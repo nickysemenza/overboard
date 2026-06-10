@@ -17,7 +17,11 @@ All planned milestones (M0–M4) complete. Daily-drivable.
   ⌘P pin, ⌘⌫ delete, esc to dismiss. Drag cards out to other apps.
 - **Search**: FTS5 full-text with prefix matching, blended with on-device
   semantic search (NLEmbedding) so "money projection" finds "quarterly
-  revenue forecast". Nothing ever leaves the machine.
+  revenue forecast". Filter operators: `kind:image`, `app:claude`,
+  `category:code`. Nothing ever leaves the machine.
+- **Quick Look & edit**: space (or ⌘Y) expands the drawer into a full-content
+  preview — scroll long text, see images large, browse with ←/→. ⌘E edits
+  the text inline before pasting (⌘↩ pastes the edited version).
 - **OCR**: copied images and screenshots are text-recognized (Vision) and
   fully searchable by their contents — find that wifi-password screenshot
   by typing the network name.

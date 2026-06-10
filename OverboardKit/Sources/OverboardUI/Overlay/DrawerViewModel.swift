@@ -175,10 +175,12 @@ public final class DrawerViewModel {
                 } else {
                     results = try await self.store.search(query, limit: 100)
                     // Semantic extras: meaning-based matches FTS missed.
-                    if trimmed.count >= 4 {
-                        let extras = await (try? self.store.semanticSearch(trimmed, limit: 8)) ?? []
+                    // Must satisfy the query's operators too.
+                    let parsed = ParsedQuery.parse(trimmed)
+                    if parsed.text.count >= 4 {
+                        let extras = await (try? self.store.semanticSearch(parsed.text, limit: 8)) ?? []
                         let seen = Set(results.map(\.id))
-                        results += extras.filter { !seen.contains($0.id) }
+                        results += extras.filter { !seen.contains($0.id) && parsed.matches($0) }
                     }
                 }
                 guard !Task.isCancelled else { return }

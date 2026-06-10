@@ -129,23 +129,56 @@ public actor ClipStore {
         }
     }
 
-    /// FTS search ranked by bm25 blended with recency.
+    /// FTS search ranked by bm25 blended with recency. The query may carry
+    /// `kind:` / `app:` / `category:` operators (see ParsedQuery).
     public func search(_ query: String, limit: Int = 100) throws -> [ClipItem] {
-        guard let match = FTSQuery.match(for: query) else { return try self.recent(limit: limit) }
+        let parsed = ParsedQuery.parse(query)
+        let match = FTSQuery.match(for: parsed.text)
+
+        guard match != nil || parsed.hasFilters else { return try self.recent(limit: limit) }
+
+        var conditions = ["item.deletedAt IS NULL"]
+        var arguments: [DatabaseValueConvertible] = []
+        if let kind = parsed.kind {
+            conditions.append("item.kind = ?")
+            arguments.append(kind.rawValue)
+        }
+        if let app = parsed.app {
+            conditions.append("(LOWER(item.sourceAppName) LIKE ? OR LOWER(item.sourceBundleID) LIKE ?)")
+            let needle = "%\(app.lowercased())%"
+            arguments.append(needle)
+            arguments.append(needle)
+        }
+        if let category = parsed.category {
+            conditions.append("item.category = ?")
+            arguments.append(category)
+        }
+
+        let sql: String
+        if let match {
+            sql = """
+            SELECT item.*
+            FROM item
+            JOIN item_fts ON item_fts.rowid = item.rowid
+            WHERE item_fts MATCH ? AND \(conditions.joined(separator: " AND "))
+            ORDER BY bm25(item_fts)
+                   + (julianday('now') - julianday(item.lastUsedAt)) * 0.05
+            LIMIT ?
+            """
+            arguments.insert(match, at: 0)
+        } else {
+            // Filters only ("kind:image") — filtered recency listing.
+            sql = """
+            SELECT item.* FROM item
+            WHERE \(conditions.joined(separator: " AND "))
+            ORDER BY item.isPinned DESC, item.lastUsedAt DESC
+            LIMIT ?
+            """
+        }
+        arguments.append(limit)
+
         return try self.dbWriter.read { db in
-            try ClipItem.fetchAll(
-                db,
-                sql: """
-                SELECT item.*
-                FROM item
-                JOIN item_fts ON item_fts.rowid = item.rowid
-                WHERE item_fts MATCH ? AND item.deletedAt IS NULL
-                ORDER BY bm25(item_fts)
-                       + (julianday('now') - julianday(item.lastUsedAt)) * 0.05
-                LIMIT ?
-                """,
-                arguments: [match, limit]
-            )
+            try ClipItem.fetchAll(db, sql: sql, arguments: StatementArguments(arguments))
         }
     }
 
