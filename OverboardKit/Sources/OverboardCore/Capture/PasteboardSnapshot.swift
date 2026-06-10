@@ -41,6 +41,6 @@ public enum WellKnownUTI {
     public static let tiff = "public.tiff"
     /// JSON-encoded `[String]` of absolute file URL strings. Internal flavor —
     /// the platform layer converts to/from real file URLs on the pasteboard.
-    public static let fileURLs = "com.nicky.overboard.file-urls"
+    public static let fileURLs = "com.nickysemenza.overboard.file-urls"
     public static let color = "com.apple.cocoa.pasteboard.color"
 }

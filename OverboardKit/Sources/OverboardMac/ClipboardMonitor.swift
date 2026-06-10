@@ -9,7 +9,7 @@ import OverboardCore
 public final class ClipboardMonitor {
     /// Written alongside paste-back payloads so the monitor never re-captures
     /// its own writes.
-    public static let markerType = NSPasteboard.PasteboardType("com.nicky.overboard.internal")
+    public static let markerType = NSPasteboard.PasteboardType("com.nickysemenza.overboard.internal")
 
     public nonisolated static let defaultExclusions: Set<String> = [
         "com.1password.1password",
@@ -34,7 +34,7 @@ public final class ClipboardMonitor {
     private let continuation: AsyncStream<PasteboardSnapshot>.Continuation
     private var timer: Timer?
     private var lastChangeCount: Int
-    private let logger = Logger(subsystem: "com.nicky.overboard", category: "monitor")
+    private let logger = Logger(subsystem: "com.nickysemenza.overboard", category: "monitor")
 
     /// Evaluated on every capture so Settings changes apply immediately.
     public var excludedBundleIDs: () -> Set<String> = { ClipboardMonitor.defaultExclusions }

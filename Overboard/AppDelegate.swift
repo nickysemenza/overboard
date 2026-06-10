@@ -14,12 +14,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         /// Scriptable control surface for development:
         ///   swift -e 'import Foundation;
         ///     DistributedNotificationCenter.default().postNotificationName(
-        ///       .init("com.nicky.overboard.debug"), object: "toggle",
+        ///       .init("com.nickysemenza.overboard.debug"), object: "toggle",
         ///       userInfo: nil, deliverImmediately: true)'
         /// Commands: "toggle", "show", "hide", "commit".
         private func installDebugHooks() {
             DistributedNotificationCenter.default().addObserver(
-                forName: .init("com.nicky.overboard.debug"),
+                forName: .init("com.nickysemenza.overboard.debug"),
                 object: nil,
                 queue: .main
             ) { notification in

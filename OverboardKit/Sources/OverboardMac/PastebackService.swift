@@ -15,7 +15,7 @@ public final class PastebackService {
     }
 
     private let store: ClipStore
-    private let logger = Logger(subsystem: "com.nicky.overboard", category: "pasteback")
+    private let logger = Logger(subsystem: "com.nickysemenza.overboard", category: "pasteback")
     private var restoreTask: Task<Void, Never>?
 
     public init(store: ClipStore) {

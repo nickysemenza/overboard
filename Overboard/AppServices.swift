@@ -29,7 +29,7 @@ final class AppServices {
     private var ingestTask: Task<Void, Never>?
     private var purgeTask: Task<Void, Never>?
     private var secretSweepTask: Task<Void, Never>?
-    private let logger = Logger(subsystem: "com.nicky.overboard", category: "app")
+    private let logger = Logger(subsystem: "com.nickysemenza.overboard", category: "app")
 
     private init() {
         do {
