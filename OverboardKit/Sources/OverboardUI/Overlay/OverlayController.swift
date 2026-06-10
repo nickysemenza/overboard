@@ -27,6 +27,8 @@ public final class OverlayController {
     public var onCommitAITransform: (ClipItem, AITransform, NSRunningApplication?) -> Void = { _, _, _ in }
     /// Called when the user pastes edited text from the preview pane.
     public var onCommitEditedText: (String, NSRunningApplication?) -> Void = { _, _ in }
+    /// Called when the user runs a clip action on the selection.
+    public var onRunAction: (ClipAction, [ClipItem], NSRunningApplication?) -> Void = { _, _, _ in }
 
     public init(store: ClipStore, stack: PasteStack) {
         self.viewModel = DrawerViewModel(store: store, stack: stack)
@@ -62,6 +64,14 @@ public final class OverlayController {
         }
         self.viewModel.onPreviewVisibilityChanged = { [weak self] expanded in
             self?.resizePanel(expanded: expanded)
+        }
+        self.viewModel.onRunAction = { [weak self] action, items in
+            guard let self else { return }
+            let target = self.targetApp
+            // Paste-producing actions need the drawer out of the way; HUD-only
+            // ones could keep it open, but consistency wins.
+            self.hide()
+            self.onRunAction(action, items, target)
         }
         self.viewModel.onDismiss = { [weak self] in self?.hide() }
     }
@@ -231,11 +241,19 @@ public final class OverlayController {
                 self.hide()
                 self.viewModel.onOpenSettings()
                 return nil
-            case 123: // left arrow
-                self.viewModel.moveSelection(-1)
+            case 123: // left arrow — ⇧ extends the selection
+                if event.modifierFlags.contains(.shift) {
+                    self.viewModel.extendSelection(-1)
+                } else {
+                    self.viewModel.moveSelection(-1)
+                }
                 return nil
-            case 124: // right arrow
-                self.viewModel.moveSelection(1)
+            case 124: // right arrow — ⇧ extends the selection
+                if event.modifierFlags.contains(.shift) {
+                    self.viewModel.extendSelection(1)
+                } else {
+                    self.viewModel.moveSelection(1)
+                }
                 return nil
             case 35 where event.modifierFlags.contains(.command): // ⌘P pin/unpin
                 self.viewModel.togglePinSelected()

@@ -107,6 +107,13 @@ final class AppServices {
             self?.pasteString(text, into: target)
         }
 
+        self.overlay.onRunAction = { [weak self] action, items, target in
+            guard let self else { return }
+            Task {
+                await self.runAction(action, on: items, target: target)
+            }
+        }
+
         self.overlay.onCommitAITransform = { [weak self] item, transform, target in
             guard let self else { return }
             Task {
@@ -185,6 +192,76 @@ final class AppServices {
                 category: enrichment.category,
                 summary: summary
             )
+        }
+    }
+
+    /// Prefetches payloads, runs the pure action, then executes its effect.
+    private func runAction(_ action: ClipAction, on items: [ClipItem], target: NSRunningApplication?) async {
+        var inputs: [ActionInput] = []
+        for item in items {
+            let text = try? await self.store.plainText(for: item.id)
+            var fileURLs: [URL] = []
+            if item.kind == .file,
+               let rep = try? await self.store.representations(for: item.id)
+               .first(where: { $0.uti == WellKnownUTI.fileURLs }),
+               let data = try? await self.store.payload(for: rep),
+               let strings = try? JSONDecoder().decode([String].self, from: data)
+            {
+                fileURLs = strings.compactMap(URL.init(string:))
+            }
+            inputs.append(ActionInput(item: item, plainText: text, fileURLs: fileURLs))
+        }
+
+        switch action.run(inputs) {
+        case let .pasteText(text):
+            self.pasteString(text, into: target)
+
+        case let .copyText(text, hud):
+            let pbItem = NSPasteboardItem()
+            pbItem.setString(text, forType: .string)
+            pbItem.setData(Data(), forType: ClipboardMonitor.markerType)
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.writeObjects([pbItem])
+            HUDController.shared.flash(hud)
+
+        case let .openURLs(urls):
+            for url in urls {
+                NSWorkspace.shared.open(url)
+            }
+
+        case let .revealFiles(urls):
+            NSWorkspace.shared.activateFileViewerSelecting(urls)
+
+        case let .saveImage(itemID):
+            await self.saveImageToDownloads(itemID: itemID)
+
+        case let .addToStack(items):
+            for item in items {
+                self.stack.push(item)
+            }
+            HUDController.shared.flash("\(items.count) items on the stack — ⌥⌘V to paste")
+
+        case let .showMessage(message):
+            HUDController.shared.flash(message)
+        }
+    }
+
+    private func saveImageToDownloads(itemID: String) async {
+        guard let rep = try? await self.store.representations(for: itemID)
+            .first(where: { $0.uti == WellKnownUTI.png }),
+            let data = try? await self.store.payload(for: rep),
+            let downloads = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
+        else {
+            HUDController.shared.flash("Couldn't save image")
+            return
+        }
+        let stamp = Date().formatted(.iso8601.year().month().day().timeSeparator(.omitted).time(includingFractionalSeconds: false))
+        let url = downloads.appendingPathComponent("Overboard \(stamp).png")
+        do {
+            try data.write(to: url)
+            HUDController.shared.flash("Saved to Downloads")
+        } catch {
+            HUDController.shared.flash("Couldn't save image")
         }
     }
 

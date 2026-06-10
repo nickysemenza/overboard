@@ -109,8 +109,18 @@ public struct DrawerView: View {
             ItemCardView(
                 item: item,
                 index: index,
-                isSelected: index == self.viewModel.selectedIndex,
+                isSelected: self.viewModel.isIndexSelected(index),
                 store: self.viewModel.storeForCards,
+                applicableActions: self.viewModel.isIndexSelected(index)
+                    ? self.viewModel.applicableActions
+                    : ClipAction.applicable(to: [item]),
+                onRunAction: { action in
+                    if !self.viewModel.isIndexSelected(index) {
+                        self.viewModel.selectedIndex = index
+                        self.viewModel.collapseMultiSelection()
+                    }
+                    self.viewModel.runAction(action)
+                },
                 onPinToggle: {
                     self.viewModel.selectedIndex = index
                     self.viewModel.togglePinSelected()
@@ -130,7 +140,11 @@ public struct DrawerView: View {
                 }
             )
             .onTapGesture {
-                self.viewModel.select(at: index)
+                if NSEvent.modifierFlags.contains(.command) {
+                    self.viewModel.toggleSelection(at: index)
+                } else {
+                    self.viewModel.select(at: index)
+                }
             }
         }
     }

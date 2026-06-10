@@ -9,6 +9,8 @@ struct ItemCardView: View {
     let index: Int
     let isSelected: Bool
     let store: ClipStore
+    var applicableActions: [ClipAction] = []
+    var onRunAction: (ClipAction) -> Void = { _ in }
     var onPinToggle: () -> Void = {}
     var onDelete: () -> Void = {}
     var onPaste: (PasteMode) -> Void = { _ in }
@@ -55,6 +57,16 @@ struct ItemCardView: View {
                 Menu("Paste with AI") {
                     ForEach(AITransform.allCases) { transform in
                         Button(transform.label) { self.onAITransform(transform) }
+                    }
+                }
+            }
+            if !self.applicableActions.isEmpty {
+                Divider()
+                ForEach(self.applicableActions) { action in
+                    Button {
+                        self.onRunAction(action)
+                    } label: {
+                        Label(action.label, systemImage: action.systemImage)
                     }
                 }
             }

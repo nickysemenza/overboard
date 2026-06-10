@@ -21,6 +21,9 @@ public final class DrawerViewModel {
     public private(set) var mode: DrawerMode = .history
     public var query: String = ""
     public var selectedIndex: Int = 0
+    /// Extra selected indices beyond the anchor (⇧arrows / ⌘-click).
+    /// Empty means plain single selection.
+    public private(set) var multiSelection: Set<Int> = []
 
     public let stack: PasteStack
 
@@ -32,6 +35,64 @@ public final class DrawerViewModel {
     public var onDismiss: () -> Void = {}
     /// Set by DrawerView, which owns the SwiftUI openSettings environment action.
     public var onOpenSettings: () -> Void = {}
+    /// Runs a clip action against the selected items.
+    public var onRunAction: (ClipAction, [ClipItem]) -> Void = { _, _ in }
+
+    // MARK: Multi-selection
+
+    /// All selected items, anchor included, in display order.
+    public var selectedItems: [ClipItem] {
+        guard self.mode == .history else { return [] }
+        let indices = self.multiSelection.union([self.selectedIndex])
+            .filter { self.items.indices.contains($0) }
+            .sorted()
+        return indices.map { self.items[$0] }
+    }
+
+    public func isIndexSelected(_ index: Int) -> Bool {
+        index == self.selectedIndex || self.multiSelection.contains(index)
+    }
+
+    /// ⇧←/⇧→: grow the selection from the anchor.
+    public func extendSelection(_ delta: Int) {
+        guard self.mode == .history, !self.items.isEmpty else { return }
+        let next = min(max(self.selectedIndex + delta, 0), self.items.count - 1)
+        guard next != self.selectedIndex else { return }
+        self.multiSelection.insert(self.selectedIndex)
+        self.multiSelection.insert(next)
+        self.selectedIndex = next
+    }
+
+    /// ⌘-click: toggle one card's membership.
+    public func toggleSelection(at index: Int) {
+        guard self.mode == .history, self.items.indices.contains(index) else { return }
+        if index == self.selectedIndex {
+            // Re-anchor on some other selected card, if any.
+            if let replacement = self.multiSelection.sorted().first {
+                self.selectedIndex = replacement
+                self.multiSelection.remove(replacement)
+            }
+        } else if self.multiSelection.contains(index) {
+            self.multiSelection.remove(index)
+        } else {
+            self.multiSelection.insert(index)
+        }
+    }
+
+    public func collapseMultiSelection() {
+        self.multiSelection.removeAll()
+    }
+
+    /// Actions applicable to the current selection.
+    public var applicableActions: [ClipAction] {
+        ClipAction.applicable(to: self.selectedItems)
+    }
+
+    public func runAction(_ action: ClipAction) {
+        let items = self.selectedItems
+        guard !items.isEmpty else { return }
+        self.onRunAction(action, items)
+    }
 
     // MARK: Preview / edit
 
@@ -108,6 +169,7 @@ public final class DrawerViewModel {
     public func prepareForShow() {
         self.query = ""
         self.selectedIndex = 0
+        self.multiSelection = []
         self.mode = .history
         // No visibility callback: show() always sets the collapsed frame.
         self.previewState = .hidden
@@ -149,6 +211,7 @@ public final class DrawerViewModel {
         self.mode = self.mode == .history ? .snippets : .history
         self.query = ""
         self.selectedIndex = 0
+        self.multiSelection = []
         self.searchTask?.cancel()
         self.searchTask = Task { await self.refresh() }
     }
@@ -194,8 +257,10 @@ public final class DrawerViewModel {
                 self.selectedIndex = index
             } else if resetSelection {
                 self.selectedIndex = 0
+                self.multiSelection = []
             } else {
                 self.selectedIndex = min(self.selectedIndex, max(self.entryCount - 1, 0))
+                self.multiSelection = self.multiSelection.filter { self.items.indices.contains($0) }
             }
             // A live update may have removed the item being previewed.
             if self.previewState != .hidden, self.selectedItem == nil {
@@ -209,6 +274,7 @@ public final class DrawerViewModel {
 
     public func moveSelection(_ delta: Int) {
         guard self.entryCount > 0 else { return }
+        self.collapseMultiSelection()
         self.selectedIndex = min(max(self.selectedIndex + delta, 0), self.entryCount - 1)
     }
 
