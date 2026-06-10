@@ -160,11 +160,13 @@ final class AppServices {
         var textForLabeling: String?
 
         if item.kind == .image,
-           let png = snapshot.reps.first(where: { $0.uti == WellKnownUTI.png })?.data,
-           let recognized = ImageTextRecognizer.recognizeText(in: png)
+           let png = snapshot.reps.first(where: { $0.uti == WellKnownUTI.png })?.data
         {
+            // Attach even empty results so textless images are marked as
+            // attempted and the startup backfill stays a no-op.
+            let recognized = ImageTextRecognizer.recognizeText(in: png) ?? ""
             try? await store.attachRecognizedText(itemID: item.id, text: recognized)
-            textForLabeling = recognized
+            textForLabeling = recognized.isEmpty ? nil : recognized
         } else if item.kind == .text {
             textForLabeling = snapshot.reps
                 .first { $0.uti == WellKnownUTI.plainText }

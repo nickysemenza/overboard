@@ -126,16 +126,6 @@ public final class PastebackService {
         keyUp.post(tap: .cghidEventTap)
     }
 
-    /// Puts the item on the general pasteboard (with the internal marker type
-    /// so the monitor doesn't re-capture it) and bumps its usage.
-    public func copyToPasteboard(_ item: ClipItem, mode: PasteMode = .full) async throws {
-        let pbItems = try await buildPasteboardItems(for: item, mode: mode)
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.writeObjects(pbItems)
-        try await self.store.markUsed(id: item.id)
-    }
-
     private func buildPasteboardItems(
         for item: ClipItem,
         mode: PasteMode
