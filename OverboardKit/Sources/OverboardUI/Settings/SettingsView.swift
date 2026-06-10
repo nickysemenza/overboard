@@ -45,6 +45,30 @@ public enum SettingsKeys {
     }
 }
 
+extension ItemKind {
+    /// Capitalized display name for Settings UI.
+    var displayName: String {
+        switch self {
+        case .text: "Text"
+        case .link: "Link"
+        case .image: "Image"
+        case .file: "File"
+        case .color: "Color"
+        }
+    }
+
+    /// SF Symbol representing this kind in Settings UI.
+    var symbolName: String {
+        switch self {
+        case .text: "textformat"
+        case .link: "link"
+        case .image: "photo"
+        case .file: "doc"
+        case .color: "paintpalette"
+        }
+    }
+}
+
 public struct SettingsView: View {
     private let store: ClipStore
 
@@ -60,10 +84,12 @@ public struct SettingsView: View {
                 .tabItem { Label("History", systemImage: "clock.arrow.circlepath") }
             AppsSettingsTab()
                 .tabItem { Label("Apps", systemImage: "app.badge.checkmark") }
+            ActionsSettingsTab()
+                .tabItem { Label("Actions", systemImage: "wand.and.stars") }
             AISettingsTab()
                 .tabItem { Label("AI", systemImage: "sparkles") }
         }
-        .frame(width: 520)
+        .frame(width: 600)
         .onAppear {
             NSApp.activate(ignoringOtherApps: true)
         }
@@ -136,6 +162,7 @@ private struct HistorySettingsTab: View {
     @AppStorage(SettingsKeys.historyLimit) private var historyLimit = 1000
     @AppStorage(SettingsKeys.secretTTLMinutes) private var secretTTLMinutes = 10
     @State private var diskUsage: String?
+    @State private var stats: LibraryStats?
     @State private var confirmingClear = false
 
     var body: some View {
@@ -157,12 +184,35 @@ private struct HistorySettingsTab: View {
             }
 
             Section {
+                LabeledContent("Items", value: self.stats?.total.formatted() ?? "—")
                 LabeledContent("On disk", value: self.diskUsage ?? "—")
                 Button("Clear History…", role: .destructive) {
                     self.confirmingClear = true
                 }
+            } header: {
+                Text("Storage")
             } footer: {
                 Text("Clearing removes all unpinned items. Pinned items and snippets are kept.")
+            }
+
+            if let stats = self.stats, !stats.byKind.isEmpty {
+                Section("By type") {
+                    ForEach(stats.byKind) { entry in
+                        LabeledContent {
+                            Text(entry.count.formatted())
+                        } label: {
+                            Label(entry.kind.displayName, systemImage: entry.kind.symbolName)
+                        }
+                    }
+                }
+            }
+
+            if let stats = self.stats, !stats.bySource.isEmpty {
+                Section("Top sources") {
+                    ForEach(stats.bySource) { entry in
+                        LabeledContent(entry.app, value: entry.count.formatted())
+                    }
+                }
             }
         }
         .formStyle(.grouped)
@@ -173,15 +223,20 @@ private struct HistorySettingsTab: View {
             Button("Clear History", role: .destructive) {
                 Task {
                     try? await self.store.purge(keepingLatest: 0)
-                    await self.refreshDiskUsage()
+                    await self.refresh()
                 }
             }
         } message: {
             Text("All unpinned items will be deleted. This can't be undone.")
         }
         .task {
-            await self.refreshDiskUsage()
+            await self.refresh()
         }
+    }
+
+    private func refresh() async {
+        await self.refreshDiskUsage()
+        self.stats = try? await self.store.libraryStats()
     }
 
     private func refreshDiskUsage() async {
@@ -234,6 +289,92 @@ private struct AppsSettingsTab: View {
             }
         }
         .formStyle(.grouped)
+    }
+}
+
+// MARK: - Actions
+
+/// Read-only matrix of which actions apply to which content kinds, rendered
+/// straight from `ClipAction.info` so it can't drift from real behavior.
+private struct ActionsSettingsTab: View {
+    private let kinds = ItemKind.allCases
+    private let kindColumnWidth: CGFloat = 44
+
+    var body: some View {
+        Form {
+            Section {
+                Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 10) {
+                    GridRow {
+                        Color.clear.frame(height: 0)
+                            .gridColumnAlignment(.leading)
+                        ForEach(self.kinds, id: \.self) { kind in
+                            VStack(spacing: 2) {
+                                Image(systemName: kind.symbolName)
+                                Text(kind.displayName)
+                                    .font(.caption2)
+                            }
+                            .foregroundStyle(.secondary)
+                            .frame(width: self.kindColumnWidth)
+                            .gridColumnAlignment(.center)
+                        }
+                        Text("When")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                    Divider()
+                    ForEach(ClipAction.allCases) { action in
+                        let info = action.info
+                        GridRow {
+                            VStack(alignment: .leading, spacing: 1) {
+                                Label(action.label, systemImage: action.systemImage)
+                                    .lineLimit(1)
+                                    .fixedSize(horizontal: true, vertical: false)
+                                if let condition = info.condition {
+                                    Text(condition)
+                                        .font(.caption2)
+                                        .foregroundStyle(.tertiary)
+                                        .padding(.leading, 22)
+                                }
+                            }
+                            .gridColumnAlignment(.leading)
+                            ForEach(self.kinds, id: \.self) { kind in
+                                self.cell(applies: info.kinds.isEmpty || info.kinds.contains(kind))
+                                    .frame(width: self.kindColumnWidth)
+                                    .gridColumnAlignment(.center)
+                            }
+                            Text(Self.selectionLabel(info.selection))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .padding(.vertical, 4)
+            } header: {
+                Text("Applies to")
+            } footer: {
+                Text("A checkmark means the action can apply to that content kind; “When” is how many items must be selected (single / 2+ / any). Greyed conditions are extra checks run against the clip's contents when you open the menu.")
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    @ViewBuilder
+    private func cell(applies: Bool) -> some View {
+        if applies {
+            Image(systemName: "checkmark")
+                .foregroundStyle(.green)
+        } else {
+            Text("–")
+                .foregroundStyle(.quaternary)
+        }
+    }
+
+    private static func selectionLabel(_ selection: ClipActionInfo.Selection) -> String {
+        switch selection {
+        case .single: "single"
+        case .multi: "2+"
+        case .any: "any"
+        }
     }
 }
 

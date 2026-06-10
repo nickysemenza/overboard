@@ -2,6 +2,31 @@ import Foundation
 import GRDB
 import NaturalLanguage
 
+/// A breakdown of the live (non-deleted) library, for the History settings tab.
+public struct LibraryStats: Sendable {
+    public struct KindCount: Sendable, Identifiable {
+        public let kind: ItemKind
+        public let count: Int
+        public var id: ItemKind {
+            self.kind
+        }
+    }
+
+    public struct SourceCount: Sendable, Identifiable {
+        public let app: String
+        public let count: Int
+        public var id: String {
+            self.app
+        }
+    }
+
+    public let total: Int
+    /// Kinds with at least one item, most-frequent first.
+    public let byKind: [KindCount]
+    /// Top source apps by item count, most-frequent first.
+    public let bySource: [SourceCount]
+}
+
 /// The single owner of all persistence: items, representations, FTS index,
 /// embeddings, and blob files. Everything mutating goes through this actor.
 public actor ClipStore {
@@ -126,6 +151,40 @@ public actor ClipStore {
                 .order(sql: "isPinned DESC, lastUsedAt DESC")
                 .limit(limit)
                 .fetchAll(db)
+        }
+    }
+
+    /// Counts of live items grouped by kind and by source app, for Settings.
+    public func libraryStats(topSources: Int = 5) throws -> LibraryStats {
+        try self.dbWriter.read { db in
+            let total = try Int.fetchOne(
+                db, sql: "SELECT COUNT(*) FROM item WHERE deletedAt IS NULL"
+            ) ?? 0
+
+            let byKind = try Row.fetchAll(
+                db,
+                sql: """
+                SELECT kind, COUNT(*) AS c FROM item
+                WHERE deletedAt IS NULL GROUP BY kind ORDER BY c DESC
+                """
+            ).compactMap { row -> LibraryStats.KindCount? in
+                guard let raw: String = row["kind"], let kind = ItemKind(rawValue: raw)
+                else { return nil }
+                return LibraryStats.KindCount(kind: kind, count: row["c"])
+            }
+
+            let bySource = try Row.fetchAll(
+                db,
+                sql: """
+                SELECT COALESCE(NULLIF(sourceAppName, ''), 'Unknown') AS app, COUNT(*) AS c
+                FROM item WHERE deletedAt IS NULL GROUP BY app ORDER BY c DESC LIMIT ?
+                """,
+                arguments: [topSources]
+            ).map { row in
+                LibraryStats.SourceCount(app: row["app"], count: row["c"])
+            }
+
+            return LibraryStats(total: total, byKind: byKind, bySource: bySource)
         }
     }
 

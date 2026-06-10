@@ -32,6 +32,29 @@ public struct ActionInput: Sendable {
     }
 }
 
+/// Declarative description of when an action applies, used for both filtering
+/// (`ClipAction.isApplicable`) and display (the Settings applicability matrix).
+public struct ClipActionInfo: Sendable {
+    public enum Selection: Sendable {
+        case single
+        case multi
+        case any
+    }
+
+    /// Kinds this action accepts. Empty means any kind.
+    public let kinds: Set<ItemKind>
+    public let selection: Selection
+    /// Human-readable requirement beyond kind/count, for display only
+    /// (e.g. "looks like JSON", "≥2 numbers"). nil means no content condition.
+    public let condition: String?
+
+    public init(kinds: Set<ItemKind>, selection: Selection, condition: String?) {
+        self.kinds = kinds
+        self.selection = selection
+        self.condition = condition
+    }
+}
+
 public enum ClipAction: String, CaseIterable, Identifiable, Sendable {
     // Single item
     case openLink
@@ -86,40 +109,64 @@ public enum ClipAction: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
+    /// The structural rules (which kinds, how many items) plus a display-only
+    /// note for any content requirement beyond them. This is the single source
+    /// of truth shared by `isApplicable` and the Settings applicability matrix.
+    public var info: ClipActionInfo {
+        switch self {
+        case .openLink, .copyAsMarkdownLink:
+            ClipActionInfo(kinds: [.link], selection: .single, condition: nil)
+        case .openAllLinks:
+            ClipActionInfo(kinds: [.text], selection: .single, condition: "contains a link")
+        case .revealInFinder:
+            ClipActionInfo(kinds: [.file], selection: .single, condition: nil)
+        case .saveImageToDownloads, .openImageInPreview:
+            ClipActionInfo(kinds: [.image], selection: .single, condition: nil)
+        case .prettyPrintJSON:
+            ClipActionInfo(kinds: [.text], selection: .single, condition: "looks like JSON · not secret")
+        case .decodeBase64:
+            ClipActionInfo(kinds: [.text], selection: .single, condition: "looks like Base64 · not secret")
+        case .wordCount:
+            ClipActionInfo(kinds: [.text], selection: .single, condition: "not secret")
+        case .sumNumbers:
+            ClipActionInfo(kinds: [.text, .link], selection: .any, condition: "≥2 numbers")
+        case .pasteAllJoined:
+            ClipActionInfo(kinds: [.text, .link], selection: .multi, condition: nil)
+        case .addAllToStack:
+            ClipActionInfo(kinds: [], selection: .multi, condition: nil)
+        }
+    }
+
     /// Synchronous filter on kinds, counts, and preview text, so menus only
     /// offer actions that plausibly apply (no "Pretty-Print JSON" on prose).
-    /// Previews are truncated at 500 chars, so `run` still revalidates the
+    /// Structural rules come from `info`; only content/secret heuristics live
+    /// here. Previews are truncated at 500 chars, so `run` still revalidates the
     /// full payload and reports failures as `.showMessage`.
     public func isApplicable(to items: [ClipItem]) -> Bool {
         guard let first = items.first else { return false }
-        let kinds = Set(items.map(\.kind))
-        let preview = first.previewText ?? ""
+        let info = self.info
+        switch info.selection {
+        case .single: guard items.count == 1 else { return false }
+        case .multi: guard items.count >= 2 else { return false }
+        case .any: break
+        }
+        if !info.kinds.isEmpty {
+            guard Set(items.map(\.kind)).isSubset(of: info.kinds) else { return false }
+        }
         switch self {
-        case .openLink, .copyAsMarkdownLink:
-            return items.count == 1 && first.kind == .link
         case .openAllLinks:
-            return items.count == 1 && first.kind == .text
-                && preview.lowercased().contains("http")
-        case .revealInFinder:
-            return items.count == 1 && first.kind == .file
-        case .saveImageToDownloads, .openImageInPreview:
-            return items.count == 1 && first.kind == .image
+            return (first.previewText ?? "").lowercased().contains("http")
         case .prettyPrintJSON:
-            return items.count == 1 && first.kind == .text && !first.isSecret
-                && TextScraps.looksLikeJSON(preview)
+            return !first.isSecret && TextScraps.looksLikeJSON(first.previewText ?? "")
         case .decodeBase64:
-            return items.count == 1 && first.kind == .text && !first.isSecret
-                && TextScraps.looksLikeBase64(preview)
+            return !first.isSecret && TextScraps.looksLikeBase64(first.previewText ?? "")
         case .wordCount:
-            return items.count == 1 && first.kind == .text && !first.isSecret
+            return !first.isSecret
         case .sumNumbers:
-            guard kinds.isSubset(of: [.text, .link]) else { return false }
             let previews = items.compactMap(\.previewText).joined(separator: " ")
             return TextScraps.numbers(in: previews).count >= 2
-        case .pasteAllJoined:
-            return items.count >= 2 && kinds.isSubset(of: [.text, .link])
-        case .addAllToStack:
-            return items.count >= 2
+        default:
+            return true
         }
     }
 
