@@ -70,8 +70,15 @@ All planned milestones (M0–M4) complete. Daily-drivable.
     `NSWorkspace`, and `CGEvent`. Clipboard monitor, paste-back, permissions.
   - `OverboardUI` — SwiftUI overlay drawer, settings, onboarding.
 
-Dependencies: [GRDB](https://github.com/groue/GRDB.swift) and
-[KeyboardShortcuts](https://github.com/sindresorhus/KeyboardShortcuts). That's it.
+Dependencies: [GRDB](https://github.com/groue/GRDB.swift),
+[KeyboardShortcuts](https://github.com/sindresorhus/KeyboardShortcuts),
+[Highlightr](https://github.com/raspu/Highlightr),
+[Expression](https://github.com/nicklockwood/Expression),
+[Defaults](https://github.com/sindresorhus/Defaults),
+[MarkdownUI](https://github.com/gonzalezreal/swift-markdown-ui), and
+[swift-async-algorithms](https://github.com/apple/swift-async-algorithms).
+Dev/test only: [swift-snapshot-testing](https://github.com/pointfreeco/swift-snapshot-testing),
+SwiftFormat, and SwiftLint.
 
 ## Development notes
 
