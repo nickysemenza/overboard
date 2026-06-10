@@ -16,8 +16,10 @@ struct ItemCardView: View {
     var onPaste: (PasteMode) -> Void = { _ in }
     var onTransform: (ClipTransform) -> Void = { _ in }
     var onAITransform: (AITransform) -> Void = { _ in }
+    var onPreview: () -> Void = {}
 
     @State private var thumbnail: NSImage?
+    @State private var hovering = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -37,6 +39,19 @@ struct ItemCardView: View {
                     lineWidth: self.isSelected ? 2.5 : 1
                 )
         }
+        .overlay(alignment: .topTrailing) {
+            if self.hovering {
+                self.hoverActions
+            }
+        }
+        .scaleEffect(self.isSelected ? 1.04 : 1)
+        .shadow(
+            color: .black.opacity(self.isSelected ? 0.28 : 0),
+            radius: self.isSelected ? 9 : 0,
+            y: 4
+        )
+        .animation(.spring(response: 0.25, dampingFraction: 0.7), value: self.isSelected)
+        .onHover { self.hovering = $0 }
         .task(id: self.item.id) {
             await self.loadThumbnailIfNeeded()
         }
@@ -77,6 +92,29 @@ struct ItemCardView: View {
         .onDrag {
             Self.dragProvider(for: self.item, store: self.store)
         }
+    }
+
+    /// Quick actions that fade in on hover so mouse users skip the context menu.
+    private var hoverActions: some View {
+        HStack(spacing: 4) {
+            self.hoverButton("eye") { self.onPreview() }
+            self.hoverButton(self.item.isPinned ? "pin.slash" : "pin") { self.onPinToggle() }
+            self.hoverButton("trash") { self.onDelete() }
+        }
+        .padding(5)
+        .background(.regularMaterial, in: Capsule())
+        .padding(6)
+        .offset(y: 26)
+        .transition(.opacity)
+    }
+
+    private func hoverButton(_ systemImage: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.caption)
+                .frame(width: 18, height: 18)
+        }
+        .buttonStyle(.borderless)
     }
 
     private var header: some View {

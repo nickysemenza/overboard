@@ -7,7 +7,7 @@ struct OverboardApp: App {
     @Environment(\.openWindow) private var openWindow
 
     var body: some Scene {
-        MenuBarExtra("Overboard", systemImage: "sailboat.fill") {
+        MenuBarExtra {
             Button("Show Drawer") {
                 AppServices.shared.overlay.show()
             }
@@ -34,6 +34,8 @@ struct OverboardApp: App {
                 NSApp.terminate(nil)
             }
             .keyboardShortcut("q")
+        } label: {
+            MenuBarLabel(signal: AppServices.shared.signal)
         }
 
         Window("Overboard History", id: "history") {
@@ -51,5 +53,15 @@ struct OverboardApp: App {
         Settings {
             SettingsView(store: AppServices.shared.store)
         }
+    }
+}
+
+/// The boat bounces whenever something is captured.
+private struct MenuBarLabel: View {
+    let signal: CaptureSignal
+
+    var body: some View {
+        Image(systemName: "sailboat.fill")
+            .symbolEffect(.bounce, value: self.signal.count)
     }
 }

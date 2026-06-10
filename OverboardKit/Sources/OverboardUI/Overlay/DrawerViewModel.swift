@@ -216,12 +216,16 @@ public final class DrawerViewModel {
         self.mode == .history ? self.items.count : self.snippets.count
     }
 
+    /// Bumped on every summon so the card strip re-runs entrance animations.
+    public private(set) var showGeneration = 0
+
     /// Reset and reload; called every time the drawer is summoned.
     public func prepareForShow() {
         self.query = ""
         self.selectedIndex = 0
         self.multiSelection = []
         self.mode = .history
+        self.showGeneration += 1
         // No visibility callback: show() always sets the collapsed frame.
         self.previewState = .hidden
         self.searchTask?.cancel()

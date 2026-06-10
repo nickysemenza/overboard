@@ -96,6 +96,8 @@ public struct DrawerView: View {
                 .padding(.vertical, 2)
                 .padding(.horizontal, 4)
             }
+            // New generation per summon → entrance animations replay.
+            .id(self.viewModel.showGeneration)
             .onChange(of: self.viewModel.selectedIndex) {
                 self.scrollToSelection(proxy)
             }
@@ -144,8 +146,15 @@ public struct DrawerView: View {
                 },
                 onAITransform: { transform in
                     self.viewModel.selectAITransformed(at: index, transform: transform)
+                },
+                onPreview: {
+                    self.viewModel.selectedIndex = index
+                    self.viewModel.collapseMultiSelection()
+                    self.viewModel.togglePreview()
                 }
             )
+            .cardEntrance(index: index)
+            .zIndex(self.viewModel.isIndexSelected(index) ? 1 : 0)
             .onTapGesture {
                 if NSEvent.modifierFlags.contains(.command) {
                     self.viewModel.toggleSelection(at: index)
@@ -163,6 +172,7 @@ public struct DrawerView: View {
                 index: index,
                 isSelected: index == self.viewModel.selectedIndex
             )
+            .cardEntrance(index: index)
             .onTapGesture {
                 self.viewModel.select(at: index)
             }
@@ -170,10 +180,19 @@ public struct DrawerView: View {
     }
 
     private var emptyState: some View {
-        ContentUnavailableView {
-            Label(self.emptyTitle, systemImage: self.viewModel.mode == .history ? "sailboat" : "text.badge.star")
-        } description: {
+        VStack(spacing: 8) {
+            if self.viewModel.mode == .history {
+                BobbingBoat()
+            } else {
+                Image(systemName: "text.badge.star")
+                    .font(.largeTitle)
+                    .foregroundStyle(.secondary)
+            }
+            Text(self.emptyTitle)
+                .font(.headline)
             Text(self.emptyDescription)
+                .font(.callout)
+                .foregroundStyle(.secondary)
         }
     }
 

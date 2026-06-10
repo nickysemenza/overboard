@@ -4,10 +4,19 @@ import OverboardCore
 import OverboardMac
 import OverboardUI
 
+/// Observable capture counter so the menu bar boat can bounce on each capture.
+@MainActor
+@Observable
+final class CaptureSignal {
+    private(set) var count = 0
+    func bump() { self.count += 1 }
+}
+
 /// Composition root: owns the store, monitor, overlay, hotkey, and paste-back.
 @MainActor
 final class AppServices {
     static let shared = AppServices()
+    let signal = CaptureSignal()
 
     let store: ClipStore
     let monitor: ClipboardMonitor
@@ -46,6 +55,7 @@ final class AppServices {
             for await snapshot in snapshots {
                 do {
                     if let item = try await store.ingest(snapshot) {
+                        self.signal.bump()
                         // Fire-and-forget so a slow OCR/LLM pass never delays
                         // capturing the next copy.
                         Task.detached(priority: .utility) {
