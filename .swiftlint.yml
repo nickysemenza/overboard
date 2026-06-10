@@ -1,0 +1,24 @@
+# SwiftFormat owns formatting; SwiftLint only catches smells.
+included:
+  - Overboard
+  - OverboardKit/Sources
+  - OverboardKit/Tests
+excluded:
+  - OverboardKit/.build
+  - build
+  - .build-xcode
+disabled_rules:
+  - todo
+  - line_length              # prose strings (footers, hints) intentionally run long
+  - function_body_length     # DemoSeed.populate, SettingsView bodies
+  - file_length
+  - type_body_length         # SwiftUI view structs run long by nature
+  - cyclomatic_complexity
+  - trailing_comma           # codebase uses trailing commas (SwiftFormat default style)
+  - opening_brace            # SwiftFormat owns brace placement (newline after multiline conditions)
+  - force_cast               # Highlightr attributed-string copies are known-typed
+  - force_try                # test fixtures only
+  - void_function_in_ternary
+  - large_tuple
+identifier_name:
+  min_length: 1              # i, t, a/b/c in tests and math are idiomatic here
