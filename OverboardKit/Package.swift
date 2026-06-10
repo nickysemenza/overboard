@@ -13,12 +13,14 @@ let package = Package(
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.0.0"),
         .package(url: "https://github.com/sindresorhus/KeyboardShortcuts", from: "2.0.0"),
         .package(url: "https://github.com/raspu/Highlightr", from: "2.1.0"),
+        .package(url: "https://github.com/nicklockwood/Expression", from: "0.13.0"),
     ],
     targets: [
         .target(
             name: "OverboardCore",
             dependencies: [
                 .product(name: "GRDB", package: "GRDB.swift"),
+                .product(name: "Expression", package: "Expression"),
             ]
         ),
         .target(

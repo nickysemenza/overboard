@@ -1,6 +1,15 @@
 {
-  "originHash" : "dc8dda01826481a058b0521aed10b0075211c5379069d2f07f34a8ab061758db",
+  "originHash" : "4f5fd6e3edbbeda9390ac1123aee53405d84be250af448c43e904d35d6db8194",
   "pins" : [
+    {
+      "identity" : "expression",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/nicklockwood/Expression",
+      "state" : {
+        "revision" : "95ffe4c352e456cede933d9910d25b9c84039d1b",
+        "version" : "0.13.9"
+      }
+    },
     {
       "identity" : "grdb.swift",
       "kind" : "remoteSourceControl",

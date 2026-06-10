@@ -32,6 +32,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 obTrace("debug command received: \(command ?? "nil")")
                 MainActor.assumeIsolated {
                     let overlay = AppServices.shared.overlay
+                    let launcher = AppServices.shared.launcher
+
+                    // "launcher-query:21*2" — payload after the first colon.
+                    if let command, command.hasPrefix("launcher-query:") {
+                        launcher.setQuery(String(command.dropFirst("launcher-query:".count)))
+                        return
+                    }
+
                     switch command {
                     case "toggle": overlay.toggle()
                     case "show": overlay.show()
@@ -46,6 +54,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     case "extend": overlay.extendSelection(1)
                     case "palette": overlay.togglePalette()
                     case "stack": overlay.addSelectedToStack()
+                    case "launcher-toggle": launcher.toggle()
+                    case "launcher-show": launcher.show()
+                    case "launcher-hide": launcher.hide()
+                    case "launcher-commit": launcher.commitSelection()
+                    case "launcher-commit-cmd": launcher.commitSelection(modifier: .command)
+                    case "launcher-commit-opt": launcher.commitSelection(modifier: .option)
+                    case "launcher-next": launcher.moveSelection(1)
+                    case "launcher-prev": launcher.moveSelection(-1)
                     default: break
                     }
                 }

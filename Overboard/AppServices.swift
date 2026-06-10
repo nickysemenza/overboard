@@ -31,6 +31,7 @@ final class AppServices {
     let monitor: ClipboardMonitor
     let pasteback: PastebackService
     let overlay: OverlayController
+    let launcher: LauncherPanelController
     let stack = PasteStack()
 
     private var ingestTask: Task<Void, Never>?
@@ -44,7 +45,7 @@ final class AppServices {
                 let queue = try OverboardDatabase.openInMemory()
                 let directory = FileManager.default.temporaryDirectory
                     .appendingPathComponent("overboard-demo-\(UUID().uuidString)", isDirectory: true)
-                self.store = ClipStore(dbWriter: queue, blobs: try BlobStore(directory: directory))
+                self.store = try ClipStore(dbWriter: queue, blobs: BlobStore(directory: directory))
             } else {
                 let directory = try OverboardDatabase.defaultDirectory()
                 let pool = try OverboardDatabase.open(at: directory)
@@ -58,6 +59,12 @@ final class AppServices {
         self.monitor = ClipboardMonitor()
         self.pasteback = PastebackService(store: self.store)
         self.overlay = OverlayController(store: self.store, stack: self.stack)
+        self.launcher = LauncherPanelController(
+            viewModel: LauncherViewModel(
+                fileProvider: FileSearchProvider(search: SpotlightFileSearch(), limit: 8),
+                isFileSearchEnabled: { UserDefaults.standard.bool(forKey: SettingsKeys.launcherFileResults) }
+            )
+        )
     }
 
     func start() {
@@ -74,6 +81,7 @@ final class AppServices {
         }
 
         self.installOverlayCallbacks()
+        self.installLauncherCallbacks()
     }
 
     /// Clipboard monitoring, ingest, and background maintenance — everything
@@ -177,9 +185,34 @@ final class AppServices {
         }
     }
 
+    private func installLauncherCallbacks() {
+        self.launcher.onCopyText = { [weak self] text in
+            self?.copyString(text, hud: "Result copied — ⌘V to paste")
+        }
+        self.launcher.onPasteText = { [weak self] text, target in
+            self?.pasteString(text, into: target)
+        }
+        self.launcher.onOpenFile = { url in
+            NSWorkspace.shared.open(url)
+        }
+        self.launcher.onRevealFile = { url in
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        }
+        self.launcher.onCopyPath = { [weak self] path in
+            self?.copyString(path, hud: "Path copied")
+        }
+        self.launcher.onOpenWebSearch = { url in
+            NSWorkspace.shared.open(url)
+        }
+    }
+
     private func registerHotkeys() {
         HotkeyService.onToggleDrawer { [weak self] in
             self?.overlay.toggle()
+        }
+
+        HotkeyService.onToggleLauncher { [weak self] in
+            self?.launcher.toggle()
         }
 
         HotkeyService.onPasteNextFromStack { [weak self] in
@@ -264,12 +297,7 @@ final class AppServices {
             self.pasteString(text, into: target)
 
         case let .copyText(text, hud):
-            let pbItem = NSPasteboardItem()
-            pbItem.setString(text, forType: .string)
-            pbItem.setData(Data(), forType: ClipboardMonitor.markerType)
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.writeObjects([pbItem])
-            HUDController.shared.flash(hud)
+            self.copyString(text, hud: hud)
 
         case let .openURLs(urls):
             for url in urls {
@@ -346,6 +374,17 @@ final class AppServices {
         } catch {
             HUDController.shared.flash("Couldn't save image")
         }
+    }
+
+    /// Writes to the pasteboard with the monitor's marker type so the copy
+    /// doesn't re-enter history, then flashes the HUD.
+    private func copyString(_ text: String, hud: String) {
+        let pbItem = NSPasteboardItem()
+        pbItem.setString(text, forType: .string)
+        pbItem.setData(Data(), forType: ClipboardMonitor.markerType)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.writeObjects([pbItem])
+        HUDController.shared.flash(hud)
     }
 
     private func pasteString(_ text: String, into target: NSRunningApplication?) {

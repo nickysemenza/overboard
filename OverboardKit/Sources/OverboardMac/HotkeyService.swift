@@ -7,6 +7,9 @@ public extension KeyboardShortcuts.Name {
 
     /// Pastes (and pops) the next item from the paste stack.
     static let pasteNextFromStack = Self("pasteNextFromStack", default: .init(.v, modifiers: [.command, .option]))
+
+    /// Summons/dismisses the launcher bar. ⌥Space — ⌘Space belongs to Spotlight.
+    static let toggleLauncher = Self("toggleLauncher", default: .init(.space, modifiers: [.option]))
 }
 
 /// Thin wrapper so only OverboardMac imports KeyboardShortcuts.
@@ -18,5 +21,9 @@ public enum HotkeyService {
 
     public static func onPasteNextFromStack(_ handler: @escaping @MainActor () -> Void) {
         KeyboardShortcuts.onKeyDown(for: .pasteNextFromStack, action: handler)
+    }
+
+    public static func onToggleLauncher(_ handler: @escaping @MainActor () -> Void) {
+        KeyboardShortcuts.onKeyDown(for: .toggleLauncher, action: handler)
     }
 }

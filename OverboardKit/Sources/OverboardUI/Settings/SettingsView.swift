@@ -14,6 +14,8 @@ public enum SettingsKeys {
     public static let secretTTLMinutes = "secretTTLMinutes"
     /// Apple Intelligence features: auto-titles, categories, AI transforms.
     public static let aiFeatures = "aiFeatures"
+    /// Spotlight file results in the launcher bar.
+    public static let launcherFileResults = "launcherFileResults"
 
     public static var defaults: [String: Any] {
         [
@@ -23,6 +25,7 @@ public enum SettingsKeys {
             plainTextBundleIDs: "com.apple.Terminal\ncom.googlecode.iterm2",
             secretTTLMinutes: 10,
             aiFeatures: true,
+            launcherFileResults: true,
         ]
     }
 
@@ -100,6 +103,7 @@ public struct SettingsView: View {
 
 private struct GeneralSettingsTab: View {
     @AppStorage(SettingsKeys.restoreClipboard) private var restoreClipboard = true
+    @AppStorage(SettingsKeys.launcherFileResults) private var launcherFileResults = true
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var accessibilityGranted = PermissionService.isTrusted
 
@@ -108,6 +112,13 @@ private struct GeneralSettingsTab: View {
             Section {
                 KeyboardShortcuts.Recorder("Summon drawer", name: .toggleDrawer)
                 KeyboardShortcuts.Recorder("Paste next from stack", name: .pasteNextFromStack)
+                KeyboardShortcuts.Recorder("Summon launcher", name: .toggleLauncher)
+            }
+
+            Section {
+                Toggle("Show file results in launcher", isOn: self.$launcherFileResults)
+            } footer: {
+                Text("The launcher always calculates and offers a web search; this adds Spotlight results from your home folder.")
             }
 
             Section {
