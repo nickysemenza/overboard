@@ -77,11 +77,6 @@ public final class LauncherPanelController {
         self.panel?.isVisible ?? false
     }
 
-    /// Warm Spotlight once at launch so the first summon feels instant.
-    public func prewarm() {
-        self.viewModel.prewarm()
-    }
-
     public func toggle() {
         if self.isVisible { self.hide() } else { self.show() }
     }

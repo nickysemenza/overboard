@@ -60,12 +60,18 @@ final class AppServices {
         self.pasteback = PastebackService(store: self.store)
         self.overlay = OverlayController(store: self.store, stack: self.stack)
         self.launcher = LauncherPanelController(
-            viewModel: LauncherViewModel(secondaryProviders: [
-                AppSearchProvider(search: SpotlightFileSearch(), limit: 5),
-                ConditionalProvider(FileSearchProvider(search: SpotlightFileSearch(), limit: 8)) {
-                    Defaults[.launcherFileResults]
-                },
-            ])
+            viewModel: LauncherViewModel(
+                instantProviders: [
+                    AppSearchProvider(index: AppIndex(), limit: 5) {
+                        AppMatcher.parseAliases(Defaults[.launcherAppAliases])
+                    },
+                ],
+                secondaryProviders: [
+                    ConditionalProvider(FileSearchProvider(search: SpotlightFileSearch(), limit: 8)) {
+                        Defaults[.launcherFileResults]
+                    },
+                ]
+            )
         )
     }
 
@@ -78,7 +84,6 @@ final class AppServices {
         } else {
             self.startCapturePipeline()
             self.registerHotkeys()
-            self.launcher.prewarm()
         }
 
         self.installOverlayCallbacks()

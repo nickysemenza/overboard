@@ -32,23 +32,14 @@ public final class LauncherViewModel {
     private let secondaryProviders: [any LauncherProvider]
     private var searchTask: Task<Void, Never>?
 
-    /// Secondary providers (apps, files, …) run in the debounced pass,
-    /// sandwiched between the instant calculator and web rows.
-    public init(secondaryProviders: [any LauncherProvider]) {
-        self.instantRouter = QueryRouter(providers: [CalculatorProvider(), WebSearchProvider()])
+    /// Instant providers (apps) answer from memory and render on every
+    /// keystroke alongside the calculator; secondary providers (files) run
+    /// in the debounced pass and splice in above the web row.
+    public init(instantProviders: [any LauncherProvider] = [], secondaryProviders: [any LauncherProvider]) {
+        self.instantRouter = QueryRouter(
+            providers: [CalculatorProvider()] + instantProviders + [WebSearchProvider()]
+        )
         self.secondaryProviders = secondaryProviders
-    }
-
-    /// Runs a throwaway query through every secondary provider so the first
-    /// real search doesn't pay Spotlight's cold-start (~3s vs ~100ms warm).
-    /// Call once at app launch.
-    public func prewarm() {
-        let providers = self.secondaryProviders
-        Task(priority: .utility) {
-            for provider in providers {
-                _ = await provider.results(for: "prewarm")
-            }
-        }
     }
 
     public func prepareForShow() {

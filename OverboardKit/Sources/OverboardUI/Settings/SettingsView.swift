@@ -62,6 +62,7 @@ public struct SettingsView: View {
 private struct GeneralSettingsTab: View {
     @Default(.restoreClipboard) private var restoreClipboard
     @Default(.launcherFileResults) private var launcherFileResults
+    @Default(.launcherAppAliases) private var launcherAppAliases
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var accessibilityGranted = PermissionService.isTrusted
 
@@ -75,8 +76,16 @@ private struct GeneralSettingsTab: View {
 
             Section {
                 Toggle("Show file results in launcher", isOn: self.$launcherFileResults)
+                LabeledContent("App aliases") {
+                    TextEditor(text: self.$launcherAppAliases)
+                        .font(.body.monospaced())
+                        .frame(height: 60)
+                        .scrollContentBackground(.hidden)
+                        .padding(4)
+                        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
+                }
             } footer: {
-                Text("The launcher always calculates and offers a web search; this adds Spotlight results from your home folder.")
+                Text("The launcher always calculates and offers a web search; file results add Spotlight hits from your home folder. Aliases are one “sm = Sublime Merge” per line — initials like “sm” already match without one; use aliases to override or shorten further.")
             }
 
             Section {

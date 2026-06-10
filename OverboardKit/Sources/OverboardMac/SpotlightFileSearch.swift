@@ -48,20 +48,6 @@ public final class SpotlightFileSearch {
         )
     }
 
-    /// Application bundles, the way Spotlight ranks its top hit. Scoped to
-    /// the canonical app folders so stray dev builds (DerivedData etc.)
-    /// don't surface.
-    public func searchApplications(_ term: String, limit: Int = 5) async -> [Hit] {
-        await self.run(
-            predicate: NSPredicate(
-                format: "kMDItemContentTypeTree == 'com.apple.application-bundle' AND kMDItemDisplayName CONTAINS[cd] %@",
-                term
-            ),
-            scopes: ["/Applications", "/System/Applications", NSHomeDirectory() + "/Applications"],
-            limit: limit
-        )
-    }
-
     private func run(predicate: NSPredicate, scopes: [Any], limit: Int) async -> [Hit] {
         self.cancelActive()
         self.generation += 1
@@ -196,26 +182,5 @@ public struct FileSearchProvider: LauncherProvider {
         guard query.count >= 2 else { return [] }
         let hits = await search.search(query, limit: self.limit)
         return hits.map { .file(name: $0.name, url: $0.url) }
-    }
-}
-
-public struct AppSearchProvider: LauncherProvider {
-    private let search: SpotlightFileSearch
-    private let limit: Int
-
-    public init(search: SpotlightFileSearch, limit: Int = 5) {
-        self.search = search
-        self.limit = limit
-    }
-
-    public func results(for query: String) async -> [LauncherResult] {
-        guard query.count >= 2 else { return [] }
-        let hits = await search.searchApplications(query, limit: self.limit)
-        return hits.map { hit in
-            // "Sublime Merge.app" → "Sublime Merge" (display names keep the
-            // extension when Finder is set to show them).
-            let name = hit.name.hasSuffix(".app") ? String(hit.name.dropLast(4)) : hit.name
-            return .app(name: name, url: hit.url)
-        }
     }
 }
