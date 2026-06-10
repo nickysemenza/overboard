@@ -11,7 +11,7 @@ jobs:
     name: OverboardKit tests
     runs-on: macos-26
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Select newest Xcode 26
         run: |
@@ -25,7 +25,7 @@ jobs:
     name: Build app artifact
     runs-on: macos-26
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Select newest Xcode 26
         run: |
@@ -47,7 +47,7 @@ jobs:
       - name: Zip app bundle
         run: ditto -c -k --keepParent build/Build/Products/Release/Overboard.app Overboard.zip
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: Overboard
           path: Overboard.zip

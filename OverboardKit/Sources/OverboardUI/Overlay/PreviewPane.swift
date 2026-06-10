@@ -7,7 +7,9 @@ import SwiftUI
 struct PreviewPane: View {
     @Bindable var viewModel: DrawerViewModel
     @FocusState private var editorFocused: Bool
+    @Environment(\.colorScheme) private var colorScheme
     @State private var fullText: String?
+    @State private var highlightedCode: NSAttributedString?
     @State private var largeImage: NSImage?
 
     private var item: ClipItem? {
@@ -77,14 +79,19 @@ struct PreviewPane: View {
         } else if let item {
             switch item.kind {
             case .text, .link, .file:
-                ScrollView {
-                    Text(self.fullText ?? item.previewText ?? "")
-                        .font(item.kind == .file ? .body.monospaced() : .body)
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(10)
+                if let highlightedCode {
+                    CodeTextView(attributed: highlightedCode)
+                        .background(.background.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+                } else {
+                    ScrollView {
+                        Text(self.fullText ?? item.previewText ?? "")
+                            .font(item.kind == .file ? .body.monospaced() : .body)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(10)
+                    }
+                    .background(.background.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
                 }
-                .background(.background.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
             case .image:
                 if let largeImage {
                     Image(nsImage: largeImage)
@@ -123,13 +130,20 @@ struct PreviewPane: View {
 
     private func load() async {
         self.fullText = nil
+        self.highlightedCode = nil
         self.largeImage = nil
         guard let item else { return }
         let store = self.viewModel.storeForCards
 
         switch item.kind {
         case .text, .link:
-            self.fullText = try? await store.plainText(for: item.id)
+            let text = try? await store.plainText(for: item.id)
+            self.fullText = text
+            if let text, item.kind == .text, !item.isSecret,
+               item.category == "code" || CodeHighlighter.looksLikeCode(text)
+            {
+                self.highlightedCode = CodeHighlighter.highlight(text, dark: self.colorScheme == .dark)
+            }
         case .file:
             if let rep = try? await store.representations(for: item.id)
                 .first(where: { $0.uti == WellKnownUTI.fileURLs }),
