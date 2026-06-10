@@ -6,7 +6,29 @@ full-text search, and paste-back into whatever app you were using.
 
 ## Status
 
-Early development. Milestone 1 (core loop) in progress.
+All planned milestones (M0–M4) complete. Daily-drivable.
+
+## Features
+
+- **Capture**: clipboard history for text, rich text, links, images, files,
+  and colors, with content-hash dedupe and source-app attribution.
+- **Drawer** (⌘⇧V): bottom overlay over any app that never steals focus.
+  Type to search, ←/→ or ⌘1–9 to select, ↩ to paste, ⇧↩ plain text,
+  ⌘P pin, ⌘⌫ delete, esc to dismiss. Drag cards out to other apps.
+- **Search**: FTS5 full-text with prefix matching, blended with on-device
+  semantic search (NLEmbedding) so "money projection" finds "quarterly
+  revenue forecast". Nothing ever leaves the machine.
+- **Paste-back**: synthesized ⌘V into the app you were in, then your previous
+  clipboard is restored. Falls back to copy + HUD without Accessibility.
+- **Paste stack**: ⌘↩ queues items in the drawer; ⌥⌘V pastes them one by one.
+- **Snippets** (⌘/ in drawer): saved templates with `{date}` `{time}`
+  `{datetime}` `{uuid}` `{clipboard}` placeholders, managed from the menu bar.
+- **Transforms**: right-click → Paste Transformed (strip tracking params,
+  trim, change case).
+- **Privacy**: password managers and concealed/transient pasteboards are
+  never captured; detected secrets (AWS keys, JWTs, API tokens, PEM keys,
+  card numbers) are masked, unsearchable, and auto-expire; per-app
+  plain-text paste rules for terminals.
 
 ## Architecture
 

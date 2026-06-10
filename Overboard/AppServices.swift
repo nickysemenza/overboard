@@ -17,6 +17,7 @@ final class AppServices {
 
     private var ingestTask: Task<Void, Never>?
     private var purgeTask: Task<Void, Never>?
+    private var secretSweepTask: Task<Void, Never>?
     private let logger = Logger(subsystem: "com.nicky.overboard", category: "app")
 
     private init() {
@@ -64,6 +65,18 @@ final class AppServices {
             }
         }
 
+        // Detected secrets expire on a short leash, swept every minute.
+        self.secretSweepTask = Task(priority: .background) {
+            while !Task.isCancelled {
+                let ttlMinutes = UserDefaults.standard.integer(forKey: SettingsKeys.secretTTLMinutes)
+                if ttlMinutes > 0 {
+                    let cutoff = Date().addingTimeInterval(-Double(ttlMinutes) * 60)
+                    try? await store.purgeExpiredSecrets(olderThan: cutoff)
+                }
+                try? await Task.sleep(for: .seconds(60))
+            }
+        }
+
         self.overlay.onCommit = { [weak self] item, mode, target in
             self?.pasteItem(item, mode: mode, into: target)
         }
@@ -72,11 +85,15 @@ final class AppServices {
             guard let self else { return }
             let clipboard = NSPasteboard.general.string(forType: .string)
             let expanded = SnippetTemplate.expand(snippet.body, clipboard: clipboard)
-            let restore = UserDefaults.standard.bool(forKey: SettingsKeys.restoreClipboard)
-            let outcome = self.pasteback.pasteText(expanded, into: target, restoreClipboard: restore)
-            if outcome == .copiedOnly {
-                HUDController.shared.flash("Copied — press ⌘V to paste")
-                PermissionService.promptIfNeeded()
+            self.pasteString(expanded, into: target)
+        }
+
+        self.overlay.onCommitTransform = { [weak self] item, transform, target in
+            guard let self else { return }
+            Task {
+                guard let text = try? await self.store.plainText(for: item.id) else { return }
+                try? await self.store.markUsed(id: item.id)
+                self.pasteString(transform.apply(to: text), into: target)
             }
         }
 
@@ -96,6 +113,15 @@ final class AppServices {
                     HUDController.shared.flash("Pasted from stack — \(remaining) left")
                 }
             }
+        }
+    }
+
+    private func pasteString(_ text: String, into target: NSRunningApplication?) {
+        let restore = UserDefaults.standard.bool(forKey: SettingsKeys.restoreClipboard)
+        let outcome = self.pasteback.pasteText(text, into: target, restoreClipboard: restore)
+        if outcome == .copiedOnly {
+            HUDController.shared.flash("Copied — press ⌘V to paste")
+            PermissionService.promptIfNeeded()
         }
     }
 

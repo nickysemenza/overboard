@@ -12,6 +12,7 @@ struct ItemCardView: View {
     var onPinToggle: () -> Void = {}
     var onDelete: () -> Void = {}
     var onPaste: (PasteMode) -> Void = { _ in }
+    var onTransform: (ClipTransform) -> Void = { _ in }
 
     @State private var thumbnail: NSImage?
 
@@ -41,6 +42,14 @@ struct ItemCardView: View {
             if self.item.kind == .text || self.item.kind == .link {
                 Button("Paste as Plain Text") { self.onPaste(.plainText) }
             }
+            let transforms = ClipTransform.allCases.filter { $0.applies(to: self.item.kind) }
+            if !transforms.isEmpty, !self.item.isSecret {
+                Menu("Paste Transformed") {
+                    ForEach(transforms) { transform in
+                        Button(transform.label) { self.onTransform(transform) }
+                    }
+                }
+            }
             Divider()
             Button(self.item.isPinned ? "Unpin" : "Pin") { self.onPinToggle() }
             Button("Delete", role: .destructive) { self.onDelete() }
@@ -62,6 +71,11 @@ struct ItemCardView: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
             Spacer()
+            if self.item.isSecret {
+                Image(systemName: "lock.fill")
+                    .font(.caption2)
+                    .foregroundStyle(.yellow)
+            }
             if self.item.isPinned {
                 Image(systemName: "pin.fill")
                     .font(.caption2)
@@ -82,10 +96,25 @@ struct ItemCardView: View {
     private var content: some View {
         switch self.item.kind {
         case .text:
-            Text(self.item.previewText ?? "")
-                .font(.callout)
-                .lineLimit(7)
-                .padding(10)
+            if self.item.isSecret {
+                VStack(spacing: 8) {
+                    Image(systemName: "lock.fill")
+                        .font(.title)
+                        .foregroundStyle(.yellow)
+                    Text(self.item.previewText ?? "Secret")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                    Text("Auto-expires soon")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                Text(self.item.previewText ?? "")
+                    .font(.callout)
+                    .lineLimit(7)
+                    .padding(10)
+            }
         case .link:
             VStack(alignment: .leading, spacing: 6) {
                 Image(systemName: "link")

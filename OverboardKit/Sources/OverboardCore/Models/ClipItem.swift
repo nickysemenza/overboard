@@ -10,6 +10,7 @@ public struct ClipItem: Codable, Sendable, Equatable, Identifiable {
     public var sourceAppName: String?
     public var byteSize: Int
     public var isPinned: Bool
+    public var isSecret: Bool
     public var useCount: Int
     public var createdAt: Date
     public var lastUsedAt: Date
@@ -26,6 +27,7 @@ public struct ClipItem: Codable, Sendable, Equatable, Identifiable {
         sourceAppName: String?,
         byteSize: Int,
         isPinned: Bool = false,
+        isSecret: Bool = false,
         useCount: Int = 1,
         createdAt: Date,
         lastUsedAt: Date,
@@ -41,6 +43,7 @@ public struct ClipItem: Codable, Sendable, Equatable, Identifiable {
         self.sourceAppName = sourceAppName
         self.byteSize = byteSize
         self.isPinned = isPinned
+        self.isSecret = isSecret
         self.useCount = useCount
         self.createdAt = createdAt
         self.lastUsedAt = lastUsedAt

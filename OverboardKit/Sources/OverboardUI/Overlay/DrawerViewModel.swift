@@ -21,6 +21,7 @@ public final class DrawerViewModel {
     /// Called when the user commits an item (Return, click, ⌘n).
     public var onCommit: (ClipItem, PasteMode) -> Void = { _, _ in }
     public var onCommitSnippet: (Snippet) -> Void = { _ in }
+    public var onCommitTransform: (ClipItem, ClipTransform) -> Void = { _, _ in }
     public var onDismiss: () -> Void = {}
 
     private let store: ClipStore
@@ -72,9 +73,19 @@ public final class DrawerViewModel {
             let query = self.query
             switch self.mode {
             case .history:
-                let results = query.trimmingCharacters(in: .whitespaces).isEmpty
-                    ? try await self.store.recent(limit: 100)
-                    : try await self.store.search(query, limit: 100)
+                let trimmed = query.trimmingCharacters(in: .whitespaces)
+                var results: [ClipItem]
+                if trimmed.isEmpty {
+                    results = try await self.store.recent(limit: 100)
+                } else {
+                    results = try await self.store.search(query, limit: 100)
+                    // Semantic extras: meaning-based matches FTS missed.
+                    if trimmed.count >= 4 {
+                        let extras = await (try? self.store.semanticSearch(trimmed, limit: 8)) ?? []
+                        let seen = Set(results.map(\.id))
+                        results += extras.filter { !seen.contains($0.id) }
+                    }
+                }
                 guard !Task.isCancelled else { return }
                 self.items = results
             case .snippets:
@@ -115,6 +126,12 @@ public final class DrawerViewModel {
 
     public func selectCurrent(mode pasteMode: PasteMode = .full) {
         self.select(at: self.selectedIndex, mode: pasteMode)
+    }
+
+    public func selectTransformed(at index: Int, transform: ClipTransform) {
+        guard self.mode == .history, self.items.indices.contains(index) else { return }
+        self.selectedIndex = index
+        self.onCommitTransform(self.items[index], transform)
     }
 
     /// Queue the selected item onto the paste stack and advance selection so

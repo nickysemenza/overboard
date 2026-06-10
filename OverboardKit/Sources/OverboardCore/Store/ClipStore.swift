@@ -1,15 +1,25 @@
 import Foundation
 import GRDB
+import NaturalLanguage
 
 /// The single owner of all persistence: items, representations, FTS index,
-/// and blob files. Everything mutating goes through this actor.
+/// embeddings, and blob files. Everything mutating goes through this actor.
 public actor ClipStore {
     private let dbWriter: any DatabaseWriter
     private let blobs: BlobStore
+    /// Double-optional: nil = not loaded yet, .some(nil) = unavailable.
+    private var embeddingCache: NLEmbedding??
 
     public init(dbWriter: any DatabaseWriter, blobs: BlobStore) {
         self.dbWriter = dbWriter
         self.blobs = blobs
+    }
+
+    private var sentenceEmbedding: NLEmbedding? {
+        if let cached = embeddingCache { return cached }
+        let embedding = NLEmbedding.sentenceEmbedding(for: .english)
+        self.embeddingCache = embedding
+        return embedding
     }
 
     // MARK: - Ingest
@@ -34,7 +44,7 @@ public actor ClipStore {
         }
 
         let now = snapshot.capturedAt
-        return try self.dbWriter.write { db in
+        let stored: (item: ClipItem, isNew: Bool)? = try self.dbWriter.write { db in
             // Dedupe: same content already live → bump it to the top.
             if let existing = try ClipItem
                 .filter(sql: "contentHash = ? AND deletedAt IS NULL", arguments: [classified.contentHash])
@@ -46,7 +56,7 @@ public actor ClipStore {
                 bumped.updatedAt = now
                 bumped.lamport += 1
                 try bumped.update(db)
-                return bumped
+                return (bumped, false)
             }
 
             let item = ClipItem(
@@ -56,6 +66,7 @@ public actor ClipStore {
                 sourceBundleID: snapshot.sourceBundleID,
                 sourceAppName: snapshot.sourceAppName,
                 byteSize: classified.byteSize,
+                isSecret: classified.isSecret,
                 createdAt: now,
                 lastUsedAt: now,
                 updatedAt: now
@@ -63,14 +74,14 @@ public actor ClipStore {
             try db.execute(
                 sql: """
                 INSERT INTO item (id, contentHash, kind, previewText, searchText,
-                                  sourceBundleID, sourceAppName, byteSize, isPinned,
+                                  sourceBundleID, sourceAppName, byteSize, isPinned, isSecret,
                                   useCount, createdAt, lastUsedAt, updatedAt, lamport, deletedAt)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 1, ?, ?, ?, 0, NULL)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 1, ?, ?, ?, 0, NULL)
                 """,
                 arguments: [
                     item.id, item.contentHash, item.kind.rawValue, item.previewText,
                     classified.searchText, item.sourceBundleID, item.sourceAppName,
-                    item.byteSize, now, now, now,
+                    item.byteSize, item.isSecret, now, now, now,
                 ]
             )
 
@@ -91,8 +102,19 @@ public actor ClipStore {
                     byteSize: rep.byteSize
                 ).insert(db)
             }
-            return item
+            return (item, true)
         }
+
+        guard let stored else { return nil }
+        if stored.isNew, !classified.isSecret,
+           classified.kind == .text || classified.kind == .link,
+           let searchText = classified.searchText
+        {
+            // Best-effort; semantic search simply won't find this item if the
+            // model is unavailable.
+            try? self.storeEmbedding(itemID: stored.item.id, text: searchText)
+        }
+        return stored.item
     }
 
     // MARK: - Queries
@@ -237,6 +259,108 @@ public actor ClipStore {
                 arguments: [row["rowid"] as Int64, row["searchText"] as String]
             )
         }
+    }
+
+    // MARK: - Semantic search
+
+    private func storeEmbedding(itemID: String, text: String) throws {
+        guard let embedding = sentenceEmbedding,
+              let vector = embedding.vector(for: String(text.prefix(300)))
+        else { return }
+        let blob = EmbeddingCoder.encode(vector)
+        try self.dbWriter.write { db in
+            try db.execute(
+                sql: "INSERT OR REPLACE INTO item_embedding (itemID, vector) VALUES (?, ?)",
+                arguments: [itemID, blob]
+            )
+        }
+    }
+
+    /// On-device semantic search over text/link items: cosine similarity of
+    /// NLEmbedding sentence vectors. Complements FTS — finds "that key from
+    /// AWS" when the words don't literally match.
+    public func semanticSearch(
+        _ query: String,
+        limit: Int = 10,
+        minSimilarity: Double = 0.75
+    ) throws -> [ClipItem] {
+        guard let embedding = sentenceEmbedding,
+              let queryVector = embedding.vector(for: query)
+        else { return [] }
+
+        let rows = try self.dbWriter.read { db in
+            try Row.fetchAll(db, sql: """
+            SELECT e.itemID, e.vector
+            FROM item_embedding e
+            JOIN item i ON i.id = e.itemID
+            WHERE i.deletedAt IS NULL
+            """)
+        }
+
+        let query32 = queryVector.map(Float.init)
+        let scored: [(id: String, score: Float)] = rows.compactMap { row in
+            let vector = EmbeddingCoder.decode(row["vector"] as Data)
+            guard !vector.isEmpty else { return nil }
+            let score = EmbeddingCoder.cosineSimilarity(query32, vector)
+            return score >= Float(minSimilarity) ? (row["itemID"] as String, score) : nil
+        }
+
+        let topIDs = scored.sorted { $0.score > $1.score }.prefix(limit).map(\.id)
+        guard !topIDs.isEmpty else { return [] }
+
+        let items = try self.dbWriter.read { db in
+            try ClipItem
+                .filter(sql: "deletedAt IS NULL")
+                .filter(keys: topIDs)
+                .fetchAll(db)
+        }
+        // Preserve similarity order.
+        let byID = Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0) })
+        return topIDs.compactMap { byID[$0] }
+    }
+
+    // MARK: - Secret expiry
+
+    /// Hard-deletes secret items captured before the cutoff. Secrets are never
+    /// in FTS or the embedding index, so only rows and blobs need cleanup.
+    public func purgeExpiredSecrets(olderThan cutoff: Date) throws {
+        let candidateHashes: Set<String> = try dbWriter.write { db in
+            let victims = try String.fetchAll(
+                db,
+                sql: "SELECT id FROM item WHERE isSecret = 1 AND createdAt < ?",
+                arguments: [cutoff]
+            )
+            guard !victims.isEmpty else { return [] }
+
+            var hashes: Set<String> = []
+            for id in victims {
+                let blobHashes = try String.fetchAll(
+                    db,
+                    sql: "SELECT blobHash FROM representation WHERE itemID = ? AND blobHash IS NOT NULL",
+                    arguments: [id]
+                )
+                hashes.formUnion(blobHashes)
+                try db.execute(sql: "DELETE FROM item WHERE id = ?", arguments: [id])
+            }
+            let stillReferenced = try String.fetchSet(
+                db,
+                sql: "SELECT DISTINCT blobHash FROM representation WHERE blobHash IS NOT NULL"
+            )
+            return hashes.subtracting(stillReferenced)
+        }
+
+        for hash in candidateHashes {
+            try? self.blobs.delete(hash: hash)
+        }
+    }
+
+    // MARK: - Payload helpers
+
+    /// The plain-text payload of an item, if it has one (for transforms).
+    public func plainText(for itemID: String) throws -> String? {
+        let reps = try self.representations(for: itemID)
+        guard let rep = reps.first(where: { $0.uti == WellKnownUTI.plainText }) else { return nil }
+        return try String(data: self.payload(for: rep), encoding: .utf8)
     }
 
     // MARK: - Snippets

@@ -108,6 +108,20 @@ enum Migrations {
             """)
         }
 
+        migrator.registerMigration("v3-secrets-embeddings") { db in
+            try db.execute(sql: """
+            ALTER TABLE item ADD COLUMN isSecret BOOLEAN NOT NULL DEFAULT 0;
+
+            CREATE INDEX item_secret_expiry
+              ON item(createdAt) WHERE isSecret = 1;
+
+            CREATE TABLE item_embedding (
+              itemID TEXT PRIMARY KEY NOT NULL REFERENCES item(id) ON DELETE CASCADE,
+              vector BLOB NOT NULL
+            );
+            """)
+        }
+
         return migrator
     }
 }

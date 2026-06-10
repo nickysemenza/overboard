@@ -103,6 +103,9 @@ public struct DrawerView: View {
                 },
                 onPaste: { mode in
                     self.viewModel.select(at: index, mode: mode)
+                },
+                onTransform: { transform in
+                    self.viewModel.selectTransformed(at: index, transform: transform)
                 }
             )
             .onTapGesture {

@@ -11,6 +11,7 @@ public enum CaptureClassifier {
         public var previewText: String?
         public var searchText: String?
         public var byteSize: Int
+        public var isSecret: Bool = false
     }
 
     static let previewLimit = 500
@@ -34,6 +35,19 @@ public enum CaptureClassifier {
 
         guard let primary = primaryData(for: kind, byUTI: byUTI) else { return nil }
         let totalBytes = snapshot.reps.reduce(0) { $0 + $1.data.count }
+
+        // Secrets keep their payload (paste still works) but get a masked
+        // preview and are never indexed for search.
+        if kind == .text, let text = plainText, let secret = SecretDetector.detect(in: text) {
+            return Classified(
+                kind: kind,
+                contentHash: self.hash(kind: kind, primary: primary),
+                previewText: "Secret — \(secret.label)",
+                searchText: nil,
+                byteSize: totalBytes,
+                isSecret: true
+            )
+        }
 
         return Classified(
             kind: kind,

@@ -9,6 +9,8 @@ public enum SettingsKeys {
     public static let restoreClipboard = "restoreClipboardAfterPaste"
     public static let excludedBundleIDs = "excludedBundleIDs"
     public static let plainTextBundleIDs = "plainTextBundleIDs"
+    /// Minutes before detected secrets are hard-deleted; 0 disables expiry.
+    public static let secretTTLMinutes = "secretTTLMinutes"
 
     public static var defaults: [String: Any] {
         [
@@ -16,6 +18,7 @@ public enum SettingsKeys {
             restoreClipboard: true,
             excludedBundleIDs: ClipboardMonitor.defaultExclusions.sorted().joined(separator: "\n"),
             plainTextBundleIDs: "com.apple.Terminal\ncom.googlecode.iterm2",
+            secretTTLMinutes: 10,
         ]
     }
 
@@ -43,6 +46,7 @@ public struct SettingsView: View {
     @AppStorage(SettingsKeys.restoreClipboard) private var restoreClipboard = true
     @AppStorage(SettingsKeys.excludedBundleIDs) private var excludedBundleIDs = ""
     @AppStorage(SettingsKeys.plainTextBundleIDs) private var plainTextBundleIDs = ""
+    @AppStorage(SettingsKeys.secretTTLMinutes) private var secretTTLMinutes = 10
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var accessibilityGranted = PermissionService.isTrusted
 
@@ -65,6 +69,13 @@ public struct SettingsView: View {
                     Text("1,000 items").tag(1000)
                     Text("2,000 items").tag(2000)
                     Text("5,000 items").tag(5000)
+                }
+
+                Picker("Expire detected secrets after", selection: self.$secretTTLMinutes) {
+                    Text("5 minutes").tag(5)
+                    Text("10 minutes").tag(10)
+                    Text("30 minutes").tag(30)
+                    Text("Never").tag(0)
                 }
             }
 
