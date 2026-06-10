@@ -11,6 +11,8 @@ public enum ActionEffect: Sendable, Equatable {
     case revealFiles([URL])
     /// Fetch the item's image payload and save it to ~/Downloads.
     case saveImage(itemID: String)
+    /// Fetch the item's image payload and open it in Preview.app.
+    case openImage(itemID: String)
     case addToStack([ClipItem])
     /// HUD-only outcome (counts, errors like "not valid JSON").
     case showMessage(String)
@@ -37,6 +39,7 @@ public enum ClipAction: String, CaseIterable, Identifiable, Sendable {
     case copyAsMarkdownLink
     case revealInFinder
     case saveImageToDownloads
+    case openImageInPreview
     case prettyPrintJSON
     case decodeBase64
     case wordCount
@@ -57,6 +60,7 @@ public enum ClipAction: String, CaseIterable, Identifiable, Sendable {
         case .copyAsMarkdownLink: "Copy as Markdown Link"
         case .revealInFinder: "Reveal in Finder"
         case .saveImageToDownloads: "Save Image to Downloads"
+        case .openImageInPreview: "Open in Preview"
         case .prettyPrintJSON: "Pretty-Print JSON"
         case .decodeBase64: "Decode Base64"
         case .wordCount: "Word Count"
@@ -72,6 +76,7 @@ public enum ClipAction: String, CaseIterable, Identifiable, Sendable {
         case .copyAsMarkdownLink: "text.badge.checkmark"
         case .revealInFinder: "folder"
         case .saveImageToDownloads: "square.and.arrow.down"
+        case .openImageInPreview: "photo.on.rectangle"
         case .prettyPrintJSON: "curlybraces"
         case .decodeBase64: "lock.open"
         case .wordCount: "textformat.123"
@@ -81,25 +86,36 @@ public enum ClipAction: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
-    /// Cheap, synchronous filter on kinds/counts so menus can be built without
-    /// touching payloads. `run` revalidates content and reports failures as
-    /// `.showMessage`.
+    /// Synchronous filter on kinds, counts, and preview text, so menus only
+    /// offer actions that plausibly apply (no "Pretty-Print JSON" on prose).
+    /// Previews are truncated at 500 chars, so `run` still revalidates the
+    /// full payload and reports failures as `.showMessage`.
     public func isApplicable(to items: [ClipItem]) -> Bool {
         guard let first = items.first else { return false }
         let kinds = Set(items.map(\.kind))
+        let preview = first.previewText ?? ""
         switch self {
         case .openLink, .copyAsMarkdownLink:
             return items.count == 1 && first.kind == .link
         case .openAllLinks:
             return items.count == 1 && first.kind == .text
+                && preview.lowercased().contains("http")
         case .revealInFinder:
             return items.count == 1 && first.kind == .file
-        case .saveImageToDownloads:
+        case .saveImageToDownloads, .openImageInPreview:
             return items.count == 1 && first.kind == .image
-        case .prettyPrintJSON, .decodeBase64, .wordCount:
-            return items.count == 1 && first.kind == .text
+        case .prettyPrintJSON:
+            return items.count == 1 && first.kind == .text && !first.isSecret
+                && TextScraps.looksLikeJSON(preview)
+        case .decodeBase64:
+            return items.count == 1 && first.kind == .text && !first.isSecret
+                && TextScraps.looksLikeBase64(preview)
+        case .wordCount:
+            return items.count == 1 && first.kind == .text && !first.isSecret
         case .sumNumbers:
-            return kinds.isSubset(of: [.text, .link])
+            guard kinds.isSubset(of: [.text, .link]) else { return false }
+            let previews = items.compactMap(\.previewText).joined(separator: " ")
+            return TextScraps.numbers(in: previews).count >= 2
         case .pasteAllJoined:
             return items.count >= 2 && kinds.isSubset(of: [.text, .link])
         case .addAllToStack:
@@ -139,6 +155,10 @@ public enum ClipAction: String, CaseIterable, Identifiable, Sendable {
         case .saveImageToDownloads:
             guard let item = inputs.first?.item else { return .showMessage("No image") }
             return .saveImage(itemID: item.id)
+
+        case .openImageInPreview:
+            guard let item = inputs.first?.item else { return .showMessage("No image") }
+            return .openImage(itemID: item.id)
 
         case .prettyPrintJSON:
             guard let text = texts.first else { return .showMessage("Empty clip") }

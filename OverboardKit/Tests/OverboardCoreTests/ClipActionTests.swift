@@ -2,9 +2,9 @@ import Foundation
 @testable import OverboardCore
 import Testing
 
-private func makeItem(kind: ItemKind, aiTitle: String? = nil) -> ClipItem {
+private func makeItem(kind: ItemKind, preview: String = "p", aiTitle: String? = nil) -> ClipItem {
     ClipItem(
-        contentHash: UUID().uuidString, kind: kind, previewText: "p",
+        contentHash: UUID().uuidString, kind: kind, previewText: preview,
         sourceBundleID: nil, sourceAppName: nil, byteSize: 1,
         aiTitle: aiTitle,
         createdAt: Date(), lastUsedAt: Date(), updatedAt: Date()
@@ -48,13 +48,43 @@ struct ClipActionTests {
 
         #expect(ClipAction.applicable(to: [link]).contains(.openLink))
         #expect(!ClipAction.applicable(to: [text]).contains(.openLink))
-        #expect(ClipAction.applicable(to: [text]).contains(.openAllLinks))
         #expect(ClipAction.applicable(to: [image]).contains(.saveImageToDownloads))
+        #expect(ClipAction.applicable(to: [image]).contains(.openImageInPreview))
         // Multi-only actions need 2+.
         #expect(!ClipAction.applicable(to: [text]).contains(.pasteAllJoined))
         #expect(ClipAction.applicable(to: [text, link]).contains(.pasteAllJoined))
         #expect(ClipAction.applicable(to: [text, image]).contains(.addAllToStack))
         #expect(!ClipAction.applicable(to: [text, image]).contains(.pasteAllJoined))
+    }
+
+    @Test func contentAwareApplicability() {
+        // JSON only offered on JSON-shaped previews.
+        let prose = makeItem(kind: .text, preview: "just some ordinary prose about boats")
+        let json = makeItem(kind: .text, preview: #"{"a": 1, "b": [2, 3]}"#)
+        #expect(!ClipAction.applicable(to: [prose]).contains(.prettyPrintJSON))
+        #expect(ClipAction.applicable(to: [json]).contains(.prettyPrintJSON))
+
+        // Base64 only on base64-shaped previews.
+        let base64 = makeItem(kind: .text, preview: "aGVsbG8gZnJvbSBvdmVyYm9hcmQ=")
+        #expect(!ClipAction.applicable(to: [prose]).contains(.decodeBase64))
+        #expect(ClipAction.applicable(to: [base64]).contains(.decodeBase64))
+
+        // Open All Links only when the preview actually has one.
+        let withLink = makeItem(kind: .text, preview: "see https://example.com for more")
+        #expect(!ClipAction.applicable(to: [prose]).contains(.openAllLinks))
+        #expect(ClipAction.applicable(to: [withLink]).contains(.openAllLinks))
+
+        // Sum only when the previews carry at least two numbers.
+        let numbers = makeItem(kind: .text, preview: "subtotal 12.50 tax 1.20")
+        #expect(!ClipAction.applicable(to: [prose]).contains(.sumNumbers))
+        #expect(ClipAction.applicable(to: [numbers]).contains(.sumNumbers))
+    }
+
+    @Test func base64HeuristicRejectsOrdinaryWords() {
+        #expect(!TextScraps.looksLikeBase64("abcdefghijkl"))
+        #expect(!TextScraps.looksLikeBase64("supercalifragilistic"))
+        #expect(TextScraps.looksLikeBase64("aGVsbG8gZnJvbSBvdmVyYm9hcmQ="))
+        #expect(!TextScraps.looksLikeBase64("has spaces aGVsbG8="))
     }
 
     @Test func sumNumbersAcrossSelection() {

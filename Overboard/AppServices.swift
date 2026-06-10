@@ -247,6 +247,9 @@ final class AppServices {
         case let .saveImage(itemID):
             await self.saveImageToDownloads(itemID: itemID)
 
+        case let .openImage(itemID):
+            await self.openImageInPreview(itemID: itemID)
+
         case let .addToStack(items):
             for item in items {
                 self.stack.push(item)
@@ -255,6 +258,39 @@ final class AppServices {
 
         case let .showMessage(message):
             HUDController.shared.flash(message)
+        }
+    }
+
+    private func openImageInPreview(itemID: String) async {
+        guard let rep = try? await self.store.representations(for: itemID)
+            .first(where: { $0.uti == WellKnownUTI.png }),
+            let data = try? await self.store.payload(for: rep)
+        else {
+            HUDController.shared.flash("Couldn't open image")
+            return
+        }
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("Overboard-\(itemID).png")
+        do {
+            try data.write(to: url)
+        } catch {
+            HUDController.shared.flash("Couldn't open image")
+            return
+        }
+        // Force Preview.app to match the action's label, falling back to the
+        // system default PNG handler if it's somehow missing.
+        if let preview = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Preview") {
+            do {
+                _ = try await NSWorkspace.shared.open(
+                    [url],
+                    withApplicationAt: preview,
+                    configuration: NSWorkspace.OpenConfiguration()
+                )
+            } catch {
+                NSWorkspace.shared.open(url)
+            }
+        } else {
+            NSWorkspace.shared.open(url)
         }
     }
 

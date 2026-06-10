@@ -28,6 +28,27 @@ public enum TextScraps {
             : String(value)
     }
 
+    /// Preview-text heuristic: JSON-shaped enough to offer pretty-printing.
+    public static func looksLikeJSON(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count >= 2, let first = trimmed.first else { return false }
+        return first == "{" || first == "["
+    }
+
+    /// Preview-text heuristic: plausibly Base64. Requires the alphabet, some
+    /// length, and at least one non-lowercase character so ordinary words
+    /// don't qualify. Tolerates length % 4 ≠ 0 only for truncated previews.
+    public static func looksLikeBase64(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count >= 16 else { return false }
+        let alphabet = Set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=")
+        guard trimmed.allSatisfy({ alphabet.contains($0) }) else { return false }
+        let hasBase64Flavor = trimmed.contains {
+            $0.isUppercase || $0.isNumber || $0 == "+" || $0 == "/" || $0 == "="
+        }
+        return hasBase64Flavor && (trimmed.count.isMultiple(of: 4) || trimmed.count >= 400)
+    }
+
     public static func prettyPrintedJSON(_ text: String) -> String? {
         guard let data = text.data(using: .utf8),
               let object = try? JSONSerialization.jsonObject(with: data),
