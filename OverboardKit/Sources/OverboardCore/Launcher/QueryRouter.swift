@@ -14,11 +14,19 @@ public struct QueryRouter: Sendable {
     public func results(for query: String) async -> [LauncherResult] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return [] }
-        var results: [LauncherResult] = []
-        for provider in self.providers {
-            results += await provider.results(for: trimmed)
+        // Providers run concurrently — Spotlight gathers dominate and would
+        // otherwise serialize — but rows keep provider priority order.
+        let providers = self.providers
+        return await withTaskGroup(of: (Int, [LauncherResult]).self) { group in
+            for (index, provider) in providers.enumerated() {
+                group.addTask { await (index, provider.results(for: trimmed)) }
+            }
+            var buckets = [[LauncherResult]](repeating: [], count: providers.count)
+            for await (index, results) in group {
+                buckets[index] = results
+            }
+            return buckets.flatMap(\.self)
         }
-        return results
     }
 }
 

@@ -1,3 +1,4 @@
+import AsyncAlgorithms
 import Foundation
 import Observation
 import OverboardCore
@@ -201,6 +202,9 @@ public final class DrawerViewModel {
     private let store: ClipStore
     private var searchTask: Task<Void, Never>?
     private var liveUpdateTask: Task<Void, Never>?
+    /// Keystrokes funnel through here; one long-lived consumer debounces them.
+    private let searchChannel = AsyncChannel<Void>()
+    private var searchDebounceTask: Task<Void, Never>?
 
     /// Card views need read access for thumbnails and drag payloads.
     var storeForCards: ClipStore {
@@ -210,6 +214,14 @@ public final class DrawerViewModel {
     public init(store: ClipStore, stack: PasteStack) {
         self.store = store
         self.stack = stack
+        // Debounce so we don't hit FTS on every keystroke. A pending refresh
+        // surviving prepareForShow/toggleMode is harmless: it re-runs the
+        // current (reset) query.
+        self.searchDebounceTask = Task { [weak self, searchChannel] in
+            for await _ in searchChannel.debounce(for: .milliseconds(120)) {
+                await self?.refresh(resetSelection: true)
+            }
+        }
     }
 
     public var entryCount: Int {
@@ -243,7 +255,9 @@ public final class DrawerViewModel {
         self.liveUpdateTask = Task {
             var isInitialEmission = true
             do {
-                for try await _ in self.store.observeChangeToken() {
+                // A single copy lands as ingest + OCR + enrichment writes in
+                // quick succession; debounce folds them into one refresh.
+                for try await _ in self.store.observeChangeToken().debounce(for: .milliseconds(100)) {
                     // prepareForShow already loaded the initial list.
                     if isInitialEmission {
                         isInitialEmission = false
@@ -275,13 +289,7 @@ public final class DrawerViewModel {
     }
 
     public func scheduleSearch() {
-        self.searchTask?.cancel()
-        self.searchTask = Task {
-            // Debounce so we don't hit FTS on every keystroke.
-            try? await Task.sleep(for: .milliseconds(120))
-            guard !Task.isCancelled else { return }
-            await self.refresh(resetSelection: true)
-        }
+        Task { [searchChannel] in await searchChannel.send(()) }
     }
 
     private func refresh(resetSelection: Bool = true, followItemID: String? = nil) async {

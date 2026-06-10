@@ -98,7 +98,6 @@ public final class LauncherViewModel {
     }
 
     private func setResults(_ newResults: [LauncherResult]) {
-        obTrace("launcher: setResults \(newResults.map(\.id))")
         let countChanged = newResults.count != self.results.count
         self.results = newResults
         if self.selectedIndex >= newResults.count {
