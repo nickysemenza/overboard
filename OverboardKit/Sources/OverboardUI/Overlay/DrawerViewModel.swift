@@ -225,6 +225,9 @@ public final class DrawerViewModel {
         self.selectedIndex = 0
         self.multiSelection = []
         self.mode = .history
+        // Hiding the drawer with the palette open must not resurface a stale
+        // palette on the next summon.
+        self.isPaletteOpen = false
         self.showGeneration += 1
         // No visibility callback: show() always sets the collapsed frame.
         self.previewState = .hidden
