@@ -45,7 +45,13 @@ final class AppServices {
         self.ingestTask = Task(priority: .utility) { [logger] in
             for await snapshot in snapshots {
                 do {
-                    try await store.ingest(snapshot)
+                    if let item = try await store.ingest(snapshot) {
+                        // Fire-and-forget so a slow OCR/LLM pass never delays
+                        // capturing the next copy.
+                        Task.detached(priority: .utility) {
+                            await AppServices.enrich(item: item, snapshot: snapshot, store: store)
+                        }
+                    }
                 } catch {
                     logger.error("ingest failed: \(String(describing: error), privacy: .public)")
                 }
@@ -97,6 +103,23 @@ final class AppServices {
             }
         }
 
+        self.overlay.onCommitAITransform = { [weak self] item, transform, target in
+            guard let self else { return }
+            Task {
+                guard #available(macOS 26.0, *) else { return }
+                guard let text = try? await self.store.plainText(for: item.id) else { return }
+                HUDController.shared.flash("✨ \(transform.label)…", duration: .seconds(15))
+                do {
+                    let result = try await AITransformer.apply(transform, to: text)
+                    try? await self.store.markUsed(id: item.id)
+                    self.pasteString(result, into: target)
+                } catch {
+                    HUDController.shared.flash("AI transform failed")
+                    self.logger.error("AI transform failed: \(String(describing: error), privacy: .public)")
+                }
+            }
+        }
+
         HotkeyService.onToggleDrawer { [weak self] in
             self?.overlay.toggle()
         }
@@ -113,6 +136,43 @@ final class AppServices {
                     HUDController.shared.flash("Pasted from stack — \(remaining) left")
                 }
             }
+        }
+    }
+
+    /// Post-ingest enrichment: OCR for images (always), then LLM title +
+    /// category (macOS 26 + Apple Intelligence + setting enabled). Runs off
+    /// the ingest loop; every step is best-effort.
+    private static func enrich(item: ClipItem, snapshot: PasteboardSnapshot, store: ClipStore) async {
+        // Only fresh, non-secret items; bumped duplicates are already enriched.
+        guard item.useCount == 1, !item.isSecret else { return }
+
+        var textForLabeling: String?
+
+        if item.kind == .image,
+           let png = snapshot.reps.first(where: { $0.uti == WellKnownUTI.png })?.data,
+           let recognized = ImageTextRecognizer.recognizeText(in: png)
+        {
+            try? await store.attachRecognizedText(itemID: item.id, text: recognized)
+            textForLabeling = recognized
+        } else if item.kind == .text {
+            textForLabeling = snapshot.reps
+                .first { $0.uti == WellKnownUTI.plainText }
+                .flatMap { String(data: $0.data, encoding: .utf8) }
+        }
+
+        guard UserDefaults.standard.bool(forKey: SettingsKeys.aiFeatures),
+              ClipEnricher.isAvailable,
+              let text = textForLabeling,
+              text.count >= 80
+        else { return }
+
+        if #available(macOS 26.0, *) {
+            guard let enrichment = try? await ClipEnricher.enrich(text: text) else { return }
+            try? await store.attachEnrichment(
+                itemID: item.id,
+                title: enrichment.title,
+                category: enrichment.category
+            )
         }
     }
 

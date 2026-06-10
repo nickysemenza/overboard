@@ -1,5 +1,6 @@
 import AppKit
 import KeyboardShortcuts
+import OverboardCore
 import OverboardMac
 import ServiceManagement
 import SwiftUI
@@ -11,6 +12,8 @@ public enum SettingsKeys {
     public static let plainTextBundleIDs = "plainTextBundleIDs"
     /// Minutes before detected secrets are hard-deleted; 0 disables expiry.
     public static let secretTTLMinutes = "secretTTLMinutes"
+    /// Apple Intelligence features: auto-titles, categories, AI transforms.
+    public static let aiFeatures = "aiFeatures"
 
     public static var defaults: [String: Any] {
         [
@@ -19,6 +22,7 @@ public enum SettingsKeys {
             excludedBundleIDs: ClipboardMonitor.defaultExclusions.sorted().joined(separator: "\n"),
             plainTextBundleIDs: "com.apple.Terminal\ncom.googlecode.iterm2",
             secretTTLMinutes: 10,
+            aiFeatures: true,
         ]
     }
 
@@ -47,6 +51,7 @@ public struct SettingsView: View {
     @AppStorage(SettingsKeys.excludedBundleIDs) private var excludedBundleIDs = ""
     @AppStorage(SettingsKeys.plainTextBundleIDs) private var plainTextBundleIDs = ""
     @AppStorage(SettingsKeys.secretTTLMinutes) private var secretTTLMinutes = 10
+    @AppStorage(SettingsKeys.aiFeatures) private var aiFeatures = true
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var accessibilityGranted = PermissionService.isTrusted
 
@@ -77,6 +82,15 @@ public struct SettingsView: View {
                     Text("30 minutes").tag(30)
                     Text("Never").tag(0)
                 }
+            }
+
+            Section {
+                Toggle("Apple Intelligence titles, categories & transforms", isOn: self.$aiFeatures)
+                    .disabled(!ClipEnricher.isAvailable)
+            } footer: {
+                Text(ClipEnricher.isAvailable
+                    ? "Clips get short titles and category badges, and the card menu gains AI transforms (summarize, fix grammar, …). Everything runs on-device."
+                    : "Requires Apple Silicon, macOS 26, and Apple Intelligence enabled. Image OCR works regardless.")
             }
 
             Section {

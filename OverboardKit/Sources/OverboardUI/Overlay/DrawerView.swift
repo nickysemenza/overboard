@@ -106,6 +106,9 @@ public struct DrawerView: View {
                 },
                 onTransform: { transform in
                     self.viewModel.selectTransformed(at: index, transform: transform)
+                },
+                onAITransform: { transform in
+                    self.viewModel.selectAITransformed(at: index, transform: transform)
                 }
             )
             .onTapGesture {

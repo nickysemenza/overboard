@@ -122,6 +122,13 @@ enum Migrations {
             """)
         }
 
+        migrator.registerMigration("v4-ai-enrichment") { db in
+            try db.execute(sql: """
+            ALTER TABLE item ADD COLUMN aiTitle TEXT;
+            ALTER TABLE item ADD COLUMN category TEXT;
+            """)
+        }
+
         return migrator
     }
 }

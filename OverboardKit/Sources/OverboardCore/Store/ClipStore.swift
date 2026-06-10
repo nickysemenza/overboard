@@ -319,6 +319,48 @@ public actor ClipStore {
         return topIDs.compactMap { byID[$0] }
     }
 
+    // MARK: - AI enrichment
+
+    /// Attaches OCR'd text to an item that had none (images): becomes its
+    /// searchText, enters the FTS index, and gets a semantic embedding —
+    /// screenshots become findable by their contents.
+    public func attachRecognizedText(itemID: String, text: String) throws {
+        let capped = String(text.prefix(CaptureClassifier.searchTextLimit))
+        let attached: Bool = try self.dbWriter.write { db in
+            guard let row = try Row.fetchOne(
+                db,
+                sql: "SELECT rowid, searchText FROM item WHERE id = ? AND deletedAt IS NULL",
+                arguments: [itemID]
+            ), (row["searchText"] as String?) == nil else { return false }
+
+            try db.execute(
+                sql: "UPDATE item SET searchText = ?, updatedAt = ?, lamport = lamport + 1 WHERE id = ?",
+                arguments: [capped, Date(), itemID]
+            )
+            try db.execute(
+                sql: "INSERT INTO item_fts (rowid, searchText) VALUES (?, ?)",
+                arguments: [row["rowid"] as Int64, capped]
+            )
+            return true
+        }
+        if attached {
+            try? self.storeEmbedding(itemID: itemID, text: capped)
+        }
+    }
+
+    /// Stores a generated title + category. Never overwrites an existing title.
+    public func attachEnrichment(itemID: String, title: String, category: String) throws {
+        try self.dbWriter.write { db in
+            try db.execute(
+                sql: """
+                UPDATE item SET aiTitle = ?, category = ?, updatedAt = ?, lamport = lamport + 1
+                WHERE id = ? AND aiTitle IS NULL AND deletedAt IS NULL
+                """,
+                arguments: [title, category, Date(), itemID]
+            )
+        }
+    }
+
     // MARK: - Secret expiry
 
     /// Hard-deletes secret items captured before the cutoff. Secrets are never

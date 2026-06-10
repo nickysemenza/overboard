@@ -13,6 +13,7 @@ struct ItemCardView: View {
     var onDelete: () -> Void = {}
     var onPaste: (PasteMode) -> Void = { _ in }
     var onTransform: (ClipTransform) -> Void = { _ in }
+    var onAITransform: (AITransform) -> Void = { _ in }
 
     @State private var thumbnail: NSImage?
 
@@ -50,6 +51,13 @@ struct ItemCardView: View {
                     }
                 }
             }
+            if self.item.kind == .text, !self.item.isSecret, AITransformer.isAvailable {
+                Menu("Paste with AI") {
+                    ForEach(AITransform.allCases) { transform in
+                        Button(transform.label) { self.onAITransform(transform) }
+                    }
+                }
+            }
             Divider()
             Button(self.item.isPinned ? "Unpin" : "Pin") { self.onPinToggle() }
             Button("Delete", role: .destructive) { self.onDelete() }
@@ -71,6 +79,14 @@ struct ItemCardView: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
             Spacer()
+            if let category = item.category, ClipEnricher.badgeCategories.contains(category) {
+                Text(category)
+                    .font(.caption2)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1)
+                    .background(Color.accentColor.opacity(0.15), in: Capsule())
+                    .foregroundStyle(.secondary)
+            }
             if self.item.isSecret {
                 Image(systemName: "lock.fill")
                     .font(.caption2)
@@ -110,10 +126,18 @@ struct ItemCardView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                Text(self.item.previewText ?? "")
-                    .font(.callout)
-                    .lineLimit(7)
-                    .padding(10)
+                VStack(alignment: .leading, spacing: 4) {
+                    if let title = item.aiTitle {
+                        Text(title)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    Text(self.item.previewText ?? "")
+                        .font(.callout)
+                        .lineLimit(self.item.aiTitle == nil ? 7 : 6)
+                }
+                .padding(10)
             }
         case .link:
             VStack(alignment: .leading, spacing: 6) {

@@ -22,6 +22,7 @@ public final class DrawerViewModel {
     public var onCommit: (ClipItem, PasteMode) -> Void = { _, _ in }
     public var onCommitSnippet: (Snippet) -> Void = { _ in }
     public var onCommitTransform: (ClipItem, ClipTransform) -> Void = { _, _ in }
+    public var onCommitAITransform: (ClipItem, AITransform) -> Void = { _, _ in }
     public var onDismiss: () -> Void = {}
 
     private let store: ClipStore
@@ -132,6 +133,12 @@ public final class DrawerViewModel {
         guard self.mode == .history, self.items.indices.contains(index) else { return }
         self.selectedIndex = index
         self.onCommitTransform(self.items[index], transform)
+    }
+
+    public func selectAITransformed(at index: Int, transform: AITransform) {
+        guard self.mode == .history, self.items.indices.contains(index) else { return }
+        self.selectedIndex = index
+        self.onCommitAITransform(self.items[index], transform)
     }
 
     /// Queue the selected item onto the paste stack and advance selection so

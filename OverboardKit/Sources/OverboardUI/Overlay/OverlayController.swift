@@ -23,6 +23,8 @@ public final class OverlayController {
     public var onCommitSnippet: (Snippet, NSRunningApplication?) -> Void = { _, _ in }
     /// Called when the user pastes an item through a transform.
     public var onCommitTransform: (ClipItem, ClipTransform, NSRunningApplication?) -> Void = { _, _, _ in }
+    /// Called when the user pastes an item through an LLM transform.
+    public var onCommitAITransform: (ClipItem, AITransform, NSRunningApplication?) -> Void = { _, _, _ in }
 
     public init(store: ClipStore, stack: PasteStack) {
         self.viewModel = DrawerViewModel(store: store, stack: stack)
@@ -43,6 +45,12 @@ public final class OverlayController {
             let target = self.targetApp
             self.hide()
             self.onCommitTransform(item, transform, target)
+        }
+        self.viewModel.onCommitAITransform = { [weak self] item, transform in
+            guard let self else { return }
+            let target = self.targetApp
+            self.hide()
+            self.onCommitAITransform(item, transform, target)
         }
         self.viewModel.onDismiss = { [weak self] in self?.hide() }
     }

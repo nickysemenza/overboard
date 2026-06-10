@@ -18,6 +18,13 @@ All planned milestones (M0–M4) complete. Daily-drivable.
 - **Search**: FTS5 full-text with prefix matching, blended with on-device
   semantic search (NLEmbedding) so "money projection" finds "quarterly
   revenue forecast". Nothing ever leaves the machine.
+- **OCR**: copied images and screenshots are text-recognized (Vision) and
+  fully searchable by their contents — find that wifi-password screenshot
+  by typing the network name.
+- **Apple Intelligence** (macOS 26, on-device, optional): clips get short
+  auto-generated titles and category badges (code, error, address, …), and
+  the card menu gains AI transforms — summarize, fix grammar, make
+  formal/casual, extract action items.
 - **Paste-back**: synthesized ⌘V into the app you were in, then your previous
   clipboard is restored. Falls back to copy + HUD without Accessibility.
 - **Paste stack**: ⌘↩ queues items in the drawer; ⌥⌘V pastes them one by one.

@@ -11,6 +11,10 @@ public struct ClipItem: Codable, Sendable, Equatable, Identifiable {
     public var byteSize: Int
     public var isPinned: Bool
     public var isSecret: Bool
+    /// LLM-generated short title (background enrichment; nil until generated).
+    public var aiTitle: String?
+    /// LLM-assigned category (code, error, address, contact, prose, list, other).
+    public var category: String?
     public var useCount: Int
     public var createdAt: Date
     public var lastUsedAt: Date
@@ -28,6 +32,8 @@ public struct ClipItem: Codable, Sendable, Equatable, Identifiable {
         byteSize: Int,
         isPinned: Bool = false,
         isSecret: Bool = false,
+        aiTitle: String? = nil,
+        category: String? = nil,
         useCount: Int = 1,
         createdAt: Date,
         lastUsedAt: Date,
@@ -44,6 +50,8 @@ public struct ClipItem: Codable, Sendable, Equatable, Identifiable {
         self.byteSize = byteSize
         self.isPinned = isPinned
         self.isSecret = isSecret
+        self.aiTitle = aiTitle
+        self.category = category
         self.useCount = useCount
         self.createdAt = createdAt
         self.lastUsedAt = lastUsedAt
