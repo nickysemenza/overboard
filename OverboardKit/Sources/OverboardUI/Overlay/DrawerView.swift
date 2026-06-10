@@ -20,6 +20,13 @@ public struct DrawerView: View {
                 PreviewPane(viewModel: self.viewModel)
             }
         }
+        .overlay {
+            if self.viewModel.isPaletteOpen {
+                ActionPalette(viewModel: self.viewModel)
+                    .transition(.scale(scale: 0.95).combined(with: .opacity))
+            }
+        }
+        .animation(.spring(response: 0.22, dampingFraction: 0.85), value: self.viewModel.isPaletteOpen)
         .padding(14)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
         .overlay {
@@ -190,7 +197,7 @@ public struct DrawerView: View {
 
     private var footerHints: some View {
         Text(self.viewModel.mode == .history
-            ? "↩ paste   ⇧↩ plain   ⌘↩ stack   space preview   ⌘E edit   ⌘P pin   ⌘⌫ delete   ⌘/ snippets"
+            ? "↩ paste   ⇧↩ plain   space preview   ⌘K actions   ⌘E edit   ⌘↩ stack   ⌘P pin   ⌘/ snippets"
             : "↩ paste snippet   ⌘/ history   esc dismiss")
             .font(.caption2)
             .foregroundStyle(.tertiary)

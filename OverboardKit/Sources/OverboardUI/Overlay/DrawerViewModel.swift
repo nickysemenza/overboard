@@ -94,6 +94,57 @@ public final class DrawerViewModel {
         self.onRunAction(action, items)
     }
 
+    // MARK: ⌘K palette
+
+    public private(set) var isPaletteOpen = false
+    public var paletteQuery: String = ""
+    public var paletteIndex: Int = 0
+
+    public var filteredPaletteActions: [ClipAction] {
+        let all = self.applicableActions
+        let needle = self.paletteQuery.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !needle.isEmpty else { return all }
+        // Subsequence "fuzzy" match on the label.
+        return all.filter { action in
+            var remaining = Substring(needle)
+            for char in action.label.lowercased() where char == remaining.first {
+                remaining = remaining.dropFirst()
+                if remaining.isEmpty { return true }
+            }
+            return remaining.isEmpty
+        }
+    }
+
+    public func togglePalette() {
+        guard self.mode == .history else { return }
+        if self.isPaletteOpen {
+            self.closePalette()
+        } else {
+            guard !self.selectedItems.isEmpty else { return }
+            self.paletteQuery = ""
+            self.paletteIndex = 0
+            self.isPaletteOpen = true
+        }
+    }
+
+    public func closePalette() {
+        self.isPaletteOpen = false
+    }
+
+    public func movePaletteSelection(_ delta: Int) {
+        let count = self.filteredPaletteActions.count
+        guard count > 0 else { return }
+        self.paletteIndex = min(max(self.paletteIndex + delta, 0), count - 1)
+    }
+
+    public func runPaletteAction(at index: Int? = nil) {
+        let actions = self.filteredPaletteActions
+        let chosen = index ?? self.paletteIndex
+        guard actions.indices.contains(chosen) else { return }
+        self.closePalette()
+        self.runAction(actions[chosen])
+    }
+
     // MARK: Preview / edit
 
     public private(set) var previewState: PreviewState = .hidden

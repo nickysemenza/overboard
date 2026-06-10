@@ -172,6 +172,26 @@ public final class OverlayController {
         self.keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self, let panel = self.panel, event.window === panel else { return event }
 
+            // The palette owns the keyboard above everything else.
+            if self.viewModel.isPaletteOpen {
+                switch event.keyCode {
+                case 53: // esc closes the palette, not the drawer
+                    self.viewModel.closePalette()
+                    return nil
+                case 36, 76: // return runs the highlighted action
+                    self.viewModel.runPaletteAction()
+                    return nil
+                case 126: // up
+                    self.viewModel.movePaletteSelection(-1)
+                    return nil
+                case 125: // down
+                    self.viewModel.movePaletteSelection(1)
+                    return nil
+                default: // typing filters
+                    return event
+                }
+            }
+
             // Preview/edit modes own the keyboard before the normal model.
             switch self.viewModel.previewState {
             case .editing:
@@ -225,6 +245,9 @@ public final class OverlayController {
                 return nil
             case 14 where event.modifierFlags.contains(.command): // ⌘E edit before paste
                 self.viewModel.beginEdit()
+                return nil
+            case 40 where event.modifierFlags.contains(.command): // ⌘K action palette
+                self.viewModel.togglePalette()
                 return nil
             case 36, 76: // return, keypad enter — ⇧ plain text, ⌘ queue on stack
                 if event.modifierFlags.contains(.command) {
