@@ -115,6 +115,62 @@ struct EnrichmentStoreTests {
         #expect(try await store.search("original").count == 1)
     }
 
+    @Test func enrichmentMakesTitleAndSummarySearchable() async throws {
+        let store = try makeStore()
+        let snapshot = PasteboardSnapshot(
+            reps: [.init(uti: WellKnownUTI.plainText, data: Data("0, 1, 1, 2, 3, 5, 8, 13, 21".utf8))],
+            sourceBundleID: nil,
+            sourceAppName: nil
+        )
+        let item = try #require(try await store.ingest(snapshot))
+
+        // Before enrichment: only the literal content matches.
+        #expect(try await store.search("fibonacci").isEmpty)
+
+        try await store.attachEnrichment(
+            itemID: item.id,
+            title: "Fibonacci Sequence",
+            category: "code",
+            summary: "The first numbers of the famous series."
+        )
+
+        // Title, summary, AND original content all match now.
+        #expect(try await store.search("fibonacci").count == 1)
+        #expect(try await store.search("famous").count == 1)
+        #expect(try await store.search("21").count == 1)
+    }
+
+    @Test func enrichedImageSearchableByOCRAndTitle() async throws {
+        let store = try makeStore()
+        let item = try #require(try await store.ingest(self.imageSnapshot()))
+
+        try await store.attachRecognizedText(itemID: item.id, text: "GUEST WIFI dockside42")
+        try await store.attachEnrichment(itemID: item.id, title: "Wifi Credentials", category: "other")
+
+        #expect(try await store.search("dockside42").count == 1)
+        #expect(try await store.search("credentials").count == 1)
+    }
+
+    @Test func backfillQueriesFindCandidates() async throws {
+        let store = try makeStore()
+        let image = try #require(try await store.ingest(self.imageSnapshot()))
+        let longText = String(repeating: "meaningful words ", count: 10)
+        let text = try #require(try await store.ingest(PasteboardSnapshot(
+            reps: [.init(uti: WellKnownUTI.plainText, data: Data(longText.utf8))],
+            sourceBundleID: nil, sourceAppName: nil
+        )))
+
+        #expect(try await store.itemsNeedingOCR().map(\.id) == [image.id])
+        #expect(try await store.itemsNeedingEnrichment().map(\.id) == [text.id])
+
+        try await store.attachRecognizedText(itemID: image.id, text: "now indexed")
+        try await store.attachEnrichment(itemID: text.id, title: "T", category: "prose")
+
+        #expect(try await store.itemsNeedingOCR().isEmpty)
+        // The OCR'd image is now an enrichment candidate only if long enough (it isn't).
+        #expect(try await store.itemsNeedingEnrichment().isEmpty)
+    }
+
     @Test func enrichmentStoresTitleAndCategoryOnce() async throws {
         let store = try makeStore()
         let snapshot = PasteboardSnapshot(

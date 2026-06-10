@@ -18,6 +18,7 @@ final class AppServices {
     private var ingestTask: Task<Void, Never>?
     private var purgeTask: Task<Void, Never>?
     private var secretSweepTask: Task<Void, Never>?
+    private var backfillTask: Task<Void, Never>?
     private let logger = Logger(subsystem: "com.nicky.overboard", category: "app")
 
     private init() {
@@ -83,6 +84,11 @@ final class AppServices {
             }
         }
 
+        // One-shot backfill: items captured before OCR/enrichment existed.
+        self.backfillTask = Task.detached(priority: .background) {
+            await AppServices.backfill(store: store)
+        }
+
         self.overlay.onCommit = { [weak self] item, mode, target in
             self?.pasteItem(item, mode: mode, into: target)
         }
@@ -146,7 +152,8 @@ final class AppServices {
     /// Post-ingest enrichment: OCR for images (always), then LLM title +
     /// category (macOS 26 + Apple Intelligence + setting enabled). Runs off
     /// the ingest loop; every step is best-effort.
-    private static func enrich(item: ClipItem, snapshot: PasteboardSnapshot, store: ClipStore) async {
+    /// nonisolated: OCR is sync CPU work and must not land on the main actor.
+    private nonisolated static func enrich(item: ClipItem, snapshot: PasteboardSnapshot, store: ClipStore) async {
         // Only fresh, non-secret items; bumped duplicates are already enriched.
         guard item.useCount == 1, !item.isSecret else { return }
 
@@ -182,6 +189,46 @@ final class AppServices {
                 category: enrichment.category,
                 summary: summary
             )
+        }
+    }
+
+    /// One-shot catch-up for items captured before OCR/enrichment existed
+    /// (or while AI was toggled off). Idempotent — candidates disappear once
+    /// processed.
+    private nonisolated static func backfill(store: ClipStore) async {
+        // OCR first: no Apple Intelligence requirement. Textless images get
+        // marked with empty searchText so they aren't retried every launch.
+        if let images = try? await store.itemsNeedingOCR() {
+            for item in images {
+                guard let rep = try? await store.representations(for: item.id)
+                    .first(where: { $0.uti == WellKnownUTI.png }),
+                    let data = try? await store.payload(for: rep)
+                else { continue }
+                let text = ImageTextRecognizer.recognizeText(in: data) ?? ""
+                try? await store.attachRecognizedText(itemID: item.id, text: text)
+            }
+        }
+
+        guard UserDefaults.standard.bool(forKey: SettingsKeys.aiFeatures),
+              ClipEnricher.isAvailable
+        else { return }
+
+        if #available(macOS 26.0, *) {
+            guard let candidates = try? await store.itemsNeedingEnrichment() else { return }
+            for item in candidates {
+                guard let text = try? await store.searchText(for: item.id),
+                      text.count >= 80,
+                      let enrichment = try? await ClipEnricher.enrich(text: text)
+                else { continue }
+                let summary = text.count >= ClipEnricher.summaryWorthwhileLength
+                    ? enrichment.summary : nil
+                try? await store.attachEnrichment(
+                    itemID: item.id,
+                    title: enrichment.title,
+                    category: enrichment.category,
+                    summary: summary
+                )
+            }
         }
     }
 

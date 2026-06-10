@@ -357,6 +357,8 @@ public actor ClipStore {
     /// Attaches OCR'd text to an item that had none (images): becomes its
     /// searchText, enters the FTS index, and gets a semantic embedding —
     /// screenshots become findable by their contents.
+    /// Empty text still sets the column (to "") so textless images are marked
+    /// as attempted and don't get re-OCR'd by every backfill pass.
     public func attachRecognizedText(itemID: String, text: String) throws {
         let capped = String(text.prefix(CaptureClassifier.searchTextLimit))
         let attached: Bool = try self.dbWriter.write { db in
@@ -370,19 +372,23 @@ public actor ClipStore {
                 sql: "UPDATE item SET searchText = ?, updatedAt = ?, lamport = lamport + 1 WHERE id = ?",
                 arguments: [capped, Date(), itemID]
             )
-            try db.execute(
-                sql: "INSERT INTO item_fts (rowid, searchText) VALUES (?, ?)",
-                arguments: [row["rowid"] as Int64, capped]
-            )
-            return true
+            if !capped.isEmpty {
+                try db.execute(
+                    sql: "INSERT INTO item_fts (rowid, searchText) VALUES (?, ?)",
+                    arguments: [row["rowid"] as Int64, capped]
+                )
+            }
+            return !capped.isEmpty
         }
         if attached {
             try? self.storeEmbedding(itemID: itemID, text: capped)
         }
     }
 
-    /// Stores generated title + category + optional summary. Never overwrites
-    /// an existing title.
+    /// Stores generated title + category + optional summary, and folds the
+    /// AI text into the FTS index so items are findable by their generated
+    /// descriptions, not just their literal content. Never overwrites an
+    /// existing title.
     public func attachEnrichment(
         itemID: String,
         title: String,
@@ -390,12 +396,76 @@ public actor ClipStore {
         summary: String? = nil
     ) throws {
         try self.dbWriter.write { db in
+            guard let row = try Row.fetchOne(
+                db,
+                sql: "SELECT rowid, searchText FROM item WHERE id = ? AND aiTitle IS NULL AND deletedAt IS NULL",
+                arguments: [itemID]
+            ) else { return }
+            let rowid: Int64 = row["rowid"]
+            let oldSearchText: String? = row["searchText"]
+
+            let parts = [oldSearchText, title, summary].compactMap(\.self).filter { !$0.isEmpty }
+            let newSearchText = String(
+                parts.joined(separator: "\n").prefix(CaptureClassifier.searchTextLimit)
+            )
+
+            if let oldSearchText {
+                try db.execute(
+                    sql: "INSERT INTO item_fts (item_fts, rowid, searchText) VALUES ('delete', ?, ?)",
+                    arguments: [rowid, oldSearchText]
+                )
+            }
             try db.execute(
                 sql: """
-                UPDATE item SET aiTitle = ?, category = ?, aiSummary = ?, updatedAt = ?, lamport = lamport + 1
-                WHERE id = ? AND aiTitle IS NULL AND deletedAt IS NULL
+                UPDATE item SET aiTitle = ?, category = ?, aiSummary = ?, searchText = ?,
+                                updatedAt = ?, lamport = lamport + 1
+                WHERE id = ?
                 """,
-                arguments: [title, category, summary, Date(), itemID]
+                arguments: [title, category, summary, newSearchText, Date(), itemID]
+            )
+            if !newSearchText.isEmpty {
+                try db.execute(
+                    sql: "INSERT INTO item_fts (rowid, searchText) VALUES (?, ?)",
+                    arguments: [rowid, newSearchText]
+                )
+            }
+        }
+    }
+
+    // MARK: - Backfill queries
+
+    /// Images captured before OCR existed (or whose OCR never ran).
+    public func itemsNeedingOCR(limit: Int = 200) throws -> [ClipItem] {
+        try self.dbWriter.read { db in
+            try ClipItem
+                .filter(sql: "kind = 'image' AND searchText IS NULL AND deletedAt IS NULL")
+                .order(sql: "lastUsedAt DESC")
+                .limit(limit)
+                .fetchAll(db)
+        }
+    }
+
+    /// Substantial items that never got a title (pre-enrichment captures).
+    public func itemsNeedingEnrichment(limit: Int = 200) throws -> [ClipItem] {
+        try self.dbWriter.read { db in
+            try ClipItem
+                .filter(sql: """
+                aiTitle IS NULL AND isSecret = 0 AND deletedAt IS NULL
+                AND searchText IS NOT NULL AND LENGTH(searchText) >= 80
+                """)
+                .order(sql: "lastUsedAt DESC")
+                .limit(limit)
+                .fetchAll(db)
+        }
+    }
+
+    /// The indexed text of an item (original content and/or OCR).
+    public func searchText(for itemID: String) throws -> String? {
+        try self.dbWriter.read { db in
+            try String.fetchOne(
+                db,
+                sql: "SELECT searchText FROM item WHERE id = ?",
+                arguments: [itemID]
             )
         }
     }

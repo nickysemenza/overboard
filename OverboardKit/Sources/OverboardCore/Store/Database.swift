@@ -133,6 +133,27 @@ enum Migrations {
             try db.execute(sql: "ALTER TABLE item ADD COLUMN aiSummary TEXT;")
         }
 
+        // AI titles/summaries originally lived outside the search index; fold
+        // them into searchText for rows enriched before that changed, then
+        // rebuild the external-content FTS index from the item table.
+        // (Tombstones get re-indexed too — harmless, every search filters on
+        // deletedAt IS NULL.)
+        migrator.registerMigration("v6-index-ai-text") { db in
+            try db.execute(sql: """
+            UPDATE item
+            SET searchText = TRIM(
+                COALESCE(searchText || char(10), '')
+                || COALESCE(aiTitle, '')
+                || char(10)
+                || COALESCE(aiSummary, ''),
+                char(10)
+            )
+            WHERE aiTitle IS NOT NULL;
+
+            INSERT INTO item_fts(item_fts) VALUES('rebuild');
+            """)
+        }
+
         return migrator
     }
 }
