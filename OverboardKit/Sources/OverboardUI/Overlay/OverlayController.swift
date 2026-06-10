@@ -25,6 +25,8 @@ public final class OverlayController {
     public var onCommitTransform: (ClipItem, ClipTransform, NSRunningApplication?) -> Void = { _, _, _ in }
     /// Called when the user pastes an item through an LLM transform.
     public var onCommitAITransform: (ClipItem, AITransform, NSRunningApplication?) -> Void = { _, _, _ in }
+    /// Called when the user pastes edited text from the preview pane.
+    public var onCommitEditedText: (String, NSRunningApplication?) -> Void = { _, _ in }
 
     public init(store: ClipStore, stack: PasteStack) {
         self.viewModel = DrawerViewModel(store: store, stack: stack)
@@ -52,6 +54,15 @@ public final class OverlayController {
             self.hide()
             self.onCommitAITransform(item, transform, target)
         }
+        self.viewModel.onCommitEditedText = { [weak self] text in
+            guard let self else { return }
+            let target = self.targetApp
+            self.hide()
+            self.onCommitEditedText(text, target)
+        }
+        self.viewModel.onPreviewVisibilityChanged = { [weak self] expanded in
+            self?.resizePanel(expanded: expanded)
+        }
         self.viewModel.onDismiss = { [weak self] in self?.hide() }
     }
 
@@ -72,6 +83,11 @@ public final class OverlayController {
     /// Delete the selected item — same path as ⌘⌫.
     public func deleteSelection() {
         self.viewModel.deleteSelected()
+    }
+
+    /// Toggle the preview pane — same path as space/⌘Y.
+    public func togglePreviewSelection() {
+        self.viewModel.togglePreview()
     }
 
     public func toggle() {
@@ -118,6 +134,19 @@ public final class OverlayController {
         return panel
     }
 
+    /// Grows the panel for the preview pane and shrinks it back, bottom-anchored.
+    private func resizePanel(expanded: Bool) {
+        guard let panel, panel.isVisible else { return }
+        let screen = panel.screen ?? self.screenWithMouse()
+        let visible = screen.visibleFrame
+        let height: CGFloat = expanded ? 540 : 282
+        panel.setFrame(
+            NSRect(x: visible.minX, y: visible.minY, width: visible.width, height: height),
+            display: true,
+            animate: true
+        )
+    }
+
     private func screenWithMouse() -> NSScreen {
         let mouse = NSEvent.mouseLocation
         return NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) }
@@ -132,9 +161,60 @@ public final class OverlayController {
         // search field, so typing always filters.
         self.keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self, let panel = self.panel, event.window === panel else { return event }
+
+            // Preview/edit modes own the keyboard before the normal model.
+            switch self.viewModel.previewState {
+            case .editing:
+                switch event.keyCode {
+                case 53: // esc cancels the edit, back to the card strip
+                    self.viewModel.closePreview()
+                    return nil
+                case 36 where event.modifierFlags.contains(.command): // ⌘↩ paste edited
+                    self.viewModel.commitEdit()
+                    return nil
+                default: // everything else belongs to the text editor
+                    return event
+                }
+            case .viewing:
+                switch event.keyCode {
+                case 53, 49: // esc, space close
+                    self.viewModel.closePreview()
+                    return nil
+                case 16 where event.modifierFlags.contains(.command): // ⌘Y closes too
+                    self.viewModel.closePreview()
+                    return nil
+                case 36, 76: // return pastes (⇧ plain)
+                    let mode: PasteMode = event.modifierFlags.contains(.shift) ? .plainText : .full
+                    self.viewModel.selectCurrent(mode: mode)
+                    return nil
+                case 123: // browse while previewing
+                    self.viewModel.moveSelection(-1)
+                    return nil
+                case 124:
+                    self.viewModel.moveSelection(1)
+                    return nil
+                case 14 where event.modifierFlags.contains(.command): // ⌘E edit
+                    self.viewModel.beginEdit()
+                    return nil
+                default:
+                    return nil // swallow stray typing while previewing
+                }
+            case .hidden:
+                break
+            }
+
             switch event.keyCode {
             case 53: // esc
                 self.hide()
+                return nil
+            case 49 where self.viewModel.query.isEmpty && self.viewModel.mode == .history: // space previews
+                self.viewModel.togglePreview()
+                return nil
+            case 16 where event.modifierFlags.contains(.command): // ⌘Y previews even mid-search
+                self.viewModel.togglePreview()
+                return nil
+            case 14 where event.modifierFlags.contains(.command): // ⌘E edit before paste
+                self.viewModel.beginEdit()
                 return nil
             case 36, 76: // return, keypad enter — ⇧ plain text, ⌘ queue on stack
                 if event.modifierFlags.contains(.command) {

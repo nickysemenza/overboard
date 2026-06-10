@@ -103,6 +103,10 @@ final class AppServices {
             }
         }
 
+        self.overlay.onCommitEditedText = { [weak self] text, target in
+            self?.pasteString(text, into: target)
+        }
+
         self.overlay.onCommitAITransform = { [weak self] item, transform, target in
             guard let self else { return }
             Task {

@@ -104,4 +104,5 @@ for size in sizes {
     let image = renderIcon(canvas: CGFloat(size.pixels))
     writePNG(image, pixels: size.pixels, to: "\(outputDir)/\(size.name).png")
 }
+
 print("wrote \(sizes.count) pngs to \(outputDir)")

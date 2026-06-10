@@ -12,9 +12,13 @@ public struct DrawerView: View {
 
     public var body: some View {
         VStack(spacing: 10) {
-            self.searchBar
-            self.cardStrip
-            self.footerHints
+            if self.viewModel.previewState == .hidden {
+                self.searchBar
+                self.cardStrip
+                self.footerHints
+            } else {
+                PreviewPane(viewModel: self.viewModel)
+            }
         }
         .padding(14)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
@@ -34,6 +38,11 @@ public struct DrawerView: View {
         }
         .onChange(of: self.viewModel.query) {
             self.viewModel.scheduleSearch()
+        }
+        .onChange(of: self.viewModel.previewState) {
+            if self.viewModel.previewState == .hidden {
+                self.searchFocused = true
+            }
         }
     }
 
@@ -167,7 +176,7 @@ public struct DrawerView: View {
 
     private var footerHints: some View {
         Text(self.viewModel.mode == .history
-            ? "↩ paste   ⇧↩ plain   ⌘↩ stack   ⌘P pin   ⌘⌫ delete   ⌘/ snippets   esc dismiss"
+            ? "↩ paste   ⇧↩ plain   ⌘↩ stack   space preview   ⌘E edit   ⌘P pin   ⌘⌫ delete   ⌘/ snippets"
             : "↩ paste snippet   ⌘/ history   esc dismiss")
             .font(.caption2)
             .foregroundStyle(.tertiary)

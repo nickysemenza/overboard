@@ -7,6 +7,12 @@ public enum DrawerMode: Sendable {
     case snippets
 }
 
+public enum PreviewState: Sendable {
+    case hidden
+    case viewing
+    case editing
+}
+
 @MainActor
 @Observable
 public final class DrawerViewModel {
@@ -26,6 +32,59 @@ public final class DrawerViewModel {
     public var onDismiss: () -> Void = {}
     /// Set by DrawerView, which owns the SwiftUI openSettings environment action.
     public var onOpenSettings: () -> Void = {}
+
+    // MARK: Preview / edit
+
+    public private(set) var previewState: PreviewState = .hidden
+    public var editText: String = ""
+    /// Pastes user-edited text instead of the original item.
+    public var onCommitEditedText: (String) -> Void = { _ in }
+    /// The controller resizes the panel when the preview pane opens/closes.
+    public var onPreviewVisibilityChanged: (Bool) -> Void = { _ in }
+
+    public var selectedItem: ClipItem? {
+        self.mode == .history && self.items.indices.contains(self.selectedIndex)
+            ? self.items[self.selectedIndex] : nil
+    }
+
+    public func togglePreview() {
+        switch self.previewState {
+        case .hidden:
+            guard self.selectedItem != nil else { return }
+            self.previewState = .viewing
+            self.onPreviewVisibilityChanged(true)
+        case .viewing, .editing:
+            self.closePreview()
+        }
+    }
+
+    public func closePreview() {
+        guard self.previewState != .hidden else { return }
+        self.previewState = .hidden
+        self.onPreviewVisibilityChanged(false)
+    }
+
+    public func beginEdit() {
+        guard let item = self.selectedItem,
+              item.kind == .text || item.kind == .link
+        else { return }
+        let wasHidden = self.previewState == .hidden
+        Task {
+            self.editText = await (try? self.store.plainText(for: item.id))
+                ?? item.previewText ?? ""
+            self.previewState = .editing
+            if wasHidden {
+                self.onPreviewVisibilityChanged(true)
+            }
+        }
+    }
+
+    public func commitEdit() {
+        guard self.previewState == .editing else { return }
+        let text = self.editText
+        self.closePreview()
+        self.onCommitEditedText(text)
+    }
 
     private let store: ClipStore
     private var searchTask: Task<Void, Never>?
@@ -50,6 +109,8 @@ public final class DrawerViewModel {
         self.query = ""
         self.selectedIndex = 0
         self.mode = .history
+        // No visibility callback: show() always sets the collapsed frame.
+        self.previewState = .hidden
         self.searchTask?.cancel()
         self.searchTask = Task { await self.refresh() }
     }
@@ -133,6 +194,10 @@ public final class DrawerViewModel {
                 self.selectedIndex = 0
             } else {
                 self.selectedIndex = min(self.selectedIndex, max(self.entryCount - 1, 0))
+            }
+            // A live update may have removed the item being previewed.
+            if self.previewState != .hidden, self.selectedItem == nil {
+                self.closePreview()
             }
         } catch {
             self.items = []
