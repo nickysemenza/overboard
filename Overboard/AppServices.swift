@@ -15,6 +15,7 @@ final class AppServices {
     let overlay: OverlayController
 
     private var ingestTask: Task<Void, Never>?
+    private var purgeTask: Task<Void, Never>?
     private let logger = Logger(subsystem: "com.nicky.overboard", category: "app")
 
     private init() {
@@ -33,7 +34,10 @@ final class AppServices {
     }
 
     func start() {
+        UserDefaults.standard.register(defaults: SettingsKeys.defaults)
+        self.monitor.excludedBundleIDs = { SettingsKeys.currentExclusions() }
         self.monitor.start()
+
         let store = store
         let snapshots = self.monitor.snapshots
         self.ingestTask = Task(priority: .utility) { [logger] in
@@ -46,11 +50,24 @@ final class AppServices {
             }
         }
 
+        // Trim history (and orphaned blobs) on launch and hourly thereafter.
+        self.purgeTask = Task(priority: .background) { [logger] in
+            while !Task.isCancelled {
+                let limit = UserDefaults.standard.integer(forKey: SettingsKeys.historyLimit)
+                do {
+                    try await store.purge(keepingLatest: max(limit, 100))
+                } catch {
+                    logger.error("purge failed: \(String(describing: error), privacy: .public)")
+                }
+                try? await Task.sleep(for: .seconds(3600))
+            }
+        }
+
         self.overlay.onCommit = { [weak self] item, target in
             guard let self else { return }
             Task {
                 do {
-                    let restore = UserDefaults.standard.object(forKey: "restoreClipboardAfterPaste") as? Bool ?? true
+                    let restore = UserDefaults.standard.bool(forKey: SettingsKeys.restoreClipboard)
                     let outcome = try await self.pasteback.paste(item, into: target, restoreClipboard: restore)
                     if outcome == .copiedOnly {
                         HUDController.shared.flash("Copied — press ⌘V to paste")

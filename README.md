@@ -38,6 +38,20 @@ xcodebuild -project Overboard.xcodeproj -scheme Overboard build   # app
 cd OverboardKit && swift test                                     # core tests
 ```
 
+### Headless debug hooks (DEBUG builds only)
+
+The overlay is scriptable via distributed notifications, so you can drive it
+without the hotkey:
+
+```sh
+swift -e 'import Foundation; DistributedNotificationCenter.default()
+  .postNotificationName(.init("com.nicky.overboard.debug"),
+  object: "show", userInfo: nil, deliverImmediately: true)'
+```
+
+Commands: `show`, `hide`, `toggle`, `commit` (commits the selected item).
+Traces append to `/tmp/overboard-trace.log` via `obTrace(_:)`.
+
 ### Manual smoke checklist (run before calling a milestone done)
 
 - [ ] Copy plain text, rich text, an image, and a file in different apps →

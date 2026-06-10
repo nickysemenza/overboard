@@ -11,7 +11,7 @@ public final class ClipboardMonitor {
     /// its own writes.
     public static let markerType = NSPasteboard.PasteboardType("com.nicky.overboard.internal")
 
-    public static let defaultExclusions: Set<String> = [
+    public nonisolated static let defaultExclusions: Set<String> = [
         "com.1password.1password",
         "com.agilebits.onepassword7",
         "com.bitwarden.desktop",
@@ -36,10 +36,10 @@ public final class ClipboardMonitor {
     private var lastChangeCount: Int
     private let logger = Logger(subsystem: "com.nicky.overboard", category: "monitor")
 
-    public var excludedBundleIDs: Set<String>
+    /// Evaluated on every capture so Settings changes apply immediately.
+    public var excludedBundleIDs: () -> Set<String> = { ClipboardMonitor.defaultExclusions }
 
-    public init(excludedBundleIDs: Set<String> = ClipboardMonitor.defaultExclusions) {
-        self.excludedBundleIDs = excludedBundleIDs
+    public init() {
         self.lastChangeCount = NSPasteboard.general.changeCount
         (self.snapshots, self.continuation) = AsyncStream.makeStream(of: PasteboardSnapshot.self)
     }
@@ -81,7 +81,7 @@ public final class ClipboardMonitor {
         if IsSecureEventInputEnabled() { return nil }
 
         let frontmost = NSWorkspace.shared.frontmostApplication
-        if let bundleID = frontmost?.bundleIdentifier, excludedBundleIDs.contains(bundleID) {
+        if let bundleID = frontmost?.bundleIdentifier, self.excludedBundleIDs().contains(bundleID) {
             return nil
         }
 

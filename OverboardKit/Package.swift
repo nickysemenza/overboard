@@ -32,6 +32,7 @@ let package = Package(
             dependencies: [
                 "OverboardCore",
                 "OverboardMac",
+                .product(name: "KeyboardShortcuts", package: "KeyboardShortcuts"),
             ]
         ),
         .testTarget(

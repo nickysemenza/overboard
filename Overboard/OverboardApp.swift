@@ -20,6 +20,11 @@ struct OverboardApp: App {
 
             Divider()
 
+            SettingsLink {
+                Text("Settings…")
+            }
+            .keyboardShortcut(",")
+
             Button("Quit Overboard") {
                 NSApp.terminate(nil)
             }
@@ -31,5 +36,9 @@ struct OverboardApp: App {
                 .frame(minWidth: 420, minHeight: 320)
         }
         .defaultSize(width: 520, height: 600)
+
+        Settings {
+            SettingsView()
+        }
     }
 }
