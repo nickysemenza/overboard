@@ -40,13 +40,15 @@ public enum ClipAction: String, CaseIterable, Identifiable, Sendable {
     case prettyPrintJSON
     case decodeBase64
     case wordCount
-    // Single or multi
+    /// Single or multi
     case sumNumbers
     // Multi
     case pasteAllJoined
     case addAllToStack
 
-    public var id: String { self.rawValue }
+    public var id: String {
+        self.rawValue
+    }
 
     public var label: String {
         switch self {

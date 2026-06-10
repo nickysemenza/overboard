@@ -9,7 +9,9 @@ import OverboardUI
 @Observable
 final class CaptureSignal {
     private(set) var count = 0
-    func bump() { self.count += 1 }
+    func bump() {
+        self.count += 1
+    }
 }
 
 /// Composition root: owns the store, monitor, overlay, hotkey, and paste-back.

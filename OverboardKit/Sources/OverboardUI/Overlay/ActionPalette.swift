@@ -42,7 +42,7 @@ struct ActionPalette: View {
             }
         }
         .frame(width: 380)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .glassPanel(cornerRadius: 12)
         .overlay {
             RoundedRectangle(cornerRadius: 12)
                 .strokeBorder(.primary.opacity(0.15), lineWidth: 1)

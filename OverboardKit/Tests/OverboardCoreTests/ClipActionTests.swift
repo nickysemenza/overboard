@@ -25,7 +25,7 @@ struct TextScrapsTests {
 
     @Test func extractsNumbers() {
         let numbers = TextScraps.numbers(in: "items: 3 at $1,200.50 each, -7 returned")
-        #expect(numbers == [3, 1_200.50, -7])
+        #expect(numbers == [3, 1200.50, -7])
     }
 
     @Test func formatsTotals() {
@@ -70,9 +70,9 @@ struct ClipActionTests {
         #expect(effect == .showMessage("Need at least two numbers"))
     }
 
-    @Test func openLinkParsesURL() {
+    @Test func openLinkParsesURL() throws {
         let effect = ClipAction.openLink.run([input(.link, text: " https://example.com/x \n")])
-        #expect(effect == .openURLs([URL(string: "https://example.com/x")!]))
+        #expect(try effect == .openURLs([#require(URL(string: "https://example.com/x"))]))
     }
 
     @Test func markdownLinkUsesAITitle() {

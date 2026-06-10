@@ -18,8 +18,11 @@ struct ItemCardView: View {
     var onAITransform: (AITransform) -> Void = { _ in }
     var onPreview: () -> Void = {}
 
+    @Environment(\.colorScheme) private var colorScheme
     @State private var thumbnail: NSImage?
     @State private var hovering = false
+    @State private var miniCode: NSAttributedString?
+    @State private var swatch: NSColor?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -155,7 +158,18 @@ struct ItemCardView: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
-        .background(.background.opacity(0.5))
+        .background {
+            // Paste-style signature: header tinted by the source app's icon.
+            if let tint = AppIconCache.shared.tint(forBundleID: item.sourceBundleID) {
+                LinearGradient(
+                    colors: [tint.opacity(0.45), tint.opacity(0.2)],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            } else {
+                Color.primary.opacity(0.05)
+            }
+        }
     }
 
     @ViewBuilder
@@ -175,6 +189,10 @@ struct ItemCardView: View {
                         .foregroundStyle(.tertiary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let miniCode {
+                // Mini syntax-highlighted code straight on the card.
+                CodeTextView(attributed: miniCode, selectable: false)
+                    .allowsHitTesting(false)
             } else {
                 VStack(alignment: .leading, spacing: 4) {
                     if let title = item.aiTitle {
@@ -203,15 +221,33 @@ struct ItemCardView: View {
                 .padding(10)
             }
         case .link:
-            VStack(alignment: .leading, spacing: 6) {
-                Image(systemName: "link")
-                    .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(spacing: 5) {
+                    Image(systemName: "link")
+                        .font(.caption)
+                        .foregroundStyle(Color.accentColor)
+                    Text(self.linkHost ?? "link")
+                        .font(.callout.weight(.semibold))
+                        .lineLimit(1)
+                }
                 Text(self.item.previewText ?? "")
-                    .font(.callout)
-                    .foregroundStyle(Color.accentColor)
-                    .lineLimit(5)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(4)
+                if let title = item.aiTitle {
+                    Spacer(minLength: 0)
+                    Text(title)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(Color.accentColor)
+                        .lineLimit(2)
+                }
             }
             .padding(10)
+            .overlay(alignment: .leading) {
+                Rectangle()
+                    .fill(Color.accentColor.opacity(0.7))
+                    .frame(width: 3)
+            }
         case .image:
             if let thumbnail {
                 // Color.clear.overlay + clipped is the canonical
@@ -249,8 +285,40 @@ struct ItemCardView: View {
             }
             .padding(10)
         case .color:
-            self.placeholder("paintpalette.fill")
+            if let swatch {
+                VStack(spacing: 6) {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color(nsColor: swatch))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 8)
+                                .strokeBorder(.primary.opacity(0.15), lineWidth: 1)
+                        }
+                    Text(Self.hexString(for: swatch))
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                }
+                .padding(10)
+            } else {
+                self.placeholder("paintpalette.fill")
+            }
         }
+    }
+
+    private var linkHost: String? {
+        guard let text = item.previewText,
+              let host = URL(string: text.trimmingCharacters(in: .whitespacesAndNewlines))?.host
+        else { return nil }
+        return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
+    }
+
+    static func hexString(for color: NSColor) -> String {
+        guard let rgb = color.usingColorSpace(.sRGB) else { return "—" }
+        return String(
+            format: "#%02X%02X%02X",
+            Int(round(rgb.redComponent * 255)),
+            Int(round(rgb.greenComponent * 255)),
+            Int(round(rgb.blueComponent * 255))
+        )
     }
 
     /// Raw text yields lines to the title and summary when they're present.
@@ -281,12 +349,36 @@ struct ItemCardView: View {
     }
 
     private func loadThumbnailIfNeeded() async {
-        guard self.item.kind == .image, self.thumbnail == nil else { return }
-        guard let rep = try? await store.representations(for: item.id)
-            .first(where: { $0.uti == WellKnownUTI.png }),
-            let data = try? await store.payload(for: rep)
-        else { return }
-        self.thumbnail = Self.thumbnail(from: data, maxPixel: 480)
+        switch self.item.kind {
+        case .image:
+            guard self.thumbnail == nil,
+                  let rep = try? await store.representations(for: item.id)
+                  .first(where: { $0.uti == WellKnownUTI.png }),
+                  let data = try? await store.payload(for: rep)
+            else { return }
+            self.thumbnail = Self.thumbnail(from: data, maxPixel: 480)
+
+        case .text:
+            guard self.miniCode == nil, !self.item.isSecret,
+                  self.item.category == "code",
+                  let text = try? await store.plainText(for: item.id)
+            else { return }
+            self.miniCode = CodeHighlighter.highlight(
+                String(text.prefix(500)),
+                dark: self.colorScheme == .dark
+            )
+
+        case .color:
+            guard self.swatch == nil,
+                  let rep = try? await store.representations(for: item.id)
+                  .first(where: { $0.uti == WellKnownUTI.color }),
+                  let data = try? await store.payload(for: rep)
+            else { return }
+            self.swatch = try? NSKeyedUnarchiver.unarchivedObject(ofClass: NSColor.self, from: data)
+
+        default:
+            break
+        }
     }
 
     nonisolated static func thumbnail(from data: Data, maxPixel: Int) -> NSImage? {
@@ -361,6 +453,7 @@ struct ItemCardView: View {
 final class AppIconCache {
     static let shared = AppIconCache()
     private var cache: [String: NSImage?] = [:]
+    private var tintCache: [String: Color?] = [:]
 
     func icon(forBundleID bundleID: String?) -> NSImage? {
         guard let bundleID else { return nil }
@@ -369,5 +462,35 @@ final class AppIconCache {
             .map { NSWorkspace.shared.icon(forFile: $0.path) }
         self.cache[bundleID] = icon
         return icon
+    }
+
+    /// Dominant color of the app's icon (average pixel), for tinted headers.
+    func tint(forBundleID bundleID: String?) -> Color? {
+        guard let bundleID else { return nil }
+        if let cached = tintCache[bundleID] { return cached }
+        let tint = self.icon(forBundleID: bundleID).flatMap(Self.averageColor)
+        self.tintCache[bundleID] = tint
+        return tint
+    }
+
+    private static func averageColor(of image: NSImage) -> Color? {
+        guard let context = CGContext(
+            data: nil, width: 1, height: 1,
+            bitsPerComponent: 8, bytesPerRow: 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ), let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil)
+        else { return nil }
+        context.interpolationQuality = .medium
+        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+        guard let pixel = context.data?.assumingMemoryBound(to: UInt8.self) else { return nil }
+        let alpha = Double(pixel[3]) / 255
+        guard alpha > 0.1 else { return nil }
+        // Un-premultiply so transparent icon edges don't darken the tint.
+        return Color(
+            red: Double(pixel[0]) / 255 / alpha,
+            green: Double(pixel[1]) / 255 / alpha,
+            blue: Double(pixel[2]) / 255 / alpha
+        )
     }
 }

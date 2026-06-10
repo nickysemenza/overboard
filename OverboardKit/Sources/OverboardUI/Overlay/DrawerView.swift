@@ -28,7 +28,7 @@ public struct DrawerView: View {
         }
         .animation(.spring(response: 0.22, dampingFraction: 0.85), value: self.viewModel.isPaletteOpen)
         .padding(14)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .glassPanel(cornerRadius: 16)
         .overlay {
             RoundedRectangle(cornerRadius: 16)
                 .strokeBorder(.primary.opacity(0.12), lineWidth: 1)

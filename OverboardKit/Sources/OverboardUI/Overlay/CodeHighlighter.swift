@@ -50,16 +50,18 @@ enum CodeHighlighter {
 /// selection and scrolling for free.
 struct CodeTextView: NSViewRepresentable {
     let attributed: NSAttributedString
+    var selectable = true
 
     func makeNSView(context _: Context) -> NSScrollView {
         let scroll = NSTextView.scrollableTextView()
         let textView = scroll.documentView as! NSTextView
         textView.isEditable = false
-        textView.isSelectable = true
+        textView.isSelectable = self.selectable
         textView.drawsBackground = false
         textView.textContainerInset = NSSize(width: 8, height: 8)
         scroll.drawsBackground = false
         scroll.hasHorizontalScroller = false
+        scroll.hasVerticalScroller = self.selectable
         return scroll
     }
 

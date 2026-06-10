@@ -25,6 +25,16 @@ extension View {
     func cardEntrance(index: Int) -> some View {
         modifier(CardEntrance(index: index))
     }
+
+    /// Liquid Glass on macOS 26, frosted material everywhere else.
+    @ViewBuilder
+    func glassPanel(cornerRadius: CGFloat) -> some View {
+        if #available(macOS 26.0, *) {
+            self.glassEffect(.regular, in: RoundedRectangle(cornerRadius: cornerRadius))
+        } else {
+            self.background(.regularMaterial, in: RoundedRectangle(cornerRadius: cornerRadius))
+        }
+    }
 }
 
 /// The empty-state boat bobs gently on the (invisible) waves.
