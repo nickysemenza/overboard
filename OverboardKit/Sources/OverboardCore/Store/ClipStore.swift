@@ -456,6 +456,20 @@ public actor ClipStore {
 
     // MARK: - Observation
 
+    /// Emits whenever any item or snippet changes (insert, enrichment, pin,
+    /// delete, …). The value is a cheap change-counter — observers re-run
+    /// their own query on each emission.
+    public nonisolated func observeChangeToken() -> AsyncValueObservation<Int64> {
+        ValueObservation
+            .tracking { db in
+                try Int64.fetchOne(db, sql: """
+                SELECT (SELECT IFNULL(SUM(lamport), 0) + COUNT(*) FROM item)
+                     + (SELECT IFNULL(SUM(lamport), 0) + COUNT(*) FROM snippet)
+                """) ?? 0
+            }
+            .values(in: self.dbWriter)
+    }
+
     /// Reactive feed of the recent list for UI. Nonisolated: GRDB observation
     /// manages its own scheduling.
     public nonisolated func observeRecent(limit: Int = 100) -> AsyncValueObservation<[ClipItem]> {

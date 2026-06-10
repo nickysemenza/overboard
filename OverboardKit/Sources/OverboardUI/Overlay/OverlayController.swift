@@ -94,11 +94,13 @@ public final class OverlayController {
         )
 
         self.viewModel.prepareForShow()
+        self.viewModel.startLiveUpdates()
         panel.makeKeyAndOrderFront(nil)
         self.installMonitors()
     }
 
     public func hide() {
+        self.viewModel.stopLiveUpdates()
         self.removeMonitors()
         self.panel?.orderOut(nil)
         self.targetApp = nil

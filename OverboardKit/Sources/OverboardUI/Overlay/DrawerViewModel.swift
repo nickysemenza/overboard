@@ -27,6 +27,7 @@ public final class DrawerViewModel {
 
     private let store: ClipStore
     private var searchTask: Task<Void, Never>?
+    private var liveUpdateTask: Task<Void, Never>?
 
     /// Card views need read access for thumbnails and drag payloads.
     var storeForCards: ClipStore {
@@ -49,6 +50,36 @@ public final class DrawerViewModel {
         self.mode = .history
         self.searchTask?.cancel()
         self.searchTask = Task { await self.refresh() }
+    }
+
+    /// While the drawer is visible, any store change (background enrichment,
+    /// a new copy, an expiring secret) re-runs the current query so cards
+    /// update in place. Selection follows the selected item.
+    public func startLiveUpdates() {
+        guard self.liveUpdateTask == nil else { return }
+        self.liveUpdateTask = Task {
+            var isInitialEmission = true
+            do {
+                for try await _ in self.store.observeChangeToken() {
+                    // prepareForShow already loaded the initial list.
+                    if isInitialEmission {
+                        isInitialEmission = false
+                        continue
+                    }
+                    let selectedID: String? = self.mode == .history
+                        && self.items.indices.contains(self.selectedIndex)
+                        ? self.items[self.selectedIndex].id : nil
+                    await self.refresh(resetSelection: false, followItemID: selectedID)
+                }
+            } catch {
+                // Observation only fails if the database is gone.
+            }
+        }
+    }
+
+    public func stopLiveUpdates() {
+        self.liveUpdateTask?.cancel()
+        self.liveUpdateTask = nil
     }
 
     public func toggleMode() {
