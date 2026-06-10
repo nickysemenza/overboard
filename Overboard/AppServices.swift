@@ -67,9 +67,12 @@ final class AppServices {
                     },
                 ],
                 secondaryProviders: [
-                    ConditionalProvider(FileSearchProvider(search: SpotlightFileSearch(), limit: 8)) {
-                        Defaults[.launcherFileResults]
-                    },
+                    // Demo screenshots must not leak real home-folder files.
+                    Self.isDemo
+                        ? DemoSeed.LauncherFiles()
+                        : ConditionalProvider(FileSearchProvider(search: SpotlightFileSearch(), limit: 8)) {
+                            Defaults[.launcherFileResults]
+                        },
                 ]
             )
         )

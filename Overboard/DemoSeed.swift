@@ -7,6 +7,25 @@ import OverboardCore
 ///   0 pinned note · 1 code · 2 link · 3 image · 4 JSON · 5 files · 6 color
 ///   · 7 secret · 8 prose · 9 markdown · 10 shell command
 enum DemoSeed {
+    /// Launcher file rows for demo mode — the real Spotlight provider would
+    /// leak the developer's home folder into README screenshots. Paths are
+    /// fake; LauncherRow falls back to file-type icons for missing files.
+    struct LauncherFiles: LauncherProvider {
+        private static let paths = [
+            "/Users/demo/Notes/release-notes.md",
+            "/Users/demo/Notes/release-checklist.md",
+            "/Users/demo/Designs/overboard-icon.sketch",
+            "/Users/demo/Decks/launch-review.key",
+        ]
+
+        func results(for query: String) async -> [LauncherResult] {
+            Self.paths
+                .map { URL(fileURLWithPath: $0) }
+                .filter { $0.lastPathComponent.localizedCaseInsensitiveContains(query) }
+                .map { .file(name: $0.lastPathComponent, url: $0) }
+        }
+    }
+
     static func populate(_ store: ClipStore) async {
         let now = Date()
 

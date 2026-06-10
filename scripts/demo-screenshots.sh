@@ -82,11 +82,35 @@ shot() { # shot <name> <settle-seconds> <commands...>
   sleep 0.5
 }
 
+lshot() { # lshot <name> <settle-seconds> <query>
+  local name=$1 settle=$2 query=$3
+  echo "Capturing $name…"
+  notify launcher-show
+  sleep 0.8
+  notify "launcher-query:$query"
+  sleep "$settle" # 250ms debounce + row arrival
+  local id
+  id=$(window_id)
+  if [ -z "$id" ]; then
+    echo "error: launcher panel window not found on screen" >&2
+    exit 1
+  fi
+  screencapture -x -o -l "$id" "$OUT/$name.png"
+  notify launcher-hide
+  sleep 0.5
+}
+
 shot drawer 0.2
 shot preview 1.5 next preview
 shot palette 1.0 next next next next palette
 shot multiselect 1.0 stack stack extend extend
 shot markdown 1.5 next next next next next next next next next preview
+# Launcher shots: calculator, app search via initials, demo-seeded files
+# (demo mode swaps the Spotlight file provider for DemoSeed.LauncherFiles,
+# so no real home-folder paths can appear; app rows scan /Applications).
+lshot launcher-calc 0.8 "15% of 80"
+lshot launcher-apps 1.2 "sm"
+lshot launcher-files 1.2 "release"
 
 echo "Wrote:"
 ls -la "$OUT"/*.png

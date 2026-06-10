@@ -1,6 +1,7 @@
 import AppKit
 import OverboardCore
 import SwiftUI
+import UniformTypeIdentifiers
 
 public struct LauncherView: View {
     @Bindable var viewModel: LauncherViewModel
@@ -99,7 +100,7 @@ struct LauncherRow: View {
                 .font(.title2)
                 .foregroundStyle(.orange)
         case let .app(_, url), let .file(_, url):
-            Image(nsImage: NSWorkspace.shared.icon(forFile: url.path))
+            Image(nsImage: Self.fileIcon(for: url))
                 .resizable()
                 .aspectRatio(contentMode: .fit)
         case .webSearch:
@@ -129,6 +130,16 @@ struct LauncherRow: View {
         case let .file(_, url): (url.path as NSString).abbreviatingWithTildeInPath
         case .webSearch: "Open in browser"
         }
+    }
+
+    /// Missing paths (demo mode's fake files) get their file-type icon
+    /// instead of the blank generic-document one.
+    private static func fileIcon(for url: URL) -> NSImage {
+        if FileManager.default.fileExists(atPath: url.path) {
+            return NSWorkspace.shared.icon(forFile: url.path)
+        }
+        let type = UTType(filenameExtension: url.pathExtension) ?? .data
+        return NSWorkspace.shared.icon(for: type)
     }
 
     private var shortcutHint: String {

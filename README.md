@@ -19,6 +19,10 @@ All planned milestones (M0–M4) complete. Daily-drivable.
 - **Drawer** (⌘⇧V): bottom overlay over any app that never steals focus.
   Type to search, ←/→ or ⌘1–9 to select, ↩ to paste, ⇧↩ plain text,
   ⌘P pin, ⌘⌫ delete, esc to dismiss. Drag cards out to other apps.
+- **Launcher** (⌥Space): a Spotlight-style bar with an inline calculator
+  (`15% of 80` → ↩ copies, ⌘↩ pastes the result), app launching with
+  initials and custom aliases (`sm` matches Sublime Merge out of the box),
+  Spotlight file search, and a web-search fallback row.
 - **Search**: FTS5 full-text with prefix matching, blended with on-device
   semantic search (NLEmbedding) so "money projection" finds "quarterly
   revenue forecast". Filter operators: `kind:image`, `app:claude`,
@@ -58,6 +62,16 @@ All planned milestones (M0–M4) complete. Daily-drivable.
 <p align="center">
   <img src="docs/screenshots/multiselect.png" width="900" alt="Three cards multi-selected with a Stack: 2 badge in the search bar">
   <br><em>Multi-select (⇧→) and the paste stack (⌘↩ to queue, ⌥⌘V to paste one by one)</em>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/launcher-apps.png" width="640" alt="The launcher bar: typing sm matches Sublime Merge by its initials, with open / reveal / copy path hints">
+  <br><em>Launcher (⌥Space): apps match by name, initials, or your aliases</em>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/launcher-calc.png" width="640" alt="The launcher evaluating 15% of 80 to 12 inline">
+  <br><em>Inline calculator: ↩ copies the result, ⌘↩ pastes it into the app you were in</em>
 </p>
 
 ## Architecture
@@ -109,7 +123,10 @@ swift -e 'import Foundation; DistributedNotificationCenter.default()
 ```
 
 Commands: `show`, `hide`, `toggle`, `commit`, `commit-plain`, `pin`, `delete`,
-`preview`, `next`, `prev`, `extend`, `palette`, `stack`.
+`preview`, `next`, `prev`, `extend`, `palette`, `stack`, plus the launcher's
+`launcher-show`, `launcher-hide`, `launcher-toggle`, `launcher-query:<text>`,
+`launcher-next`, `launcher-prev`, `launcher-commit`, `launcher-commit-cmd`,
+`launcher-commit-opt`.
 Traces append to `/tmp/overboard-trace.log` via `obTrace(_:)`.
 
 ### Regenerating the README screenshots
