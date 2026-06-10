@@ -49,7 +49,7 @@ struct OverboardApp: App {
         .defaultSize(width: 640, height: 420)
 
         Settings {
-            SettingsView()
+            SettingsView(store: AppServices.shared.store)
         }
     }
 }
