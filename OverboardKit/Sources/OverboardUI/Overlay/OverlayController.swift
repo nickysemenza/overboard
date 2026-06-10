@@ -100,6 +100,26 @@ public final class OverlayController {
         self.viewModel.togglePreview()
     }
 
+    /// Move the selection — same path as ←/→.
+    public func moveSelection(_ delta: Int) {
+        self.viewModel.moveSelection(delta)
+    }
+
+    /// Grow the multi-selection — same path as ⇧→/⇧←.
+    public func extendSelection(_ delta: Int) {
+        self.viewModel.extendSelection(delta)
+    }
+
+    /// Toggle the action palette — same path as ⌘K.
+    public func togglePalette() {
+        self.viewModel.togglePalette()
+    }
+
+    /// Queue the selected item on the paste stack — same path as ⌘↩.
+    public func addSelectedToStack() {
+        self.viewModel.addSelectedToStack()
+    }
+
     public func toggle() {
         if self.isVisible { self.hide() } else { self.show() }
     }

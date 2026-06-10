@@ -18,6 +18,13 @@ final class CaptureSignal {
 @MainActor
 final class AppServices {
     static let shared = AppServices()
+
+    /// Demo mode (`OVERBOARD_DEMO=1`): in-memory store seeded with fake clips,
+    /// no clipboard monitoring or global hotkeys. Used by
+    /// scripts/demo-screenshots.sh to capture README screenshots without
+    /// touching (or leaking) real clipboard history.
+    nonisolated static let isDemo = ProcessInfo.processInfo.environment["OVERBOARD_DEMO"] == "1"
+
     let signal = CaptureSignal()
 
     let store: ClipStore
@@ -33,10 +40,17 @@ final class AppServices {
 
     private init() {
         do {
-            let directory = try OverboardDatabase.defaultDirectory()
-            let pool = try OverboardDatabase.open(at: directory)
-            let blobs = try BlobStore(directory: directory.appendingPathComponent("blobs", isDirectory: true))
-            self.store = ClipStore(dbWriter: pool, blobs: blobs)
+            if Self.isDemo {
+                let queue = try OverboardDatabase.openInMemory()
+                let directory = FileManager.default.temporaryDirectory
+                    .appendingPathComponent("overboard-demo-\(UUID().uuidString)", isDirectory: true)
+                self.store = ClipStore(dbWriter: queue, blobs: try BlobStore(directory: directory))
+            } else {
+                let directory = try OverboardDatabase.defaultDirectory()
+                let pool = try OverboardDatabase.open(at: directory)
+                let blobs = try BlobStore(directory: directory.appendingPathComponent("blobs", isDirectory: true))
+                self.store = ClipStore(dbWriter: pool, blobs: blobs)
+            }
         } catch {
             // Without a database there is no app; surface loudly in dev.
             fatalError("Failed to open Overboard database: \(error)")
@@ -48,6 +62,23 @@ final class AppServices {
 
     func start() {
         UserDefaults.standard.register(defaults: SettingsKeys.defaults)
+
+        if Self.isDemo {
+            // No monitor, purge, secret sweep, or hotkeys: nothing real may be
+            // captured, and global hotkeys would fight a concurrently running
+            // daily-driver instance.
+            Task { await DemoSeed.populate(self.store) }
+        } else {
+            self.startCapturePipeline()
+            self.registerHotkeys()
+        }
+
+        self.installOverlayCallbacks()
+    }
+
+    /// Clipboard monitoring, ingest, and background maintenance — everything
+    /// that touches the real pasteboard or the on-disk database.
+    private func startCapturePipeline() {
         self.monitor.excludedBundleIDs = { SettingsKeys.currentExclusions() }
         self.monitor.start()
 
@@ -94,7 +125,9 @@ final class AppServices {
                 try? await Task.sleep(for: .seconds(60))
             }
         }
+    }
 
+    private func installOverlayCallbacks() {
         self.overlay.onCommit = { [weak self] item, mode, target in
             self?.pasteItem(item, mode: mode, into: target)
         }
@@ -142,7 +175,9 @@ final class AppServices {
                 }
             }
         }
+    }
 
+    private func registerHotkeys() {
         HotkeyService.onToggleDrawer { [weak self] in
             self?.overlay.toggle()
         }

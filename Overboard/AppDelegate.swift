@@ -17,9 +17,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ///       .init("com.nickysemenza.overboard.debug"), object: "toggle",
         ///       userInfo: nil, deliverImmediately: true)'
         /// Commands: "toggle", "show", "hide", "commit".
+        /// Demo mode listens on `…overboard.demo` instead, so a concurrently
+        /// running daily-driver DEBUG build doesn't mirror every command.
         private func installDebugHooks() {
+            let name = AppServices.isDemo
+                ? "com.nickysemenza.overboard.demo"
+                : "com.nickysemenza.overboard.debug"
             DistributedNotificationCenter.default().addObserver(
-                forName: .init("com.nickysemenza.overboard.debug"),
+                forName: .init(name),
                 object: nil,
                 queue: .main
             ) { notification in
@@ -36,6 +41,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     case "pin": overlay.togglePinSelection()
                     case "delete": overlay.deleteSelection()
                     case "preview": overlay.togglePreviewSelection()
+                    case "next": overlay.moveSelection(1)
+                    case "prev": overlay.moveSelection(-1)
+                    case "extend": overlay.extendSelection(1)
+                    case "palette": overlay.togglePalette()
+                    case "stack": overlay.addSelectedToStack()
                     default: break
                     }
                 }

@@ -4,6 +4,10 @@ Everything you copy goes overboard. A native macOS clipboard manager — a perso
 better Paste: clipboard history, a bottom-drawer picker on a hotkey, instant
 full-text search, and paste-back into whatever app you were using.
 
+<p align="center">
+  <img src="docs/screenshots/drawer.png" width="900" alt="The Overboard drawer: a search bar over a strip of clipboard cards — pinned note, syntax-highlighted code, link, image, JSON, files, color swatch, and a masked secret">
+</p>
+
 ## Status
 
 All planned milestones (M0–M4) complete. Daily-drivable.
@@ -40,6 +44,21 @@ All planned milestones (M0–M4) complete. Daily-drivable.
   never captured; detected secrets (AWS keys, JWTs, API tokens, PEM keys,
   card numbers) are masked, unsearchable, and auto-expire; per-app
   plain-text paste rules for terminals.
+
+<p align="center">
+  <img src="docs/screenshots/preview.png" width="900" alt="Quick Look preview pane showing a syntax-highlighted Swift snippet">
+  <br><em>Quick Look (space): full-content preview with syntax highlighting</em>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/palette.png" width="900" alt="⌘K action palette over a JSON clip, offering Pretty-Print JSON, Word Count, and Sum the Numbers">
+  <br><em>⌘K action palette: transforms that match the selected clip</em>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/multiselect.png" width="900" alt="Three cards multi-selected with a Stack: 2 badge in the search bar">
+  <br><em>Multi-select (⇧→) and the paste stack (⌘↩ to queue, ⌥⌘V to paste one by one)</em>
+</p>
 
 ## Architecture
 
@@ -78,12 +97,25 @@ without the hotkey:
 
 ```sh
 swift -e 'import Foundation; DistributedNotificationCenter.default()
-  .postNotificationName(.init("com.nicky.overboard.debug"),
+  .postNotificationName(.init("com.nickysemenza.overboard.debug"),
   object: "show", userInfo: nil, deliverImmediately: true)'
 ```
 
-Commands: `show`, `hide`, `toggle`, `commit` (commits the selected item).
+Commands: `show`, `hide`, `toggle`, `commit`, `commit-plain`, `pin`, `delete`,
+`preview`, `next`, `prev`, `extend`, `palette`, `stack`.
 Traces append to `/tmp/overboard-trace.log` via `obTrace(_:)`.
+
+### Regenerating the README screenshots
+
+```sh
+./scripts/demo-screenshots.sh
+```
+
+Launches the app with `OVERBOARD_DEMO=1` (in-memory store seeded by
+`DemoSeed.swift` — no real clipboard data), drives it over the
+`com.nickysemenza.overboard.demo` notification, and captures the panel into
+`docs/screenshots/`. Quit the daily-driver instance first; the terminal needs
+Screen Recording permission.
 
 ### Manual smoke checklist (run before calling a milestone done)
 
