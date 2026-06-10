@@ -31,32 +31,54 @@ public final class PastebackService {
         restoreClipboard: Bool,
         mode: PasteMode = .full
     ) async throws -> Outcome {
+        let pbItems = try await buildPasteboardItems(for: item, mode: mode)
+        try await self.store.markUsed(id: item.id)
+        return self.writeAndPaste(pbItems, into: target, restoreClipboard: restoreClipboard)
+    }
+
+    /// Pastes an arbitrary string (snippets, transforms) — plain text only.
+    public func pasteText(
+        _ text: String,
+        into target: NSRunningApplication?,
+        restoreClipboard: Bool
+    ) -> Outcome {
+        let pbItem = NSPasteboardItem()
+        pbItem.setString(text, forType: .string)
+        pbItem.setData(Data(), forType: ClipboardMonitor.markerType)
+        return self.writeAndPaste([pbItem], into: target, restoreClipboard: restoreClipboard)
+    }
+
+    private func writeAndPaste(
+        _ pbItems: [NSPasteboardItem],
+        into target: NSRunningApplication?,
+        restoreClipboard: Bool
+    ) -> Outcome {
         self.restoreTask?.cancel()
         let backup = restoreClipboard ? Self.backupPasteboard() : nil
 
-        try await self.copyToPasteboard(item, mode: mode)
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.writeObjects(pbItems)
 
         guard PermissionService.isTrusted else { return .copiedOnly }
 
-        let pasteboard = NSPasteboard.general
         let expectedChangeCount = pasteboard.changeCount
 
-        // Belt and braces: with a nonactivating panel the target never lost
-        // frontmost status, but re-activate in case focus drifted.
-        target?.activate()
-        try? await Task.sleep(for: .milliseconds(90))
-        Self.synthesizeCmdV()
+        self.restoreTask = Task { @MainActor in
+            // Belt and braces: with a nonactivating panel the target never lost
+            // frontmost status, but re-activate in case focus drifted.
+            target?.activate()
+            try? await Task.sleep(for: .milliseconds(90))
+            Self.synthesizeCmdV()
 
-        if let backup {
-            self.restoreTask = Task { @MainActor in
-                // Give the target app time to consume the paste.
-                try? await Task.sleep(for: .milliseconds(600))
-                guard !Task.isCancelled else { return }
-                // Only restore if nothing else wrote to the pasteboard in the
-                // meantime — never clobber newer content.
-                guard pasteboard.changeCount == expectedChangeCount else { return }
-                Self.restore(backup)
-            }
+            guard let backup else { return }
+            // Give the target app time to consume the paste.
+            try? await Task.sleep(for: .milliseconds(600))
+            guard !Task.isCancelled else { return }
+            // Only restore if nothing else wrote to the pasteboard in the
+            // meantime — never clobber newer content.
+            guard pasteboard.changeCount == expectedChangeCount else { return }
+            Self.restore(backup)
         }
         return .pasted
     }
@@ -107,6 +129,17 @@ public final class PastebackService {
     /// Puts the item on the general pasteboard (with the internal marker type
     /// so the monitor doesn't re-capture it) and bumps its usage.
     public func copyToPasteboard(_ item: ClipItem, mode: PasteMode = .full) async throws {
+        let pbItems = try await buildPasteboardItems(for: item, mode: mode)
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.writeObjects(pbItems)
+        try await self.store.markUsed(id: item.id)
+    }
+
+    private func buildPasteboardItems(
+        for item: ClipItem,
+        mode: PasteMode
+    ) async throws -> [NSPasteboardItem] {
         var reps = try await store.representations(for: item.id)
         if mode == .plainText {
             reps = reps.filter { $0.uti == WellKnownUTI.plainText }
@@ -133,12 +166,7 @@ public final class PastebackService {
         }
         main.setData(Data(), forType: ClipboardMonitor.markerType)
         if pbItems.isEmpty { pbItems = [main] }
-
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.writeObjects(pbItems)
-
-        try await self.store.markUsed(id: item.id)
+        return pbItems
     }
 
     static func pasteboardType(for uti: String) -> NSPasteboard.PasteboardType? {

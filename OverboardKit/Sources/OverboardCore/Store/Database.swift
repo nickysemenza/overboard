@@ -94,6 +94,20 @@ enum Migrations {
             )
         }
 
+        migrator.registerMigration("v2-snippets") { db in
+            try db.execute(sql: """
+            CREATE TABLE snippet (
+              id TEXT PRIMARY KEY NOT NULL,
+              title TEXT NOT NULL,
+              body TEXT NOT NULL,
+              createdAt DATETIME NOT NULL,
+              updatedAt DATETIME NOT NULL,
+              lamport INTEGER NOT NULL DEFAULT 0,
+              deletedAt DATETIME
+            );
+            """)
+        }
+
         return migrator
     }
 }

@@ -239,6 +239,49 @@ public actor ClipStore {
         }
     }
 
+    // MARK: - Snippets
+
+    public func snippets() throws -> [Snippet] {
+        try self.dbWriter.read { db in
+            try Snippet
+                .filter(sql: "deletedAt IS NULL")
+                .order(sql: "title COLLATE NOCASE")
+                .fetchAll(db)
+        }
+    }
+
+    public func searchSnippets(_ query: String) throws -> [Snippet] {
+        let trimmed = query.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return try self.snippets() }
+        return try self.dbWriter.read { db in
+            try Snippet
+                .filter(
+                    sql: "deletedAt IS NULL AND (title LIKE ? OR body LIKE ?)",
+                    arguments: ["%\(trimmed)%", "%\(trimmed)%"]
+                )
+                .order(sql: "title COLLATE NOCASE")
+                .fetchAll(db)
+        }
+    }
+
+    public func saveSnippet(_ snippet: Snippet) throws {
+        var updated = snippet
+        updated.updatedAt = Date()
+        updated.lamport += 1
+        try self.dbWriter.write { db in
+            try updated.save(db)
+        }
+    }
+
+    public func deleteSnippet(id: String) throws {
+        try self.dbWriter.write { db in
+            try db.execute(
+                sql: "UPDATE snippet SET deletedAt = ?, updatedAt = ?, lamport = lamport + 1 WHERE id = ?",
+                arguments: [Date(), Date(), id]
+            )
+        }
+    }
+
     // MARK: - Observation
 
     /// Reactive feed of the recent list for UI. Nonisolated: GRDB observation

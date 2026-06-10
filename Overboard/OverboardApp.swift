@@ -18,6 +18,11 @@ struct OverboardApp: App {
             }
             .keyboardShortcut("h")
 
+            Button("Snippets…") {
+                self.openWindow(id: "snippets")
+                NSApp.activate(ignoringOtherApps: true)
+            }
+
             Divider()
 
             SettingsLink {
@@ -36,6 +41,12 @@ struct OverboardApp: App {
                 .frame(minWidth: 420, minHeight: 320)
         }
         .defaultSize(width: 520, height: 600)
+
+        Window("Snippets", id: "snippets") {
+            SnippetsManagerView(store: AppServices.shared.store)
+                .frame(minWidth: 540, minHeight: 360)
+        }
+        .defaultSize(width: 640, height: 420)
 
         Settings {
             SettingsView()

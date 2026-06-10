@@ -8,17 +8,28 @@ public enum SettingsKeys {
     public static let historyLimit = "historyLimit"
     public static let restoreClipboard = "restoreClipboardAfterPaste"
     public static let excludedBundleIDs = "excludedBundleIDs"
+    public static let plainTextBundleIDs = "plainTextBundleIDs"
 
     public static var defaults: [String: Any] {
         [
             historyLimit: 1000,
             restoreClipboard: true,
             excludedBundleIDs: ClipboardMonitor.defaultExclusions.sorted().joined(separator: "\n"),
+            plainTextBundleIDs: "com.apple.Terminal\ncom.googlecode.iterm2",
         ]
     }
 
     public static func currentExclusions() -> Set<String> {
-        let raw = UserDefaults.standard.string(forKey: self.excludedBundleIDs) ?? ""
+        self.bundleIDSet(forKey: self.excludedBundleIDs)
+    }
+
+    /// Apps where pasted text should always be plain (terminals etc.).
+    public static func currentPlainTextApps() -> Set<String> {
+        self.bundleIDSet(forKey: self.plainTextBundleIDs)
+    }
+
+    private static func bundleIDSet(forKey key: String) -> Set<String> {
+        let raw = UserDefaults.standard.string(forKey: key) ?? ""
         return Set(
             raw.split(whereSeparator: \.isNewline)
                 .map { $0.trimmingCharacters(in: .whitespaces) }
@@ -31,6 +42,7 @@ public struct SettingsView: View {
     @AppStorage(SettingsKeys.historyLimit) private var historyLimit = 1000
     @AppStorage(SettingsKeys.restoreClipboard) private var restoreClipboard = true
     @AppStorage(SettingsKeys.excludedBundleIDs) private var excludedBundleIDs = ""
+    @AppStorage(SettingsKeys.plainTextBundleIDs) private var plainTextBundleIDs = ""
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var accessibilityGranted = PermissionService.isTrusted
 
@@ -79,6 +91,16 @@ public struct SettingsView: View {
                 Text("Excluded apps")
             } footer: {
                 Text("One bundle identifier per line. Copies made in these apps are never captured. Apps that mark their pasteboard as concealed (most password managers) are skipped automatically.")
+            }
+
+            Section {
+                TextEditor(text: self.$plainTextBundleIDs)
+                    .font(.body.monospaced())
+                    .frame(minHeight: 70)
+            } header: {
+                Text("Always paste as plain text into")
+            } footer: {
+                Text("One bundle identifier per line. Pasting text into these apps (terminals, editors) strips formatting automatically.")
             }
         }
         .formStyle(.grouped)

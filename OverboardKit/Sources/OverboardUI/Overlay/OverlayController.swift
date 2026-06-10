@@ -19,14 +19,22 @@ public final class OverlayController {
 
     /// Called with the committed item, paste mode, and the recorded target app.
     public var onCommit: (ClipItem, PasteMode, NSRunningApplication?) -> Void = { _, _, _ in }
+    /// Called with the committed snippet and the recorded target app.
+    public var onCommitSnippet: (Snippet, NSRunningApplication?) -> Void = { _, _ in }
 
-    public init(store: ClipStore) {
-        self.viewModel = DrawerViewModel(store: store)
+    public init(store: ClipStore, stack: PasteStack) {
+        self.viewModel = DrawerViewModel(store: store, stack: stack)
         self.viewModel.onCommit = { [weak self] item, mode in
             guard let self else { return }
             let target = self.targetApp
             self.hide()
             self.onCommit(item, mode, target)
+        }
+        self.viewModel.onCommitSnippet = { [weak self] snippet in
+            guard let self else { return }
+            let target = self.targetApp
+            self.hide()
+            self.onCommitSnippet(snippet, target)
         }
         self.viewModel.onDismiss = { [weak self] in self?.hide() }
     }
@@ -110,9 +118,16 @@ public final class OverlayController {
             case 53: // esc
                 self.hide()
                 return nil
-            case 36, 76: // return, keypad enter — ⇧ pastes as plain text
-                let mode: PasteMode = event.modifierFlags.contains(.shift) ? .plainText : .full
-                self.viewModel.selectCurrent(mode: mode)
+            case 36, 76: // return, keypad enter — ⇧ plain text, ⌘ queue on stack
+                if event.modifierFlags.contains(.command) {
+                    self.viewModel.addSelectedToStack()
+                } else {
+                    let mode: PasteMode = event.modifierFlags.contains(.shift) ? .plainText : .full
+                    self.viewModel.selectCurrent(mode: mode)
+                }
+                return nil
+            case 44 where event.modifierFlags.contains(.command): // ⌘/ history ⇄ snippets
+                self.viewModel.toggleMode()
                 return nil
             case 123: // left arrow
                 self.viewModel.moveSelection(-1)

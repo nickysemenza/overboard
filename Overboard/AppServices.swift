@@ -13,6 +13,7 @@ final class AppServices {
     let monitor: ClipboardMonitor
     let pasteback: PastebackService
     let overlay: OverlayController
+    let stack = PasteStack()
 
     private var ingestTask: Task<Void, Never>?
     private var purgeTask: Task<Void, Never>?
@@ -30,7 +31,7 @@ final class AppServices {
         }
         self.monitor = ClipboardMonitor()
         self.pasteback = PastebackService(store: self.store)
-        self.overlay = OverlayController(store: self.store)
+        self.overlay = OverlayController(store: self.store, stack: self.stack)
     }
 
     func start() {
@@ -64,25 +65,72 @@ final class AppServices {
         }
 
         self.overlay.onCommit = { [weak self] item, mode, target in
+            self?.pasteItem(item, mode: mode, into: target)
+        }
+
+        self.overlay.onCommitSnippet = { [weak self] snippet, target in
             guard let self else { return }
-            Task {
-                do {
-                    let restore = UserDefaults.standard.bool(forKey: SettingsKeys.restoreClipboard)
-                    let outcome = try await self.pasteback.paste(
-                        item, into: target, restoreClipboard: restore, mode: mode
-                    )
-                    if outcome == .copiedOnly {
-                        HUDController.shared.flash("Copied — press ⌘V to paste")
-                        PermissionService.promptIfNeeded()
-                    }
-                } catch {
-                    self.logger.error("paste failed: \(String(describing: error), privacy: .public)")
-                }
+            let clipboard = NSPasteboard.general.string(forType: .string)
+            let expanded = SnippetTemplate.expand(snippet.body, clipboard: clipboard)
+            let restore = UserDefaults.standard.bool(forKey: SettingsKeys.restoreClipboard)
+            let outcome = self.pasteback.pasteText(expanded, into: target, restoreClipboard: restore)
+            if outcome == .copiedOnly {
+                HUDController.shared.flash("Copied — press ⌘V to paste")
+                PermissionService.promptIfNeeded()
             }
         }
 
         HotkeyService.onToggleDrawer { [weak self] in
             self?.overlay.toggle()
+        }
+
+        HotkeyService.onPasteNextFromStack { [weak self] in
+            guard let self else { return }
+            guard let item = self.stack.popNext() else {
+                HUDController.shared.flash("Paste stack is empty")
+                return
+            }
+            let remaining = self.stack.count
+            self.pasteItem(item, mode: .full, into: NSWorkspace.shared.frontmostApplication) {
+                if remaining > 0 {
+                    HUDController.shared.flash("Pasted from stack — \(remaining) left")
+                }
+            }
+        }
+    }
+
+    /// Shared paste path: applies per-app plain-text rules, falls back to
+    /// copy-only + HUD when Accessibility isn't granted.
+    private func pasteItem(
+        _ item: ClipItem,
+        mode: PasteMode,
+        into target: NSRunningApplication?,
+        onPasted: (@MainActor () -> Void)? = nil
+    ) {
+        Task {
+            do {
+                var effectiveMode = mode
+                if effectiveMode == .full,
+                   item.kind == .text || item.kind == .link,
+                   let bundleID = target?.bundleIdentifier,
+                   SettingsKeys.currentPlainTextApps().contains(bundleID)
+                {
+                    effectiveMode = .plainText
+                }
+                let restore = UserDefaults.standard.bool(forKey: SettingsKeys.restoreClipboard)
+                let outcome = try await self.pasteback.paste(
+                    item, into: target, restoreClipboard: restore, mode: effectiveMode
+                )
+                switch outcome {
+                case .pasted:
+                    onPasted?()
+                case .copiedOnly:
+                    HUDController.shared.flash("Copied — press ⌘V to paste")
+                    PermissionService.promptIfNeeded()
+                }
+            } catch {
+                self.logger.error("paste failed: \(String(describing: error), privacy: .public)")
+            }
         }
     }
 }

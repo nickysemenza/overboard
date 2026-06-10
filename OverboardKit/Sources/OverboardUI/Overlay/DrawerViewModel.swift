@@ -2,15 +2,25 @@ import Foundation
 import Observation
 import OverboardCore
 
+public enum DrawerMode: Sendable {
+    case history
+    case snippets
+}
+
 @MainActor
 @Observable
 public final class DrawerViewModel {
     public private(set) var items: [ClipItem] = []
+    public private(set) var snippets: [Snippet] = []
+    public private(set) var mode: DrawerMode = .history
     public var query: String = ""
     public var selectedIndex: Int = 0
 
+    public let stack: PasteStack
+
     /// Called when the user commits an item (Return, click, ⌘n).
     public var onCommit: (ClipItem, PasteMode) -> Void = { _, _ in }
+    public var onCommitSnippet: (Snippet) -> Void = { _ in }
     public var onDismiss: () -> Void = {}
 
     private let store: ClipStore
@@ -21,12 +31,26 @@ public final class DrawerViewModel {
         self.store
     }
 
-    public init(store: ClipStore) {
+    public init(store: ClipStore, stack: PasteStack) {
         self.store = store
+        self.stack = stack
+    }
+
+    public var entryCount: Int {
+        self.mode == .history ? self.items.count : self.snippets.count
     }
 
     /// Reset and reload; called every time the drawer is summoned.
     public func prepareForShow() {
+        self.query = ""
+        self.selectedIndex = 0
+        self.mode = .history
+        self.searchTask?.cancel()
+        self.searchTask = Task { await self.refresh() }
+    }
+
+    public func toggleMode() {
+        self.mode = self.mode == .history ? .snippets : .history
         self.query = ""
         self.selectedIndex = 0
         self.searchTask?.cancel()
@@ -46,42 +70,66 @@ public final class DrawerViewModel {
     private func refresh(resetSelection: Bool = true, followItemID: String? = nil) async {
         do {
             let query = self.query
-            let results = query.trimmingCharacters(in: .whitespaces).isEmpty
-                ? try await self.store.recent(limit: 100)
-                : try await self.store.search(query, limit: 100)
-            guard !Task.isCancelled else { return }
-            self.items = results
-            if let followItemID, let index = results.firstIndex(where: { $0.id == followItemID }) {
+            switch self.mode {
+            case .history:
+                let results = query.trimmingCharacters(in: .whitespaces).isEmpty
+                    ? try await self.store.recent(limit: 100)
+                    : try await self.store.search(query, limit: 100)
+                guard !Task.isCancelled else { return }
+                self.items = results
+            case .snippets:
+                let results = try await self.store.searchSnippets(query)
+                guard !Task.isCancelled else { return }
+                self.snippets = results
+            }
+            if let followItemID, let index = self.items.firstIndex(where: { $0.id == followItemID }) {
                 self.selectedIndex = index
             } else if resetSelection {
                 self.selectedIndex = 0
             } else {
-                self.selectedIndex = min(self.selectedIndex, max(self.items.count - 1, 0))
+                self.selectedIndex = min(self.selectedIndex, max(self.entryCount - 1, 0))
             }
         } catch {
             self.items = []
+            self.snippets = []
         }
     }
 
     public func moveSelection(_ delta: Int) {
-        guard !self.items.isEmpty else { return }
-        self.selectedIndex = min(max(self.selectedIndex + delta, 0), self.items.count - 1)
+        guard self.entryCount > 0 else { return }
+        self.selectedIndex = min(max(self.selectedIndex + delta, 0), self.entryCount - 1)
     }
 
-    public func select(at index: Int, mode: PasteMode = .full) {
-        guard self.items.indices.contains(index) else { return }
-        self.selectedIndex = index
-        self.onCommit(self.items[index], mode)
+    public func select(at index: Int, mode pasteMode: PasteMode = .full) {
+        switch self.mode {
+        case .history:
+            guard self.items.indices.contains(index) else { return }
+            self.selectedIndex = index
+            self.onCommit(self.items[index], pasteMode)
+        case .snippets:
+            guard self.snippets.indices.contains(index) else { return }
+            self.selectedIndex = index
+            self.onCommitSnippet(self.snippets[index])
+        }
     }
 
-    public func selectCurrent(mode: PasteMode = .full) {
-        guard self.items.indices.contains(self.selectedIndex) else { return }
-        self.onCommit(self.items[self.selectedIndex], mode)
+    public func selectCurrent(mode pasteMode: PasteMode = .full) {
+        self.select(at: self.selectedIndex, mode: pasteMode)
+    }
+
+    /// Queue the selected item onto the paste stack and advance selection so
+    /// repeated ⌘↩ presses queue a run of items.
+    public func addSelectedToStack() {
+        guard self.mode == .history, self.items.indices.contains(self.selectedIndex) else { return }
+        self.stack.push(self.items[self.selectedIndex])
+        if self.selectedIndex < self.items.count - 1 {
+            self.selectedIndex += 1
+        }
     }
 
     /// Pin/unpin the selected item; selection follows it to its new position.
     public func togglePinSelected() {
-        guard self.items.indices.contains(self.selectedIndex) else { return }
+        guard self.mode == .history, self.items.indices.contains(self.selectedIndex) else { return }
         let item = self.items[self.selectedIndex]
         Task {
             try? await self.store.setPinned(id: item.id, !item.isPinned)
@@ -91,7 +139,7 @@ public final class DrawerViewModel {
 
     /// Remove the selected item from history (drawer stays open).
     public func deleteSelected() {
-        guard self.items.indices.contains(self.selectedIndex) else { return }
+        guard self.mode == .history, self.items.indices.contains(self.selectedIndex) else { return }
         let item = self.items[self.selectedIndex]
         Task {
             try? await self.store.delete(id: item.id)
