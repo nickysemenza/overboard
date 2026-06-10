@@ -2,15 +2,105 @@ import AppKit
 import os
 import OverboardCore
 
-/// Writes history items back to the pasteboard. M1.2: copy-only.
-/// M1.4 adds CGEvent ⌘V synthesis into the target app and clipboard restore.
+/// Writes history items back to the pasteboard and synthesizes ⌘V into the
+/// target app. Direct paste needs Accessibility; without it we fall back to
+/// copy-only (the caller shows a "press ⌘V" HUD).
 @MainActor
 public final class PastebackService {
+    public enum Outcome: Sendable {
+        /// ⌘V was synthesized into the target app.
+        case pasted
+        /// No Accessibility permission — item is on the clipboard, user pastes manually.
+        case copiedOnly
+    }
+
     private let store: ClipStore
     private let logger = Logger(subsystem: "com.nicky.overboard", category: "pasteback")
+    private var restoreTask: Task<Void, Never>?
 
     public init(store: ClipStore) {
         self.store = store
+    }
+
+    /// Full paste-back: optionally snapshot the current clipboard, write the
+    /// item, re-activate the target, synthesize ⌘V, then restore the snapshot
+    /// once the paste has landed.
+    public func paste(
+        _ item: ClipItem,
+        into target: NSRunningApplication?,
+        restoreClipboard: Bool
+    ) async throws -> Outcome {
+        self.restoreTask?.cancel()
+        let backup = restoreClipboard ? Self.backupPasteboard() : nil
+
+        try await self.copyToPasteboard(item)
+
+        guard PermissionService.isTrusted else { return .copiedOnly }
+
+        let pasteboard = NSPasteboard.general
+        let expectedChangeCount = pasteboard.changeCount
+
+        // Belt and braces: with a nonactivating panel the target never lost
+        // frontmost status, but re-activate in case focus drifted.
+        target?.activate()
+        try? await Task.sleep(for: .milliseconds(90))
+        Self.synthesizeCmdV()
+
+        if let backup {
+            self.restoreTask = Task { @MainActor in
+                // Give the target app time to consume the paste.
+                try? await Task.sleep(for: .milliseconds(600))
+                guard !Task.isCancelled else { return }
+                // Only restore if nothing else wrote to the pasteboard in the
+                // meantime — never clobber newer content.
+                guard pasteboard.changeCount == expectedChangeCount else { return }
+                Self.restore(backup)
+            }
+        }
+        return .pasted
+    }
+
+    // MARK: - Clipboard backup/restore
+
+    /// All flavors of all items currently on the pasteboard.
+    private static func backupPasteboard() -> [[(NSPasteboard.PasteboardType, Data)]]? {
+        guard let items = NSPasteboard.general.pasteboardItems, !items.isEmpty else { return nil }
+        let backup = items.map { item in
+            item.types.compactMap { type -> (NSPasteboard.PasteboardType, Data)? in
+                guard let data = item.data(forType: type) else { return nil }
+                return (type, data)
+            }
+        }
+        return backup.contains(where: { !$0.isEmpty }) ? backup : nil
+    }
+
+    private static func restore(_ backup: [[(NSPasteboard.PasteboardType, Data)]]) {
+        let restored = backup.map { flavors in
+            let item = NSPasteboardItem()
+            for (type, data) in flavors {
+                item.setData(data, forType: type)
+            }
+            // Marked so the monitor doesn't re-capture the restore as a new copy.
+            item.setData(Data(), forType: ClipboardMonitor.markerType)
+            return item
+        }
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.writeObjects(restored)
+    }
+
+    // MARK: - Key synthesis
+
+    private static func synthesizeCmdV() {
+        let source = CGEventSource(stateID: .combinedSessionState)
+        let vKey: CGKeyCode = 9 // kVK_ANSI_V
+        guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: vKey, keyDown: true),
+              let keyUp = CGEvent(keyboardEventSource: source, virtualKey: vKey, keyDown: false)
+        else { return }
+        keyDown.flags = .maskCommand
+        keyUp.flags = .maskCommand
+        keyDown.post(tap: .cghidEventTap)
+        keyUp.post(tap: .cghidEventTap)
     }
 
     /// Puts the item on the general pasteboard (with the internal marker type

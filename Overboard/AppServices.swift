@@ -46,14 +46,18 @@ final class AppServices {
             }
         }
 
-        self.overlay.onCommit = { [weak self] item, _ in
+        self.overlay.onCommit = { [weak self] item, target in
             guard let self else { return }
-            // M1.2: copy-only. M1.4 turns this into a real paste into targetApp.
             Task {
                 do {
-                    try await self.pasteback.copyToPasteboard(item)
+                    let restore = UserDefaults.standard.object(forKey: "restoreClipboardAfterPaste") as? Bool ?? true
+                    let outcome = try await self.pasteback.paste(item, into: target, restoreClipboard: restore)
+                    if outcome == .copiedOnly {
+                        HUDController.shared.flash("Copied — press ⌘V to paste")
+                        PermissionService.promptIfNeeded()
+                    }
                 } catch {
-                    self.logger.error("copy failed: \(String(describing: error), privacy: .public)")
+                    self.logger.error("paste failed: \(String(describing: error), privacy: .public)")
                 }
             }
         }
