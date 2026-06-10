@@ -29,18 +29,26 @@ public final class LauncherViewModel {
     public var onResultCountChanged: (Int) -> Void = { _ in }
 
     private let instantRouter: QueryRouter
-    private let fullRouter: QueryRouter
-    private let hasSecondaryProviders: Bool
+    private let secondaryProviders: [any LauncherProvider]
     private var searchTask: Task<Void, Never>?
 
     /// Secondary providers (apps, files, …) run in the debounced pass,
     /// sandwiched between the instant calculator and web rows.
     public init(secondaryProviders: [any LauncherProvider]) {
-        let calculator = CalculatorProvider()
-        let web = WebSearchProvider()
-        self.instantRouter = QueryRouter(providers: [calculator, web])
-        self.fullRouter = QueryRouter(providers: [calculator] + secondaryProviders + [web])
-        self.hasSecondaryProviders = !secondaryProviders.isEmpty
+        self.instantRouter = QueryRouter(providers: [CalculatorProvider(), WebSearchProvider()])
+        self.secondaryProviders = secondaryProviders
+    }
+
+    /// Runs a throwaway query through every secondary provider so the first
+    /// real search doesn't pay Spotlight's cold-start (~3s vs ~100ms warm).
+    /// Call once at app launch.
+    public func prewarm() {
+        let providers = self.secondaryProviders
+        Task(priority: .utility) {
+            for provider in providers {
+                _ = await provider.results(for: "prewarm")
+            }
+        }
     }
 
     public func prepareForShow() {
@@ -66,13 +74,28 @@ public final class LauncherViewModel {
             self.selectedIndex = 0
             self.setResults(instant)
 
-            guard self.hasSecondaryProviders else { return }
+            let providers = self.secondaryProviders
+            guard !providers.isEmpty else { return }
             // Debounce Spotlight; per-keystroke metadata queries are wasteful.
             try? await Task.sleep(for: .milliseconds(250))
             guard !Task.isCancelled else { return }
-            let full = await self.fullRouter.results(for: query)
-            guard !Task.isCancelled else { return }
-            self.setResults(full)
+
+            // Splice each provider's rows in as it finishes — apps come back
+            // well before the broad home-folder file query, and waiting for
+            // the slowest provider made the whole bar feel sluggish.
+            let head = instant.filter { if case .webSearch = $0 { false } else { true } }
+            let tail = instant.filter { if case .webSearch = $0 { true } else { false } }
+            var buckets = [[LauncherResult]](repeating: [], count: providers.count)
+            await withTaskGroup(of: (Int, [LauncherResult]).self) { group in
+                for (index, provider) in providers.enumerated() {
+                    group.addTask { await (index, provider.results(for: query)) }
+                }
+                for await (index, rows) in group {
+                    guard !Task.isCancelled else { return }
+                    buckets[index] = rows
+                    self.setResults(head + buckets.flatMap(\.self) + tail)
+                }
+            }
         }
     }
 
@@ -98,6 +121,7 @@ public final class LauncherViewModel {
     }
 
     private func setResults(_ newResults: [LauncherResult]) {
+        obTrace("launcher results: \(newResults.map(\.id))")
         let countChanged = newResults.count != self.results.count
         self.results = newResults
         if self.selectedIndex >= newResults.count {

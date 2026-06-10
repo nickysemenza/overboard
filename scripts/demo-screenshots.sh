@@ -86,6 +86,7 @@ shot drawer 0.2
 shot preview 1.5 next preview
 shot palette 1.0 next next next next palette
 shot multiselect 1.0 stack stack extend extend
+shot markdown 1.5 next next next next next next next next next preview
 
 echo "Wrote:"
 ls -la "$OUT"/*.png

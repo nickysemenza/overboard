@@ -16,6 +16,7 @@ let package = Package(
         .package(url: "https://github.com/nicklockwood/Expression", from: "0.13.0"),
         .package(url: "https://github.com/sindresorhus/Defaults", from: "9.0.0"),
         .package(url: "https://github.com/apple/swift-async-algorithms", from: "1.0.0"),
+        .package(url: "https://github.com/gonzalezreal/swift-markdown-ui", from: "2.4.0"),
     ],
     targets: [
         .target(
@@ -42,6 +43,7 @@ let package = Package(
                 .product(name: "Highlightr", package: "Highlightr"),
                 .product(name: "Defaults", package: "Defaults"),
                 .product(name: "AsyncAlgorithms", package: "swift-async-algorithms"),
+                .product(name: "MarkdownUI", package: "swift-markdown-ui"),
             ]
         ),
         .testTarget(

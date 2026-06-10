@@ -1,4 +1,5 @@
 import AppKit
+import MarkdownUI
 import OverboardCore
 import SwiftUI
 
@@ -10,6 +11,8 @@ struct PreviewPane: View {
     @Environment(\.colorScheme) private var colorScheme
     @State private var fullText: String?
     @State private var highlightedCode: NSAttributedString?
+    @State private var markdownSource: String?
+    @State private var showRawMarkdown = false
     @State private var largeImage: NSImage?
 
     private var item: ClipItem? {
@@ -56,6 +59,16 @@ struct PreviewPane: View {
                         .font(.caption)
                         .foregroundStyle(.yellow)
                 }
+                if self.markdownSource != nil {
+                    Button {
+                        self.showRawMarkdown.toggle()
+                    } label: {
+                        Image(systemName: self.showRawMarkdown ? "doc.richtext" : "text.alignleft")
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .help(self.showRawMarkdown ? "Show rendered markdown" : "Show raw markdown")
+                }
                 if self.viewModel.previewState == .editing {
                     Text("Editing")
                         .font(.caption.weight(.medium))
@@ -79,7 +92,16 @@ struct PreviewPane: View {
         } else if let item {
             switch item.kind {
             case .text, .link, .file:
-                if let highlightedCode {
+                if let markdownSource, !self.showRawMarkdown {
+                    ScrollView {
+                        Markdown(markdownSource)
+                            .markdownTheme(.basic)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(10)
+                    }
+                    .background(.background.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+                } else if let highlightedCode {
                     CodeTextView(attributed: highlightedCode)
                         .background(.background.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
                 } else {
@@ -131,6 +153,8 @@ struct PreviewPane: View {
     private func load() async {
         self.fullText = nil
         self.highlightedCode = nil
+        self.markdownSource = nil
+        self.showRawMarkdown = false
         self.largeImage = nil
         guard let item else { return }
         let store = self.viewModel.storeForCards
@@ -139,10 +163,17 @@ struct PreviewPane: View {
         case .text, .link:
             let text = try? await store.plainText(for: item.id)
             self.fullText = text
-            if let text, item.kind == .text, !item.isSecret,
-               item.category == "code" || CodeHighlighter.looksLikeCode(text)
-            {
-                self.highlightedCode = CodeHighlighter.highlight(text, dark: self.colorScheme == .dark)
+            if let text, item.kind == .text, !item.isSecret {
+                if item.category == "code" {
+                    self.highlightedCode = CodeHighlighter.highlight(text, dark: self.colorScheme == .dark)
+                } else if MarkdownDetector.looksLikeMarkdown(text) {
+                    // Checked before looksLikeCode: a README's fenced block
+                    // trips the code heuristic, and the clip would never
+                    // render as markdown.
+                    self.markdownSource = text
+                } else if CodeHighlighter.looksLikeCode(text) {
+                    self.highlightedCode = CodeHighlighter.highlight(text, dark: self.colorScheme == .dark)
+                }
             }
         case .file:
             if let rep = try? await store.representations(for: item.id)

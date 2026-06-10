@@ -78,6 +78,7 @@ final class AppServices {
         } else {
             self.startCapturePipeline()
             self.registerHotkeys()
+            self.launcher.prewarm()
         }
 
         self.installOverlayCallbacks()

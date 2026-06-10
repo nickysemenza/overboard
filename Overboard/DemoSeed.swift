@@ -5,7 +5,7 @@ import OverboardCore
 /// scripts/demo-screenshots.sh. Items get staggered `capturedAt` stamps so the
 /// drawer order is deterministic — the screenshot script navigates by index:
 ///   0 pinned note · 1 code · 2 link · 3 image · 4 JSON · 5 files · 6 color
-///   · 7 secret · 8 prose · 9 shell command
+///   · 7 secret · 8 prose · 9 markdown · 10 shell command
 enum DemoSeed {
     static func populate(_ store: ClipStore) async {
         let now = Date()
@@ -119,7 +119,23 @@ enum DemoSeed {
                 )
             }
 
-            // Index 9: plain shell command.
+            // Index 9: markdown — MarkdownDetector renders this in the preview.
+            _ = try await store.ingest(text(
+                """
+                ## Overboard 1.5
+
+                **Highlights**
+
+                - Markdown clips now render in the preview pane
+                - Search keystrokes debounce through [swift-async-algorithms](https://github.com/apple/swift-async-algorithms)
+                - Settings migrated to typed keys
+
+                > Pinned clips survive history purges.
+                """,
+                bundleID: "com.apple.Notes", appName: "Notes", age: 1100
+            ))
+
+            // Index 10: plain shell command.
             _ = try await store.ingest(text(
                 "xcodebuild -project Overboard.xcodeproj -scheme Overboard build",
                 bundleID: "com.apple.Terminal", appName: "Terminal", age: 1140

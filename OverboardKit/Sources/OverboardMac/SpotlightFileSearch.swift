@@ -18,12 +18,18 @@ public final class SpotlightFileSearch {
     }
 
     private var activeQuery: NSMetadataQuery?
-    private var activeObserver: NSObjectProtocol?
+    private var activeObservers: [NSObjectProtocol] = []
     private var activeContinuation: CheckedContinuation<[Hit], Never>?
     private var activeLimit = 0
+    private var timeoutTask: Task<Void, Never>?
     /// Distinguishes "this task's search" from a successor so a stale
     /// cancellation handler can't kill a newer query.
     private var generation = 0
+
+    /// mds can take seconds to declare gathering *finished* even though the
+    /// hits arrive almost immediately; past this deadline we harvest
+    /// whatever has gathered. Tuned for a launcher, not completeness.
+    private let harvestDeadline: Duration = .milliseconds(700)
 
     public init() {}
 
@@ -75,14 +81,35 @@ public final class SpotlightFileSearch {
                 self.activeQuery = query
                 self.activeContinuation = continuation
                 self.activeLimit = limit
-                self.activeObserver = NotificationCenter.default.addObserver(
-                    forName: .NSMetadataQueryDidFinishGathering,
-                    object: query,
-                    queue: .main
-                ) { [weak self] _ in
-                    MainActor.assumeIsolated {
-                        self?.finishActive()
-                    }
+
+                // Three harvest triggers, first one wins: gathering finished,
+                // enough rows mid-gather, or the deadline.
+                self.activeObservers = [
+                    NotificationCenter.default.addObserver(
+                        forName: .NSMetadataQueryDidFinishGathering,
+                        object: query,
+                        queue: .main
+                    ) { [weak self] _ in
+                        MainActor.assumeIsolated {
+                            self?.finishActive()
+                        }
+                    },
+                    NotificationCenter.default.addObserver(
+                        forName: .NSMetadataQueryGatheringProgress,
+                        object: query,
+                        queue: .main
+                    ) { [weak self] _ in
+                        MainActor.assumeIsolated {
+                            guard let self, self.activeQuery === query,
+                                  query.resultCount >= limit else { return }
+                            self.finishActive()
+                        }
+                    },
+                ]
+                self.timeoutTask = Task { [weak self, harvestDeadline] in
+                    try? await Task.sleep(for: harvestDeadline)
+                    guard !Task.isCancelled, let self, self.activeQuery === query else { return }
+                    self.finishActive()
                 }
 
                 if !query.start() {
@@ -127,14 +154,16 @@ public final class SpotlightFileSearch {
     /// Clears state *before* the continuation resumes so a re-entrant
     /// search can't see a half-torn-down query.
     private func tearDown(_ query: NSMetadataQuery) {
-        if let observer = activeObserver {
+        for observer in self.activeObservers {
             NotificationCenter.default.removeObserver(observer)
         }
+        self.timeoutTask?.cancel()
         query.stop()
         self.activeQuery = nil
-        self.activeObserver = nil
+        self.activeObservers = []
         self.activeContinuation = nil
         self.activeLimit = 0
+        self.timeoutTask = nil
     }
 }
 
