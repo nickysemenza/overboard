@@ -24,6 +24,8 @@ public final class DrawerViewModel {
     public var onCommitTransform: (ClipItem, ClipTransform) -> Void = { _, _ in }
     public var onCommitAITransform: (ClipItem, AITransform) -> Void = { _, _ in }
     public var onDismiss: () -> Void = {}
+    /// Set by DrawerView, which owns the SwiftUI openSettings environment action.
+    public var onOpenSettings: () -> Void = {}
 
     private let store: ClipStore
     private var searchTask: Task<Void, Never>?

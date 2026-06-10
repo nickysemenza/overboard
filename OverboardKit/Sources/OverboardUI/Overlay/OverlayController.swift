@@ -147,6 +147,10 @@ public final class OverlayController {
             case 44 where event.modifierFlags.contains(.command): // ⌘/ history ⇄ snippets
                 self.viewModel.toggleMode()
                 return nil
+            case 43 where event.modifierFlags.contains(.command): // ⌘, settings
+                self.hide()
+                self.viewModel.onOpenSettings()
+                return nil
             case 123: // left arrow
                 self.viewModel.moveSelection(-1)
                 return nil

@@ -4,6 +4,7 @@ import SwiftUI
 public struct DrawerView: View {
     @Bindable var viewModel: DrawerViewModel
     @FocusState private var searchFocused: Bool
+    @Environment(\.openSettings) private var openSettings
 
     public init(viewModel: DrawerViewModel) {
         self.viewModel = viewModel
@@ -22,7 +23,15 @@ public struct DrawerView: View {
                 .strokeBorder(.primary.opacity(0.12), lineWidth: 1)
         }
         .padding(12)
-        .onAppear { self.searchFocused = true }
+        .onAppear {
+            self.searchFocused = true
+            // The overlay controller can't reach SwiftUI environment actions;
+            // hand it the capability.
+            self.viewModel.onOpenSettings = {
+                self.openSettings()
+                NSApp.activate(ignoringOtherApps: true)
+            }
+        }
         .onChange(of: self.viewModel.query) {
             self.viewModel.scheduleSearch()
         }
