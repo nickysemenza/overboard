@@ -348,15 +348,21 @@ public actor ClipStore {
         }
     }
 
-    /// Stores a generated title + category. Never overwrites an existing title.
-    public func attachEnrichment(itemID: String, title: String, category: String) throws {
+    /// Stores generated title + category + optional summary. Never overwrites
+    /// an existing title.
+    public func attachEnrichment(
+        itemID: String,
+        title: String,
+        category: String,
+        summary: String? = nil
+    ) throws {
         try self.dbWriter.write { db in
             try db.execute(
                 sql: """
-                UPDATE item SET aiTitle = ?, category = ?, updatedAt = ?, lamport = lamport + 1
+                UPDATE item SET aiTitle = ?, category = ?, aiSummary = ?, updatedAt = ?, lamport = lamport + 1
                 WHERE id = ? AND aiTitle IS NULL AND deletedAt IS NULL
                 """,
-                arguments: [title, category, Date(), itemID]
+                arguments: [title, category, summary, Date(), itemID]
             )
         }
     }

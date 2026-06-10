@@ -124,11 +124,14 @@ struct EnrichmentStoreTests {
         )
         let item = try #require(try await store.ingest(snapshot))
 
-        try await store.attachEnrichment(itemID: item.id, title: "First Title", category: "prose")
+        try await store.attachEnrichment(
+            itemID: item.id, title: "First Title", category: "prose", summary: "A summary."
+        )
         try await store.attachEnrichment(itemID: item.id, title: "Second Title", category: "code")
 
         let recent = try await store.recent(limit: 5)
         #expect(recent.first?.aiTitle == "First Title")
         #expect(recent.first?.category == "prose")
+        #expect(recent.first?.aiSummary == "A summary.")
     }
 }

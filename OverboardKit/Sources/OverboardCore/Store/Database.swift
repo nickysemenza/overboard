@@ -129,6 +129,10 @@ enum Migrations {
             """)
         }
 
+        migrator.registerMigration("v5-ai-summary") { db in
+            try db.execute(sql: "ALTER TABLE item ADD COLUMN aiSummary TEXT;")
+        }
+
         return migrator
     }
 }

@@ -168,10 +168,15 @@ final class AppServices {
 
         if #available(macOS 26.0, *) {
             guard let enrichment = try? await ClipEnricher.enrich(text: text) else { return }
+            // Short clips show fully on the card; a summary only earns its
+            // space once the preview truncates.
+            let summary = text.count >= ClipEnricher.summaryWorthwhileLength
+                ? enrichment.summary : nil
             try? await store.attachEnrichment(
                 itemID: item.id,
                 title: enrichment.title,
-                category: enrichment.category
+                category: enrichment.category,
+                summary: summary
             )
         }
     }

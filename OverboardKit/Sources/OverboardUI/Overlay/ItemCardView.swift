@@ -135,7 +135,20 @@ struct ItemCardView: View {
                     }
                     Text(self.item.previewText ?? "")
                         .font(.callout)
-                        .lineLimit(self.item.aiTitle == nil ? 7 : 6)
+                        .lineLimit(self.textPreviewLineLimit)
+                    if let summary = item.aiSummary {
+                        Spacer(minLength: 0)
+                        HStack(alignment: .top, spacing: 4) {
+                            Image(systemName: "sparkles")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                            Text(summary)
+                                .font(.caption)
+                                .italic()
+                                .foregroundStyle(.secondary)
+                                .lineLimit(3)
+                        }
+                    }
                 }
                 .padding(10)
             }
@@ -161,6 +174,17 @@ struct ItemCardView: View {
                             .scaledToFill()
                     }
                     .clipped()
+                    .overlay(alignment: .bottom) {
+                        if let title = item.aiTitle {
+                            Text(title)
+                                .font(.caption2.weight(.medium))
+                                .lineLimit(1)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .frame(maxWidth: .infinity)
+                                .background(.ultraThinMaterial)
+                        }
+                    }
             } else {
                 self.placeholder("photo")
             }
@@ -176,6 +200,16 @@ struct ItemCardView: View {
             .padding(10)
         case .color:
             self.placeholder("paintpalette.fill")
+        }
+    }
+
+    /// Raw text yields lines to the title and summary when they're present.
+    private var textPreviewLineLimit: Int {
+        switch (self.item.aiTitle != nil, self.item.aiSummary != nil) {
+        case (false, false): 7
+        case (true, false): 6
+        case (false, true): 4
+        case (true, true): 3
         }
     }
 

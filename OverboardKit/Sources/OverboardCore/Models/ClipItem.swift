@@ -15,6 +15,8 @@ public struct ClipItem: Codable, Sendable, Equatable, Identifiable {
     public var aiTitle: String?
     /// LLM-assigned category (code, error, address, contact, prose, list, other).
     public var category: String?
+    /// LLM one-sentence summary; only stored for long clips (≥250 chars).
+    public var aiSummary: String?
     public var useCount: Int
     public var createdAt: Date
     public var lastUsedAt: Date
@@ -34,6 +36,7 @@ public struct ClipItem: Codable, Sendable, Equatable, Identifiable {
         isSecret: Bool = false,
         aiTitle: String? = nil,
         category: String? = nil,
+        aiSummary: String? = nil,
         useCount: Int = 1,
         createdAt: Date,
         lastUsedAt: Date,
@@ -52,6 +55,7 @@ public struct ClipItem: Codable, Sendable, Equatable, Identifiable {
         self.isSecret = isSecret
         self.aiTitle = aiTitle
         self.category = category
+        self.aiSummary = aiSummary
         self.useCount = useCount
         self.createdAt = createdAt
         self.lastUsedAt = lastUsedAt
