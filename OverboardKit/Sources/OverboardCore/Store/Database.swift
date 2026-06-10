@@ -51,6 +51,10 @@ enum Migrations {
               sourceAppName TEXT,
               byteSize INTEGER NOT NULL,
               isPinned BOOLEAN NOT NULL DEFAULT 0,
+              isSecret BOOLEAN NOT NULL DEFAULT 0,
+              aiTitle TEXT,
+              category TEXT,
+              aiSummary TEXT,
               useCount INTEGER NOT NULL DEFAULT 1,
               createdAt DATETIME NOT NULL,
               lastUsedAt DATETIME NOT NULL,
@@ -62,6 +66,8 @@ enum Migrations {
             CREATE UNIQUE INDEX item_contentHash_live
               ON item(contentHash) WHERE deletedAt IS NULL;
             CREATE INDEX item_lastUsedAt ON item(lastUsedAt DESC);
+            CREATE INDEX item_secret_expiry
+              ON item(createdAt) WHERE isSecret = 1;
 
             CREATE TABLE representation (
               id TEXT PRIMARY KEY NOT NULL,
@@ -83,19 +89,11 @@ enum Migrations {
               tokenize='unicode61 remove_diacritics 2'
             );
 
-            CREATE TABLE meta (
-              key TEXT PRIMARY KEY NOT NULL,
-              value TEXT NOT NULL
+            CREATE TABLE item_embedding (
+              itemID TEXT PRIMARY KEY NOT NULL REFERENCES item(id) ON DELETE CASCADE,
+              vector BLOB NOT NULL
             );
-            """)
-            try db.execute(
-                sql: "INSERT INTO meta (key, value) VALUES ('deviceID', ?)",
-                arguments: [UUID().uuidString]
-            )
-        }
 
-        migrator.registerMigration("v2-snippets") { db in
-            try db.execute(sql: """
             CREATE TABLE snippet (
               id TEXT PRIMARY KEY NOT NULL,
               title TEXT NOT NULL,
@@ -105,53 +103,16 @@ enum Migrations {
               lamport INTEGER NOT NULL DEFAULT 0,
               deletedAt DATETIME
             );
-            """)
-        }
 
-        migrator.registerMigration("v3-secrets-embeddings") { db in
-            try db.execute(sql: """
-            ALTER TABLE item ADD COLUMN isSecret BOOLEAN NOT NULL DEFAULT 0;
-
-            CREATE INDEX item_secret_expiry
-              ON item(createdAt) WHERE isSecret = 1;
-
-            CREATE TABLE item_embedding (
-              itemID TEXT PRIMARY KEY NOT NULL REFERENCES item(id) ON DELETE CASCADE,
-              vector BLOB NOT NULL
+            CREATE TABLE meta (
+              key TEXT PRIMARY KEY NOT NULL,
+              value TEXT NOT NULL
             );
             """)
-        }
-
-        migrator.registerMigration("v4-ai-enrichment") { db in
-            try db.execute(sql: """
-            ALTER TABLE item ADD COLUMN aiTitle TEXT;
-            ALTER TABLE item ADD COLUMN category TEXT;
-            """)
-        }
-
-        migrator.registerMigration("v5-ai-summary") { db in
-            try db.execute(sql: "ALTER TABLE item ADD COLUMN aiSummary TEXT;")
-        }
-
-        // AI titles/summaries originally lived outside the search index; fold
-        // them into searchText for rows enriched before that changed, then
-        // rebuild the external-content FTS index from the item table.
-        // (Tombstones get re-indexed too — harmless, every search filters on
-        // deletedAt IS NULL.)
-        migrator.registerMigration("v6-index-ai-text") { db in
-            try db.execute(sql: """
-            UPDATE item
-            SET searchText = TRIM(
-                COALESCE(searchText || char(10), '')
-                || COALESCE(aiTitle, '')
-                || char(10)
-                || COALESCE(aiSummary, ''),
-                char(10)
+            try db.execute(
+                sql: "INSERT INTO meta (key, value) VALUES ('deviceID', ?)",
+                arguments: [UUID().uuidString]
             )
-            WHERE aiTitle IS NOT NULL;
-
-            INSERT INTO item_fts(item_fts) VALUES('rebuild');
-            """)
         }
 
         return migrator

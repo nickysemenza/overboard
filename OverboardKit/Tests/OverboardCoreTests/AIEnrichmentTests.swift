@@ -151,26 +151,6 @@ struct EnrichmentStoreTests {
         #expect(try await store.search("credentials").count == 1)
     }
 
-    @Test func backfillQueriesFindCandidates() async throws {
-        let store = try makeStore()
-        let image = try #require(try await store.ingest(self.imageSnapshot()))
-        let longText = String(repeating: "meaningful words ", count: 10)
-        let text = try #require(try await store.ingest(PasteboardSnapshot(
-            reps: [.init(uti: WellKnownUTI.plainText, data: Data(longText.utf8))],
-            sourceBundleID: nil, sourceAppName: nil
-        )))
-
-        #expect(try await store.itemsNeedingOCR().map(\.id) == [image.id])
-        #expect(try await store.itemsNeedingEnrichment().map(\.id) == [text.id])
-
-        try await store.attachRecognizedText(itemID: image.id, text: "now indexed")
-        try await store.attachEnrichment(itemID: text.id, title: "T", category: "prose")
-
-        #expect(try await store.itemsNeedingOCR().isEmpty)
-        // The OCR'd image is now an enrichment candidate only if long enough (it isn't).
-        #expect(try await store.itemsNeedingEnrichment().isEmpty)
-    }
-
     @Test func enrichmentStoresTitleAndCategoryOnce() async throws {
         let store = try makeStore()
         let snapshot = PasteboardSnapshot(

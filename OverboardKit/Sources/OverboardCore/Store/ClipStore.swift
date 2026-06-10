@@ -432,44 +432,6 @@ public actor ClipStore {
         }
     }
 
-    // MARK: - Backfill queries
-
-    /// Images captured before OCR existed (or whose OCR never ran).
-    public func itemsNeedingOCR(limit: Int = 200) throws -> [ClipItem] {
-        try self.dbWriter.read { db in
-            try ClipItem
-                .filter(sql: "kind = 'image' AND searchText IS NULL AND deletedAt IS NULL")
-                .order(sql: "lastUsedAt DESC")
-                .limit(limit)
-                .fetchAll(db)
-        }
-    }
-
-    /// Substantial items that never got a title (pre-enrichment captures).
-    public func itemsNeedingEnrichment(limit: Int = 200) throws -> [ClipItem] {
-        try self.dbWriter.read { db in
-            try ClipItem
-                .filter(sql: """
-                aiTitle IS NULL AND isSecret = 0 AND deletedAt IS NULL
-                AND searchText IS NOT NULL AND LENGTH(searchText) >= 80
-                """)
-                .order(sql: "lastUsedAt DESC")
-                .limit(limit)
-                .fetchAll(db)
-        }
-    }
-
-    /// The indexed text of an item (original content and/or OCR).
-    public func searchText(for itemID: String) throws -> String? {
-        try self.dbWriter.read { db in
-            try String.fetchOne(
-                db,
-                sql: "SELECT searchText FROM item WHERE id = ?",
-                arguments: [itemID]
-            )
-        }
-    }
-
     // MARK: - Secret expiry
 
     /// Hard-deletes secret items captured before the cutoff. Secrets are never
