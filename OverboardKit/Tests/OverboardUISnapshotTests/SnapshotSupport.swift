@@ -1,0 +1,78 @@
+import AppKit
+import OverboardCore
+import SnapshotTesting
+import SwiftUI
+
+/// Deterministic fixtures: fixed dates, and bundle IDs that resolve to no
+/// installed app so AppIconCache yields the neutral header instead of
+/// machine-dependent app icons.
+enum Fixtures {
+    static let date = Date(timeIntervalSince1970: 1_700_000_000)
+
+    static func item(
+        kind: ItemKind = .text,
+        preview: String,
+        appName: String = "Demo Editor",
+        isPinned: Bool = false,
+        isSecret: Bool = false,
+        aiTitle: String? = nil,
+        category: String? = nil,
+        aiSummary: String? = nil
+    ) -> ClipItem {
+        ClipItem(
+            id: "fixture-\(preview.prefix(24))",
+            contentHash: "fixture-hash",
+            kind: kind,
+            previewText: preview,
+            sourceBundleID: "dev.example.editor",
+            sourceAppName: appName,
+            byteSize: preview.utf8.count,
+            isPinned: isPinned,
+            isSecret: isSecret,
+            aiTitle: aiTitle,
+            category: category,
+            aiSummary: aiSummary,
+            createdAt: self.date,
+            lastUsedAt: self.date,
+            updatedAt: self.date
+        )
+    }
+
+    static func store() throws -> ClipStore {
+        let queue = try OverboardDatabase.openInMemory()
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("overboard-snapshot-tests-\(UUID().uuidString)", isDirectory: true)
+        return try ClipStore(dbWriter: queue, blobs: BlobStore(directory: dir))
+    }
+
+    static func textSnapshot(_ text: String) -> PasteboardSnapshot {
+        PasteboardSnapshot(
+            reps: [.init(uti: WellKnownUTI.plainText, data: Data(text.utf8))],
+            sourceBundleID: "dev.example.editor",
+            sourceAppName: "Demo Editor",
+            capturedAt: self.date
+        )
+    }
+}
+
+/// NSHostingView wrapper: ImageRenderer can't render NSViewRepresentable
+/// content, and appearance must be set per-host (no NSApp under swift test).
+@MainActor
+func snapshotHost(
+    _ view: some View,
+    width: CGFloat,
+    height: CGFloat,
+    dark: Bool = false
+) -> NSView {
+    let host = NSHostingView(rootView: view)
+    host.frame = CGRect(x: 0, y: 0, width: width, height: height)
+    host.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+    host.layoutSubtreeIfNeeded()
+    return host
+}
+
+/// Sub-pixel antialiasing drifts across macOS point releases; perceptual
+/// precision absorbs it without masking real layout changes.
+@MainActor var snapshotImageStrategy: Snapshotting<NSView, NSImage> {
+    .image(precision: 0.99, perceptualPrecision: 0.98)
+}

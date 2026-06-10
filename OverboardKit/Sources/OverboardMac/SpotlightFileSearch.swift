@@ -22,13 +22,16 @@ public final class SpotlightFileSearch {
     private var activeContinuation: CheckedContinuation<[Hit], Never>?
     private var activeLimit = 0
     private var timeoutTask: Task<Void, Never>?
+    private var deadlinePassed = false
     /// Distinguishes "this task's search" from a successor so a stale
     /// cancellation handler can't kill a newer query.
     private var generation = 0
 
     /// mds can take seconds to declare gathering *finished* even though the
-    /// hits arrive almost immediately; past this deadline we harvest
-    /// whatever has gathered. Tuned for a launcher, not completeness.
+    /// hits arrive almost immediately. Past this deadline we ship as soon as
+    /// we have *any* hits (at the deadline if some already gathered, else on
+    /// the next progress tick). Queries with no hits yet keep waiting for
+    /// finish-gathering so slow gathers still surface results eventually.
     private let harvestDeadline: Duration = .milliseconds(700)
 
     public init() {}
@@ -99,17 +102,26 @@ public final class SpotlightFileSearch {
                         object: query,
                         queue: .main
                     ) { [weak self] _ in
+                        // Registered per-query and removed at teardown, so
+                        // activeQuery is necessarily the query that fired.
                         MainActor.assumeIsolated {
-                            guard let self, self.activeQuery === query,
-                                  query.resultCount >= limit else { return }
-                            self.finishActive()
+                            guard let self, let active = self.activeQuery else { return }
+                            let enough = active.resultCount >= limit
+                            let lateButSomething = self.deadlinePassed && active.resultCount > 0
+                            if enough || lateButSomething {
+                                self.finishActive()
+                            }
                         }
                     },
                 ]
                 self.timeoutTask = Task { [weak self, harvestDeadline] in
                     try? await Task.sleep(for: harvestDeadline)
-                    guard !Task.isCancelled, let self, self.activeQuery === query else { return }
-                    self.finishActive()
+                    guard !Task.isCancelled, let self,
+                          self.generation == myGeneration, let active = self.activeQuery else { return }
+                    self.deadlinePassed = true
+                    if active.resultCount > 0 {
+                        self.finishActive()
+                    }
                 }
 
                 if !query.start() {
@@ -164,6 +176,7 @@ public final class SpotlightFileSearch {
         self.activeContinuation = nil
         self.activeLimit = 0
         self.timeoutTask = nil
+        self.deadlinePassed = false
     }
 }
 
