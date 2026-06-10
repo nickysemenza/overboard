@@ -8,6 +8,10 @@ struct OverboardApp: App {
 
     var body: some Scene {
         MenuBarExtra("Overboard", systemImage: "sailboat.fill") {
+            Button("Show Drawer") {
+                AppServices.shared.overlay.show()
+            }
+
             Button("History…") {
                 self.openWindow(id: "history")
                 NSApp.activate(ignoringOtherApps: true)
