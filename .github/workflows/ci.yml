@@ -16,6 +16,10 @@ jobs:
       - name: SwiftFormat (lint mode)
         run: swiftformat --lint .
 
+      # Not preinstalled on the macos-26 runner image (SwiftFormat is).
+      - name: Install SwiftLint
+        run: brew install swiftlint
+
       - name: SwiftLint
         run: swiftlint --strict
 
