@@ -28,12 +28,13 @@ public final class PastebackService {
     public func paste(
         _ item: ClipItem,
         into target: NSRunningApplication?,
-        restoreClipboard: Bool
+        restoreClipboard: Bool,
+        mode: PasteMode = .full
     ) async throws -> Outcome {
         self.restoreTask?.cancel()
         let backup = restoreClipboard ? Self.backupPasteboard() : nil
 
-        try await self.copyToPasteboard(item)
+        try await self.copyToPasteboard(item, mode: mode)
 
         guard PermissionService.isTrusted else { return .copiedOnly }
 
@@ -105,8 +106,11 @@ public final class PastebackService {
 
     /// Puts the item on the general pasteboard (with the internal marker type
     /// so the monitor doesn't re-capture it) and bumps its usage.
-    public func copyToPasteboard(_ item: ClipItem) async throws {
-        let reps = try await store.representations(for: item.id)
+    public func copyToPasteboard(_ item: ClipItem, mode: PasteMode = .full) async throws {
+        var reps = try await store.representations(for: item.id)
+        if mode == .plainText {
+            reps = reps.filter { $0.uti == WellKnownUTI.plainText }
+        }
 
         var pbItems: [NSPasteboardItem] = []
 

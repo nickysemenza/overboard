@@ -32,6 +32,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     case "show": overlay.show()
                     case "hide": overlay.hide()
                     case "commit": overlay.commitSelection()
+                    case "commit-plain": overlay.commitSelection(mode: .plainText)
+                    case "pin": overlay.togglePinSelection()
+                    case "delete": overlay.deleteSelection()
                     default: break
                     }
                 }

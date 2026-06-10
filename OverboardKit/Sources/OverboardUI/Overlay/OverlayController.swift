@@ -17,16 +17,16 @@ public final class OverlayController {
     /// paste should land. Recorded before the panel appears.
     public private(set) var targetApp: NSRunningApplication?
 
-    /// Called with the committed item and the recorded target app.
-    public var onCommit: (ClipItem, NSRunningApplication?) -> Void = { _, _ in }
+    /// Called with the committed item, paste mode, and the recorded target app.
+    public var onCommit: (ClipItem, PasteMode, NSRunningApplication?) -> Void = { _, _, _ in }
 
     public init(store: ClipStore) {
         self.viewModel = DrawerViewModel(store: store)
-        self.viewModel.onCommit = { [weak self] item in
+        self.viewModel.onCommit = { [weak self] item, mode in
             guard let self else { return }
             let target = self.targetApp
             self.hide()
-            self.onCommit(item, target)
+            self.onCommit(item, mode, target)
         }
         self.viewModel.onDismiss = { [weak self] in self?.hide() }
     }
@@ -36,8 +36,18 @@ public final class OverlayController {
     }
 
     /// Commits the currently selected item — same path as pressing Return.
-    public func commitSelection() {
-        self.viewModel.selectCurrent()
+    public func commitSelection(mode: PasteMode = .full) {
+        self.viewModel.selectCurrent(mode: mode)
+    }
+
+    /// Pin/unpin the selected item — same path as ⌘P.
+    public func togglePinSelection() {
+        self.viewModel.togglePinSelected()
+    }
+
+    /// Delete the selected item — same path as ⌘⌫.
+    public func deleteSelection() {
+        self.viewModel.deleteSelected()
     }
 
     public func toggle() {
@@ -53,7 +63,7 @@ public final class OverlayController {
 
         let screen = self.screenWithMouse()
         let visible = screen.visibleFrame
-        let height: CGFloat = 260
+        let height: CGFloat = 282
         panel.setFrame(
             NSRect(x: visible.minX, y: visible.minY, width: visible.width, height: height),
             display: false
@@ -73,7 +83,7 @@ public final class OverlayController {
     // MARK: - Setup
 
     private func makePanel() -> OverlayPanel {
-        let panel = OverlayPanel(contentRect: NSRect(x: 0, y: 0, width: 800, height: 260))
+        let panel = OverlayPanel(contentRect: NSRect(x: 0, y: 0, width: 800, height: 282))
         let hosting = NSHostingView(
             rootView: DrawerView(viewModel: self.viewModel)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
@@ -100,14 +110,21 @@ public final class OverlayController {
             case 53: // esc
                 self.hide()
                 return nil
-            case 36, 76: // return, keypad enter
-                self.viewModel.selectCurrent()
+            case 36, 76: // return, keypad enter — ⇧ pastes as plain text
+                let mode: PasteMode = event.modifierFlags.contains(.shift) ? .plainText : .full
+                self.viewModel.selectCurrent(mode: mode)
                 return nil
             case 123: // left arrow
                 self.viewModel.moveSelection(-1)
                 return nil
             case 124: // right arrow
                 self.viewModel.moveSelection(1)
+                return nil
+            case 35 where event.modifierFlags.contains(.command): // ⌘P pin/unpin
+                self.viewModel.togglePinSelected()
+                return nil
+            case 51 where event.modifierFlags.contains(.command): // ⌘⌫ delete item
+                self.viewModel.deleteSelected()
                 return nil
             default:
                 if event.modifierFlags.contains(.command),

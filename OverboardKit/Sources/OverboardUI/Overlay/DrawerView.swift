@@ -13,6 +13,7 @@ public struct DrawerView: View {
         VStack(spacing: 10) {
             self.searchBar
             self.cardStrip
+            self.footerHints
         }
         .padding(14)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
@@ -25,6 +26,13 @@ public struct DrawerView: View {
         .onChange(of: self.viewModel.query) {
             self.viewModel.scheduleSearch()
         }
+    }
+
+    private var footerHints: some View {
+        Text("↩ paste   ⇧↩ plain text   ⌘P pin   ⌘⌫ delete   esc dismiss")
+            .font(.caption2)
+            .foregroundStyle(.tertiary)
+            .frame(maxWidth: .infinity, alignment: .center)
     }
 
     private var searchBar: some View {
@@ -53,7 +61,18 @@ public struct DrawerView: View {
                             item: item,
                             index: index,
                             isSelected: index == self.viewModel.selectedIndex,
-                            store: self.viewModel.storeForCards
+                            store: self.viewModel.storeForCards,
+                            onPinToggle: {
+                                self.viewModel.selectedIndex = index
+                                self.viewModel.togglePinSelected()
+                            },
+                            onDelete: {
+                                self.viewModel.selectedIndex = index
+                                self.viewModel.deleteSelected()
+                            },
+                            onPaste: { mode in
+                                self.viewModel.select(at: index, mode: mode)
+                            }
                         )
                         .onTapGesture {
                             self.viewModel.select(at: index)

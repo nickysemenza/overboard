@@ -63,12 +63,14 @@ final class AppServices {
             }
         }
 
-        self.overlay.onCommit = { [weak self] item, target in
+        self.overlay.onCommit = { [weak self] item, mode, target in
             guard let self else { return }
             Task {
                 do {
                     let restore = UserDefaults.standard.bool(forKey: SettingsKeys.restoreClipboard)
-                    let outcome = try await self.pasteback.paste(item, into: target, restoreClipboard: restore)
+                    let outcome = try await self.pasteback.paste(
+                        item, into: target, restoreClipboard: restore, mode: mode
+                    )
                     if outcome == .copiedOnly {
                         HUDController.shared.flash("Copied — press ⌘V to paste")
                         PermissionService.promptIfNeeded()

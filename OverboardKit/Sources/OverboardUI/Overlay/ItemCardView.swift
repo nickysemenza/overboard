@@ -2,12 +2,16 @@ import AppKit
 import ImageIO
 import OverboardCore
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct ItemCardView: View {
     let item: ClipItem
     let index: Int
     let isSelected: Bool
     let store: ClipStore
+    var onPinToggle: () -> Void = {}
+    var onDelete: () -> Void = {}
+    var onPaste: (PasteMode) -> Void = { _ in }
 
     @State private var thumbnail: NSImage?
 
@@ -19,7 +23,9 @@ struct ItemCardView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
         .frame(width: 190, height: 180)
-        .background(.background.opacity(0.6), in: RoundedRectangle(cornerRadius: 10))
+        .background(.background.opacity(0.6))
+        // Clip the whole card so image fills can't bleed past the corners.
+        .clipShape(RoundedRectangle(cornerRadius: 10))
         .overlay {
             RoundedRectangle(cornerRadius: 10)
                 .strokeBorder(
@@ -29,6 +35,18 @@ struct ItemCardView: View {
         }
         .task(id: self.item.id) {
             await self.loadThumbnailIfNeeded()
+        }
+        .contextMenu {
+            Button("Paste") { self.onPaste(.full) }
+            if self.item.kind == .text || self.item.kind == .link {
+                Button("Paste as Plain Text") { self.onPaste(.plainText) }
+            }
+            Divider()
+            Button(self.item.isPinned ? "Unpin" : "Pin") { self.onPinToggle() }
+            Button("Delete", role: .destructive) { self.onDelete() }
+        }
+        .onDrag {
+            Self.dragProvider(for: self.item, store: self.store)
         }
     }
 
@@ -44,6 +62,11 @@ struct ItemCardView: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
             Spacer()
+            if self.item.isPinned {
+                Image(systemName: "pin.fill")
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+            }
             if self.index < 9 {
                 Text("⌘\(self.index + 1)")
                     .font(.caption2.monospaced())
@@ -52,6 +75,7 @@ struct ItemCardView: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
+        .background(.background.opacity(0.5))
     }
 
     @ViewBuilder
@@ -74,10 +98,15 @@ struct ItemCardView: View {
             .padding(10)
         case .image:
             if let thumbnail {
-                Image(nsImage: thumbnail)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // Color.clear.overlay + clipped is the canonical
+                // non-bleeding aspect-fill: the image can never propose its
+                // own size to the layout.
+                Color.clear
+                    .overlay {
+                        Image(nsImage: thumbnail)
+                            .resizable()
+                            .scaledToFill()
+                    }
                     .clipped()
             } else {
                 self.placeholder("photo")
@@ -133,6 +162,59 @@ struct ItemCardView: View {
         guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
         else { return nil }
         return NSImage(cgImage: cgImage, size: .zero)
+    }
+
+    // MARK: - Drag out
+
+    /// Builds a provider whose payloads load lazily from the store when the
+    /// drop target asks for them.
+    nonisolated static func dragProvider(for item: ClipItem, store: ClipStore) -> NSItemProvider {
+        let provider = NSItemProvider()
+
+        func register(typeID: String, uti: String, transform: (@Sendable (Data) -> Data?)? = nil) {
+            provider.registerDataRepresentation(
+                forTypeIdentifier: typeID,
+                visibility: .all
+            ) { completion in
+                nonisolated(unsafe) let completion = completion
+                Task {
+                    do {
+                        let reps = try await store.representations(for: item.id)
+                        guard let rep = reps.first(where: { $0.uti == uti }) else {
+                            completion(nil, CocoaError(.fileNoSuchFile))
+                            return
+                        }
+                        let data = try await store.payload(for: rep)
+                        completion(transform?(data) ?? data, nil)
+                    } catch {
+                        completion(nil, error)
+                    }
+                }
+                return nil
+            }
+        }
+
+        switch item.kind {
+        case .text:
+            register(typeID: UTType.utf8PlainText.identifier, uti: WellKnownUTI.plainText)
+            register(typeID: UTType.rtf.identifier, uti: WellKnownUTI.rtf)
+        case .link:
+            register(typeID: UTType.url.identifier, uti: WellKnownUTI.plainText)
+            register(typeID: UTType.utf8PlainText.identifier, uti: WellKnownUTI.plainText)
+        case .image:
+            register(typeID: UTType.png.identifier, uti: WellKnownUTI.png)
+        case .file:
+            // Drag carries the first file's URL; multi-file drag-out can come later.
+            register(typeID: UTType.fileURL.identifier, uti: WellKnownUTI.fileURLs) { data in
+                guard let strings = try? JSONDecoder().decode([String].self, from: data),
+                      let first = strings.first
+                else { return nil }
+                return Data(first.utf8)
+            }
+        case .color:
+            break
+        }
+        return provider
     }
 }
 
