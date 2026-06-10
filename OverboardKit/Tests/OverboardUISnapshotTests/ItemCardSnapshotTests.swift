@@ -4,6 +4,7 @@ import SnapshotTesting
 import SwiftUI
 import Testing
 
+@Suite(.localOnly)
 @MainActor
 struct ItemCardSnapshotTests {
     private let store: ClipStore

@@ -4,6 +4,7 @@ import SnapshotTesting
 import SwiftUI
 import Testing
 
+@Suite(.localOnly)
 @MainActor
 struct ActionPaletteSnapshotTests {
     /// Builds a view model with one selected text item so the palette has

@@ -2,6 +2,16 @@ import AppKit
 import OverboardCore
 import SnapshotTesting
 import SwiftUI
+import Testing
+
+extension Trait where Self == ConditionTrait {
+    /// Snapshots are recorded on a local Retina Mac; the CI VM renders at a
+    /// different backing scale (no scaler driver), so images can never match.
+    /// Asserted locally only.
+    static var localOnly: ConditionTrait {
+        .enabled(if: ProcessInfo.processInfo.environment["CI"] == nil)
+    }
+}
 
 /// Deterministic fixtures: fixed dates, and bundle IDs that resolve to no
 /// installed app so AppIconCache yields the neutral header instead of

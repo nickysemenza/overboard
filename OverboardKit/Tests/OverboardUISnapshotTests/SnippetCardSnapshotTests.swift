@@ -4,6 +4,7 @@ import SnapshotTesting
 import SwiftUI
 import Testing
 
+@Suite(.localOnly)
 @MainActor
 struct SnippetCardSnapshotTests {
     private func snippet(title: String, body: String) -> Snippet {
