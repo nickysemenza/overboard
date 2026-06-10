@@ -14,6 +14,7 @@ let package = Package(
         .package(url: "https://github.com/sindresorhus/KeyboardShortcuts", from: "2.0.0"),
         .package(url: "https://github.com/raspu/Highlightr", from: "2.1.0"),
         .package(url: "https://github.com/nicklockwood/Expression", from: "0.13.0"),
+        .package(url: "https://github.com/sindresorhus/Defaults", from: "9.0.0"),
     ],
     targets: [
         .target(
@@ -28,6 +29,7 @@ let package = Package(
             dependencies: [
                 "OverboardCore",
                 .product(name: "KeyboardShortcuts", package: "KeyboardShortcuts"),
+                .product(name: "Defaults", package: "Defaults"),
             ]
         ),
         .target(
@@ -37,6 +39,7 @@ let package = Package(
                 "OverboardMac",
                 .product(name: "KeyboardShortcuts", package: "KeyboardShortcuts"),
                 .product(name: "Highlightr", package: "Highlightr"),
+                .product(name: "Defaults", package: "Defaults"),
             ]
         ),
         .testTarget(

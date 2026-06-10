@@ -60,6 +60,34 @@ struct QueryRouterTests {
         #expect(display == "4")
     }
 
+    @Test func appsRankAboveFilesAndBelowCalculations() async {
+        let app = LauncherResult.app(name: "Calculator", url: URL(fileURLWithPath: "/Applications/Calculator.app"))
+        let file = LauncherResult.file(name: "calc.txt", url: URL(fileURLWithPath: "/tmp/calc.txt"))
+        let router = QueryRouter(providers: [
+            CalculatorProvider(),
+            StubFileProvider(hits: [app]),
+            StubFileProvider(hits: [file]),
+            WebSearchProvider(),
+        ])
+
+        let results = await router.results(for: "2+2")
+        guard case .calculation = results.first else {
+            Issue.record("expected calculation first, got \(results)")
+            return
+        }
+        #expect(results[1] == app)
+        #expect(results[2] == file)
+    }
+
+    @Test func conditionalProviderRespectsSwitch() async {
+        let hit = LauncherResult.file(name: "a", url: URL(fileURLWithPath: "/tmp/a"))
+        let enabled = ConditionalProvider(StubFileProvider(hits: [hit])) { true }
+        let disabled = ConditionalProvider(StubFileProvider(hits: [hit])) { false }
+
+        #expect(await enabled.results(for: "a") == [hit])
+        #expect(await disabled.results(for: "a").isEmpty)
+    }
+
     @Test func webSearchURLEncodesPlusAndUnicode() {
         let url = WebSearchProvider.searchURL(for: "c++ tutorial")
         #expect(url?.absoluteString == "https://www.google.com/search?q=c%2B%2B%20tutorial")

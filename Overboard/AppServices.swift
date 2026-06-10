@@ -60,16 +60,16 @@ final class AppServices {
         self.pasteback = PastebackService(store: self.store)
         self.overlay = OverlayController(store: self.store, stack: self.stack)
         self.launcher = LauncherPanelController(
-            viewModel: LauncherViewModel(
-                fileProvider: FileSearchProvider(search: SpotlightFileSearch(), limit: 8),
-                isFileSearchEnabled: { UserDefaults.standard.bool(forKey: SettingsKeys.launcherFileResults) }
-            )
+            viewModel: LauncherViewModel(secondaryProviders: [
+                AppSearchProvider(search: SpotlightFileSearch(), limit: 5),
+                ConditionalProvider(FileSearchProvider(search: SpotlightFileSearch(), limit: 8)) {
+                    Defaults[.launcherFileResults]
+                },
+            ])
         )
     }
 
     func start() {
-        UserDefaults.standard.register(defaults: SettingsKeys.defaults)
-
         if Self.isDemo {
             // No monitor, purge, secret sweep, or hotkeys: nothing real may be
             // captured, and global hotkeys would fight a concurrently running
@@ -87,7 +87,7 @@ final class AppServices {
     /// Clipboard monitoring, ingest, and background maintenance — everything
     /// that touches the real pasteboard or the on-disk database.
     private func startCapturePipeline() {
-        self.monitor.excludedBundleIDs = { SettingsKeys.currentExclusions() }
+        self.monitor.excludedBundleIDs = { Preferences.currentExclusions() }
         self.monitor.start()
 
         let store = store
@@ -112,7 +112,7 @@ final class AppServices {
         // Trim history (and orphaned blobs) on launch and hourly thereafter.
         self.purgeTask = Task(priority: .background) { [logger] in
             while !Task.isCancelled {
-                let limit = UserDefaults.standard.integer(forKey: SettingsKeys.historyLimit)
+                let limit = Defaults[.historyLimit]
                 do {
                     try await store.purge(keepingLatest: max(limit, 100))
                 } catch {
@@ -125,7 +125,7 @@ final class AppServices {
         // Detected secrets expire on a short leash, swept every minute.
         self.secretSweepTask = Task(priority: .background) {
             while !Task.isCancelled {
-                let ttlMinutes = UserDefaults.standard.integer(forKey: SettingsKeys.secretTTLMinutes)
+                let ttlMinutes = Defaults[.secretTTLMinutes]
                 if ttlMinutes > 0 {
                     let cutoff = Date().addingTimeInterval(-Double(ttlMinutes) * 60)
                     try? await store.purgeExpiredSecrets(olderThan: cutoff)
@@ -254,7 +254,7 @@ final class AppServices {
                 .flatMap { String(data: $0.data, encoding: .utf8) }
         }
 
-        guard UserDefaults.standard.bool(forKey: SettingsKeys.aiFeatures),
+        guard Defaults[.aiFeatures],
               ClipEnricher.isAvailable,
               let text = textForLabeling,
               text.count >= 80
@@ -388,7 +388,7 @@ final class AppServices {
     }
 
     private func pasteString(_ text: String, into target: NSRunningApplication?) {
-        let restore = UserDefaults.standard.bool(forKey: SettingsKeys.restoreClipboard)
+        let restore = Defaults[.restoreClipboard]
         let outcome = self.pasteback.pasteText(text, into: target, restoreClipboard: restore)
         if outcome == .copiedOnly {
             HUDController.shared.flash("Copied — press ⌘V to paste")
@@ -410,11 +410,11 @@ final class AppServices {
                 if effectiveMode == .full,
                    item.kind == .text || item.kind == .link,
                    let bundleID = target?.bundleIdentifier,
-                   SettingsKeys.currentPlainTextApps().contains(bundleID)
+                   Preferences.currentPlainTextApps().contains(bundleID)
                 {
                     effectiveMode = .plainText
                 }
-                let restore = UserDefaults.standard.bool(forKey: SettingsKeys.restoreClipboard)
+                let restore = Defaults[.restoreClipboard]
                 let outcome = try await self.pasteback.paste(
                     item, into: target, restoreClipboard: restore, mode: effectiveMode
                 )

@@ -22,6 +22,23 @@ public struct QueryRouter: Sendable {
     }
 }
 
+/// Wraps a provider behind a runtime switch (a Settings toggle), so the
+/// provider chain stays fixed while the user flips preferences.
+public struct ConditionalProvider: LauncherProvider {
+    private let base: any LauncherProvider
+    private let isEnabled: @Sendable () -> Bool
+
+    public init(_ base: any LauncherProvider, isEnabled: @escaping @Sendable () -> Bool) {
+        self.base = base
+        self.isEnabled = isEnabled
+    }
+
+    public func results(for query: String) async -> [LauncherResult] {
+        guard self.isEnabled() else { return [] }
+        return await self.base.results(for: query)
+    }
+}
+
 public struct CalculatorProvider: LauncherProvider {
     public init() {}
 

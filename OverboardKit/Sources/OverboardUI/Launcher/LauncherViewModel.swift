@@ -30,20 +30,17 @@ public final class LauncherViewModel {
 
     private let instantRouter: QueryRouter
     private let fullRouter: QueryRouter
-    private let isFileSearchEnabled: () -> Bool
+    private let hasSecondaryProviders: Bool
     private var searchTask: Task<Void, Never>?
 
-    public init(
-        fileProvider: (any LauncherProvider)?,
-        isFileSearchEnabled: @escaping () -> Bool = { true }
-    ) {
+    /// Secondary providers (apps, files, …) run in the debounced pass,
+    /// sandwiched between the instant calculator and web rows.
+    public init(secondaryProviders: [any LauncherProvider]) {
         let calculator = CalculatorProvider()
         let web = WebSearchProvider()
         self.instantRouter = QueryRouter(providers: [calculator, web])
-        self.fullRouter = QueryRouter(
-            providers: fileProvider.map { [calculator, $0, web] } ?? [calculator, web]
-        )
-        self.isFileSearchEnabled = isFileSearchEnabled
+        self.fullRouter = QueryRouter(providers: [calculator] + secondaryProviders + [web])
+        self.hasSecondaryProviders = !secondaryProviders.isEmpty
     }
 
     public func prepareForShow() {
@@ -69,7 +66,7 @@ public final class LauncherViewModel {
             self.selectedIndex = 0
             self.setResults(instant)
 
-            guard self.isFileSearchEnabled() else { return }
+            guard self.hasSecondaryProviders else { return }
             // Debounce Spotlight; per-keystroke metadata queries are wasteful.
             try? await Task.sleep(for: .milliseconds(250))
             guard !Task.isCancelled else { return }
@@ -89,7 +86,7 @@ public final class LauncherViewModel {
         switch self.results[self.selectedIndex] {
         case let .calculation(_, display):
             modifier == .command ? self.onPasteText(display) : self.onCopyText(display)
-        case let .file(_, url):
+        case let .app(_, url), let .file(_, url):
             switch modifier {
             case .none: self.onOpenFile(url)
             case .command: self.onRevealFile(url)
@@ -101,6 +98,7 @@ public final class LauncherViewModel {
     }
 
     private func setResults(_ newResults: [LauncherResult]) {
+        obTrace("launcher: setResults \(newResults.map(\.id))")
         let countChanged = newResults.count != self.results.count
         self.results = newResults
         if self.selectedIndex >= newResults.count {

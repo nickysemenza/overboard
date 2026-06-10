@@ -1,52 +1,10 @@
 import AppKit
+import Defaults
 import KeyboardShortcuts
 import OverboardCore
 import OverboardMac
 import ServiceManagement
 import SwiftUI
-
-public enum SettingsKeys {
-    public static let historyLimit = "historyLimit"
-    public static let restoreClipboard = "restoreClipboardAfterPaste"
-    public static let excludedBundleIDs = "excludedBundleIDs"
-    public static let plainTextBundleIDs = "plainTextBundleIDs"
-    /// Minutes before detected secrets are hard-deleted; 0 disables expiry.
-    public static let secretTTLMinutes = "secretTTLMinutes"
-    /// Apple Intelligence features: auto-titles, categories, AI transforms.
-    public static let aiFeatures = "aiFeatures"
-    /// Spotlight file results in the launcher bar.
-    public static let launcherFileResults = "launcherFileResults"
-
-    public static var defaults: [String: Any] {
-        [
-            historyLimit: 1000,
-            restoreClipboard: true,
-            excludedBundleIDs: ClipboardMonitor.defaultExclusions.sorted().joined(separator: "\n"),
-            plainTextBundleIDs: "com.apple.Terminal\ncom.googlecode.iterm2",
-            secretTTLMinutes: 10,
-            aiFeatures: true,
-            launcherFileResults: true,
-        ]
-    }
-
-    public static func currentExclusions() -> Set<String> {
-        self.bundleIDSet(forKey: self.excludedBundleIDs)
-    }
-
-    /// Apps where pasted text should always be plain (terminals etc.).
-    public static func currentPlainTextApps() -> Set<String> {
-        self.bundleIDSet(forKey: self.plainTextBundleIDs)
-    }
-
-    private static func bundleIDSet(forKey key: String) -> Set<String> {
-        let raw = UserDefaults.standard.string(forKey: key) ?? ""
-        return Set(
-            raw.split(whereSeparator: \.isNewline)
-                .map { $0.trimmingCharacters(in: .whitespaces) }
-                .filter { !$0.isEmpty }
-        )
-    }
-}
 
 extension ItemKind {
     /// Capitalized display name for Settings UI.
@@ -102,8 +60,8 @@ public struct SettingsView: View {
 // MARK: - General
 
 private struct GeneralSettingsTab: View {
-    @AppStorage(SettingsKeys.restoreClipboard) private var restoreClipboard = true
-    @AppStorage(SettingsKeys.launcherFileResults) private var launcherFileResults = true
+    @Default(.restoreClipboard) private var restoreClipboard
+    @Default(.launcherFileResults) private var launcherFileResults
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var accessibilityGranted = PermissionService.isTrusted
 
@@ -170,8 +128,8 @@ private struct GeneralSettingsTab: View {
 private struct HistorySettingsTab: View {
     let store: ClipStore
 
-    @AppStorage(SettingsKeys.historyLimit) private var historyLimit = 1000
-    @AppStorage(SettingsKeys.secretTTLMinutes) private var secretTTLMinutes = 10
+    @Default(.historyLimit) private var historyLimit
+    @Default(.secretTTLMinutes) private var secretTTLMinutes
     @State private var diskUsage: String?
     @State private var stats: LibraryStats?
     @State private var confirmingClear = false
@@ -278,8 +236,8 @@ private struct HistorySettingsTab: View {
 // MARK: - Apps
 
 private struct AppsSettingsTab: View {
-    @AppStorage(SettingsKeys.excludedBundleIDs) private var excludedBundleIDs = ""
-    @AppStorage(SettingsKeys.plainTextBundleIDs) private var plainTextBundleIDs = ""
+    @Default(.excludedBundleIDs) private var excludedBundleIDs
+    @Default(.plainTextBundleIDs) private var plainTextBundleIDs
 
     var body: some View {
         Form {
@@ -392,7 +350,7 @@ private struct ActionsSettingsTab: View {
 // MARK: - AI
 
 private struct AISettingsTab: View {
-    @AppStorage(SettingsKeys.aiFeatures) private var aiFeatures = true
+    @Default(.aiFeatures) private var aiFeatures
 
     var body: some View {
         Form {

@@ -27,7 +27,33 @@ public final class SpotlightFileSearch {
 
     public init() {}
 
+    /// General files anywhere in the user's home folder.
     public func search(_ term: String, limit: Int = 20) async -> [Hit] {
+        await self.run(
+            predicate: NSPredicate(
+                format: "kMDItemFSName CONTAINS[cd] %@ OR kMDItemDisplayName CONTAINS[cd] %@",
+                term, term
+            ),
+            scopes: [NSMetadataQueryUserHomeScope],
+            limit: limit
+        )
+    }
+
+    /// Application bundles, the way Spotlight ranks its top hit. Scoped to
+    /// the canonical app folders so stray dev builds (DerivedData etc.)
+    /// don't surface.
+    public func searchApplications(_ term: String, limit: Int = 5) async -> [Hit] {
+        await self.run(
+            predicate: NSPredicate(
+                format: "kMDItemContentTypeTree == 'com.apple.application-bundle' AND kMDItemDisplayName CONTAINS[cd] %@",
+                term
+            ),
+            scopes: ["/Applications", "/System/Applications", NSHomeDirectory() + "/Applications"],
+            limit: limit
+        )
+    }
+
+    private func run(predicate: NSPredicate, scopes: [Any], limit: Int) async -> [Hit] {
         self.cancelActive()
         self.generation += 1
         let myGeneration = self.generation
@@ -40,11 +66,8 @@ public final class SpotlightFileSearch {
                 }
 
                 let query = NSMetadataQuery()
-                query.predicate = NSPredicate(
-                    format: "kMDItemFSName CONTAINS[cd] %@ OR kMDItemDisplayName CONTAINS[cd] %@",
-                    term, term
-                )
-                query.searchScopes = [NSMetadataQueryUserHomeScope]
+                query.predicate = predicate
+                query.searchScopes = scopes
                 query.sortDescriptors = [
                     NSSortDescriptor(key: NSMetadataItemLastUsedDateKey as String, ascending: false),
                 ]
@@ -116,7 +139,8 @@ public final class SpotlightFileSearch {
 }
 
 /// Bridges Spotlight into the launcher's provider chain (the protocol lives
-/// in OverboardCore, which can't see AppKit).
+/// in OverboardCore, which can't see AppKit). Each provider owns its own
+/// SpotlightFileSearch — one instance can only run one query at a time.
 public struct FileSearchProvider: LauncherProvider {
     private let search: SpotlightFileSearch
     private let limit: Int
@@ -130,5 +154,26 @@ public struct FileSearchProvider: LauncherProvider {
         guard query.count >= 2 else { return [] }
         let hits = await search.search(query, limit: self.limit)
         return hits.map { .file(name: $0.name, url: $0.url) }
+    }
+}
+
+public struct AppSearchProvider: LauncherProvider {
+    private let search: SpotlightFileSearch
+    private let limit: Int
+
+    public init(search: SpotlightFileSearch, limit: Int = 5) {
+        self.search = search
+        self.limit = limit
+    }
+
+    public func results(for query: String) async -> [LauncherResult] {
+        guard query.count >= 2 else { return [] }
+        let hits = await search.searchApplications(query, limit: self.limit)
+        return hits.map { hit in
+            // "Sublime Merge.app" → "Sublime Merge" (display names keep the
+            // extension when Finder is set to show them).
+            let name = hit.name.hasSuffix(".app") ? String(hit.name.dropLast(4)) : hit.name
+            return .app(name: name, url: hit.url)
+        }
     }
 }

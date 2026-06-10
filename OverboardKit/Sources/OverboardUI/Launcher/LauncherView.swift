@@ -98,7 +98,7 @@ struct LauncherRow: View {
             Image(systemName: "equal.circle.fill")
                 .font(.title2)
                 .foregroundStyle(.orange)
-        case let .file(_, url):
+        case let .app(_, url), let .file(_, url):
             Image(nsImage: NSWorkspace.shared.icon(forFile: url.path))
                 .resizable()
                 .aspectRatio(contentMode: .fit)
@@ -112,6 +112,7 @@ struct LauncherRow: View {
     private var title: String {
         switch self.result {
         case let .calculation(_, display): display
+        case let .app(name, _): name
         case let .file(name, _): name
         case let .webSearch(query, _): "Search Google for “\(query)”"
         }
@@ -124,6 +125,7 @@ struct LauncherRow: View {
     private var subtitle: String {
         switch self.result {
         case let .calculation(input, _): "\(input.trimmingCharacters(in: .whitespaces)) ="
+        case .app: "Application"
         case let .file(_, url): (url.path as NSString).abbreviatingWithTildeInPath
         case .webSearch: "Open in browser"
         }
@@ -132,6 +134,7 @@ struct LauncherRow: View {
     private var shortcutHint: String {
         switch self.result {
         case .calculation: "↩ copy   ⌘↩ paste"
+        case .app: "↩ open   ⌘↩ reveal   ⌥↩ copy path"
         case .file: "↩ open   ⌘↩ reveal   ⌥↩ copy path"
         case .webSearch: "↩ search"
         }
