@@ -22,7 +22,9 @@ All planned milestones (M0–M4) complete. Daily-drivable.
 - **Launcher** (⌥Space): a Spotlight-style bar with an inline calculator
   (`15% of 80` → ↩ copies, ⌘↩ pastes the result), app launching with
   initials and custom aliases (`sm` matches Sublime Merge out of the box),
-  Spotlight file search, and a web-search fallback row.
+  clipboard-history and snippet rows (search operators work here too;
+  ↩ pastes into the app you were in, ⌘↩ copies), Spotlight file search,
+  and a web-search fallback row.
 - **Search**: FTS5 full-text with prefix matching, blended with on-device
   semantic search (NLEmbedding) so "money projection" finds "quarterly
   revenue forecast". Filter operators: `kind:image`, `app:claude`,
@@ -72,6 +74,11 @@ All planned milestones (M0–M4) complete. Daily-drivable.
 <p align="center">
   <img src="docs/screenshots/launcher-calc.png" width="640" alt="The launcher evaluating 15% of 80 to 12 inline">
   <br><em>Inline calculator: ↩ copies the result, ⌘↩ pastes it into the app you were in</em>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/launcher-clips.png" width="640" alt="The launcher matching a saved snippet and a clipboard item for the query standup, each marked with a Snippet or Clipboard source badge">
+  <br><em>Clipboard history and snippets in the launcher, marked with source badges</em>
 </p>
 
 ## Architecture

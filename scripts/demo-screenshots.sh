@@ -111,6 +111,9 @@ shot markdown 1.5 next next next next next next next next next preview
 lshot launcher-calc 0.8 "15% of 80"
 lshot launcher-apps 1.2 "sm"
 lshot launcher-files 1.2 "release"
+# "standup" matches both a seeded snippet and a seeded clip, so one frame
+# shows both row kinds with their Clipboard/Snippet source badges.
+lshot launcher-clips 1.2 "standup"
 
 echo "Wrote:"
 ls -la "$OUT"/*.png

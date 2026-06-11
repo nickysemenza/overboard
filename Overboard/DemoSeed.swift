@@ -167,6 +167,18 @@ enum DemoSeed {
             )) {
                 try await store.setPinned(id: pinned.id, true)
             }
+
+            // Snippets, for the launcher-clips shot: "standup" matches the
+            // template here AND the prose item above, showing both row kinds
+            // with their source badges in one frame.
+            try await store.saveSnippet(Snippet(
+                title: "Standup template",
+                body: "Yesterday:\nToday:\nBlockers:"
+            ))
+            try await store.saveSnippet(Snippet(
+                title: "Bug report",
+                body: "Steps to reproduce:\n1.\n\nExpected:\nActual:\nBuild: {date}"
+            ))
         } catch {
             NSLog("DemoSeed failed: \(error)")
         }

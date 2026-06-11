@@ -84,6 +84,17 @@ struct LauncherRow: View {
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }
+            if let badge = self.sourceBadge {
+                HStack(spacing: 3) {
+                    Image(systemName: badge.symbol)
+                    Text(badge.label)
+                }
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2.5)
+                .background(.quaternary.opacity(0.6), in: Capsule())
+            }
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
@@ -168,6 +179,16 @@ struct LauncherRow: View {
         case .clip: "↩ paste   ⌘↩ copy   ⌥↩ paste plain"
         case .file: "↩ open   ⌘↩ reveal   ⌥↩ copy path"
         case .webSearch: "↩ search"
+        }
+    }
+
+    /// Clip and snippet rows carry a trailing source badge — an app icon plus
+    /// a title reads as "app row" otherwise.
+    private var sourceBadge: (symbol: String, label: String)? {
+        switch self.result {
+        case .snippet: (symbol: "text.badge.star", label: "Snippet")
+        case .clip: (symbol: "doc.on.clipboard", label: "Clipboard")
+        default: nil
         }
     }
 

@@ -180,7 +180,19 @@ public struct FileSearchProvider: LauncherProvider {
 
     public func results(for query: String) async -> [LauncherResult] {
         guard query.count >= 2 else { return [] }
-        let hits = await search.search(query, limit: self.limit)
-        return hits.map { .file(name: $0.name, url: $0.url) }
+        // Over-fetch: FileNameMatcher drops mid-word junk, which would
+        // otherwise starve the row list.
+        let hits = await search.search(query, limit: self.limit * 2)
+        return hits
+            .enumerated()
+            .compactMap { index, hit in
+                FileNameMatcher.rank(name: hit.name, query: query)
+                    .map { (rank: $0, index: index, hit: hit) }
+            }
+            // Index tiebreaker keeps Spotlight's recency order within a tier
+            // (Swift's sort is not guaranteed stable).
+            .sorted { ($0.rank, $0.index) < ($1.rank, $1.index) }
+            .prefix(self.limit)
+            .map { .file(name: $0.hit.name, url: $0.hit.url) }
     }
 }
