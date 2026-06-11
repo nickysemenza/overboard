@@ -8,6 +8,7 @@ import SwiftUI
 @MainActor
 public final class LauncherPanelController {
     private let viewModel: LauncherViewModel
+    private let store: ClipStore
     private var panel: OverlayPanel?
     private var keyMonitor: Any?
     private var clickMonitor: Any?
@@ -39,7 +40,8 @@ public final class LauncherPanelController {
         static let topFraction: CGFloat = 0.72
     }
 
-    public init(viewModel: LauncherViewModel) {
+    public init(store: ClipStore, viewModel: LauncherViewModel) {
+        self.store = store
         self.viewModel = viewModel
         viewModel.onCopyText = { [weak self] text in
             guard let self else { return }
@@ -150,7 +152,7 @@ public final class LauncherPanelController {
             contentRect: NSRect(x: 0, y: 0, width: Metrics.panelWidth, height: Metrics.barOnlyHeight)
         )
         let hosting = NSHostingView(
-            rootView: LauncherView(viewModel: self.viewModel)
+            rootView: LauncherView(viewModel: self.viewModel, store: self.store)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         )
         panel.contentView = hosting

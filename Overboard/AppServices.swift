@@ -60,6 +60,7 @@ final class AppServices {
         self.pasteback = PastebackService(store: self.store)
         self.overlay = OverlayController(store: self.store, stack: self.stack)
         self.launcher = LauncherPanelController(
+            store: self.store,
             viewModel: LauncherViewModel(
                 instantProviders: [
                     AppSearchProvider(index: AppIndex(), limit: 5) {

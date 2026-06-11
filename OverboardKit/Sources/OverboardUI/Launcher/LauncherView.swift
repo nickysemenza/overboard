@@ -5,10 +5,12 @@ import UniformTypeIdentifiers
 
 public struct LauncherView: View {
     @Bindable var viewModel: LauncherViewModel
+    let store: ClipStore
     @FocusState private var fieldFocused: Bool
 
-    public init(viewModel: LauncherViewModel) {
+    public init(viewModel: LauncherViewModel, store: ClipStore) {
         self.viewModel = viewModel
+        self.store = store
     }
 
     public var body: some View {
@@ -18,7 +20,7 @@ public struct LauncherView: View {
                 Divider()
                 VStack(spacing: 2) {
                     ForEach(Array(self.viewModel.results.enumerated()), id: \.element.id) { index, result in
-                        LauncherRow(result: result, isSelected: index == self.viewModel.selectedIndex)
+                        LauncherRow(result: result, store: self.store, isSelected: index == self.viewModel.selectedIndex)
                             .contentShape(RoundedRectangle(cornerRadius: 8))
                             .onTapGesture {
                                 self.viewModel.selectedIndex = index
@@ -62,7 +64,9 @@ public struct LauncherView: View {
 
 struct LauncherRow: View {
     let result: LauncherResult
+    let store: ClipStore
     let isSelected: Bool
+    @State private var thumbnail: NSImage?
 
     var body: some View {
         HStack(spacing: 10) {
@@ -102,6 +106,9 @@ struct LauncherRow: View {
             self.isSelected ? Color.accentColor.opacity(0.22) : .clear,
             in: RoundedRectangle(cornerRadius: 8)
         )
+        .task(id: self.result.id) {
+            await self.loadThumbnailIfNeeded()
+        }
     }
 
     @ViewBuilder private var icon: some View {
@@ -119,7 +126,12 @@ struct LauncherRow: View {
                 .font(.title2)
                 .foregroundStyle(.purple)
         case let .clip(item):
-            if let appIcon = AppIconCache.shared.icon(forBundleID: item.sourceBundleID) {
+            if let thumbnail {
+                Image(nsImage: thumbnail)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+            } else if let appIcon = AppIconCache.shared.icon(forBundleID: item.sourceBundleID) {
                 Image(nsImage: appIcon)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
@@ -133,6 +145,21 @@ struct LauncherRow: View {
                 .font(.title2)
                 .foregroundStyle(.blue)
         }
+    }
+
+    /// Image clips show the actual picture instead of the source-app icon,
+    /// same payload + downscale path as the drawer cards.
+    private func loadThumbnailIfNeeded() async {
+        guard case let .clip(item) = self.result, item.kind == .image else {
+            self.thumbnail = nil
+            return
+        }
+        guard let rep = try? await store.representations(for: item.id)
+            .first(where: { $0.uti == WellKnownUTI.png }),
+            let data = try? await store.payload(for: rep)
+        else { return }
+        // 2× the 28 pt frame so Retina stays sharp.
+        self.thumbnail = ItemCardView.thumbnail(from: data, maxPixel: 64)
     }
 
     private var title: String {

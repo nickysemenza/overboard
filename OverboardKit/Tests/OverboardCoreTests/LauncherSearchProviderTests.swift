@@ -129,4 +129,32 @@ struct SnippetSearchProviderTests {
         #expect(await SnippetSearchProvider(store: store).results(for: "s").isEmpty)
         #expect(await SnippetSearchProvider(store: store).results(for: "").isEmpty)
     }
+
+    @Test func ranksTitleMatchesAboveBodyMatches() async throws {
+        let store = try makeStore()
+        // Saved in title-alphabetical order: Address (body hit), My signature
+        // (title word prefix), Signature (title prefix) — ranking must invert
+        // the store's order.
+        try await store.saveSnippet(Snippet(title: "Address", body: "signature dish: paella"))
+        try await store.saveSnippet(Snippet(title: "My signature", body: "Cheers"))
+        try await store.saveSnippet(Snippet(title: "Signature block", body: "Best"))
+
+        let results = await SnippetSearchProvider(store: store).results(for: "signature")
+        let titles = results.compactMap { result -> String? in
+            guard case let .snippet(snippet) = result else { return nil }
+            return snippet.title
+        }
+        #expect(titles == ["Signature block", "My signature", "Address"])
+    }
+
+    @Test func rankTiers() {
+        let query = "sig"
+        func snippet(_ title: String, body: String = "x") -> Snippet {
+            Snippet(title: title, body: body)
+        }
+        #expect(SnippetSearchProvider.rank(snippet("Signature"), query: query) == 0)
+        #expect(SnippetSearchProvider.rank(snippet("Email sig"), query: query) == 1)
+        #expect(SnippetSearchProvider.rank(snippet("Designs"), query: query) == 2)
+        #expect(SnippetSearchProvider.rank(snippet("Other", body: "sig here"), query: query) == 3)
+    }
 }
