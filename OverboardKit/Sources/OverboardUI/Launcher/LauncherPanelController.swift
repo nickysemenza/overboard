@@ -23,6 +23,10 @@ public final class LauncherPanelController {
     public var onRevealFile: (URL) -> Void = { _ in }
     public var onCopyPath: (String) -> Void = { _ in }
     public var onOpenWebSearch: (URL) -> Void = { _ in }
+    public var onPasteClip: (ClipItem, PasteMode, NSRunningApplication?) -> Void = { _, _, _ in }
+    public var onCopyClip: (ClipItem) -> Void = { _ in }
+    public var onPasteSnippet: (Snippet, NSRunningApplication?) -> Void = { _, _ in }
+    public var onCopySnippet: (Snippet) -> Void = { _ in }
 
     private enum Metrics {
         static let panelWidth: CGFloat = 640
@@ -67,6 +71,29 @@ public final class LauncherPanelController {
             guard let self else { return }
             self.hide()
             self.onOpenWebSearch(url)
+        }
+        viewModel.onPasteClip = { [weak self] item, mode in
+            guard let self else { return }
+            // Capture before hide() — hiding clears targetApp.
+            let target = self.targetApp
+            self.hide()
+            self.onPasteClip(item, mode, target)
+        }
+        viewModel.onCopyClip = { [weak self] item in
+            guard let self else { return }
+            self.hide()
+            self.onCopyClip(item)
+        }
+        viewModel.onPasteSnippet = { [weak self] snippet in
+            guard let self else { return }
+            let target = self.targetApp
+            self.hide()
+            self.onPasteSnippet(snippet, target)
+        }
+        viewModel.onCopySnippet = { [weak self] snippet in
+            guard let self else { return }
+            self.hide()
+            self.onCopySnippet(snippet)
         }
         viewModel.onResultCountChanged = { [weak self] count in
             self?.resizePanel(rows: count)

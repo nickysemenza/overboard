@@ -67,6 +67,12 @@ final class AppServices {
                     },
                 ],
                 secondaryProviders: [
+                    ConditionalProvider(SnippetSearchProvider(store: self.store)) {
+                        Defaults[.launcherSnippetResults]
+                    },
+                    ConditionalProvider(ClipSearchProvider(store: self.store)) {
+                        Defaults[.launcherClipResults]
+                    },
                     // Demo screenshots must not leak real home-folder files.
                     Self.isDemo
                         ? DemoSeed.LauncherFiles()
@@ -212,6 +218,33 @@ final class AppServices {
         }
         self.launcher.onOpenWebSearch = { url in
             NSWorkspace.shared.open(url)
+        }
+        self.launcher.onPasteClip = { [weak self] item, mode, target in
+            self?.pasteItem(item, mode: mode, into: target)
+        }
+        self.launcher.onCopyClip = { [weak self] item in
+            guard let self else { return }
+            Task {
+                do {
+                    try await self.pasteback.copy(item)
+                    HUDController.shared.flash("Copied — ⌘V to paste")
+                } catch {
+                    self.logger.error("copy failed: \(String(describing: error), privacy: .public)")
+                }
+            }
+        }
+        self.launcher.onPasteSnippet = { [weak self] snippet, target in
+            guard let self else { return }
+            // Read {clipboard} before pasteString overwrites the pasteboard.
+            let clipboard = NSPasteboard.general.string(forType: .string)
+            let expanded = SnippetTemplate.expand(snippet.body, clipboard: clipboard)
+            self.pasteString(expanded, into: target)
+        }
+        self.launcher.onCopySnippet = { [weak self] snippet in
+            guard let self else { return }
+            let clipboard = NSPasteboard.general.string(forType: .string)
+            let expanded = SnippetTemplate.expand(snippet.body, clipboard: clipboard)
+            self.copyString(expanded, hud: "Snippet copied — ⌘V to paste")
         }
     }
 

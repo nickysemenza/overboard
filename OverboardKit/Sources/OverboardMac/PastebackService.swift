@@ -36,6 +36,19 @@ public final class PastebackService {
         return self.writeAndPaste(pbItems, into: target, restoreClipboard: restoreClipboard)
     }
 
+    /// Copy-only variant: writes the item's full representations to the
+    /// pasteboard without synthesizing ⌘V (the launcher's ⌘↩).
+    public func copy(_ item: ClipItem) async throws {
+        // buildPasteboardItems already sets the monitor's marker type, so the
+        // copy doesn't re-enter history.
+        let pbItems = try await buildPasteboardItems(for: item, mode: .full)
+        try await self.store.markUsed(id: item.id)
+        self.restoreTask?.cancel()
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.writeObjects(pbItems)
+    }
+
     /// Pastes an arbitrary string (snippets, transforms) — plain text only.
     public func pasteText(
         _ text: String,

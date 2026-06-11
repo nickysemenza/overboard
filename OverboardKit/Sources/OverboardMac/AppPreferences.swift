@@ -22,6 +22,10 @@ public extension Defaults.Keys {
     static let aiFeatures = Key<Bool>("aiFeatures", default: true)
     /// Spotlight file results in the launcher bar.
     static let launcherFileResults = Key<Bool>("launcherFileResults", default: true)
+    /// Clipboard-history results in the launcher bar.
+    static let launcherClipResults = Key<Bool>("launcherClipResults", default: true)
+    /// Snippet results in the launcher bar.
+    static let launcherSnippetResults = Key<Bool>("launcherSnippetResults", default: true)
     /// Launcher app-search aliases, one "alias = App Name" per line.
     static let launcherAppAliases = Key<String>("launcherAppAliases", default: "")
 }

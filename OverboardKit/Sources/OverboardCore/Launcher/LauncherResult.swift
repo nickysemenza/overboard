@@ -4,6 +4,8 @@ import Foundation
 public enum LauncherResult: Sendable, Equatable, Identifiable {
     case calculation(input: String, display: String)
     case app(name: String, url: URL)
+    case snippet(Snippet)
+    case clip(ClipItem)
     case file(name: String, url: URL)
     case webSearch(query: String, url: URL)
 
@@ -11,6 +13,8 @@ public enum LauncherResult: Sendable, Equatable, Identifiable {
         switch self {
         case let .calculation(input, display): "calc:\(input)=\(display)"
         case let .app(_, url): "app:\(url.path)"
+        case let .snippet(snippet): "snippet:\(snippet.id)"
+        case let .clip(item): "clip:\(item.id)"
         case let .file(_, url): "file:\(url.path)"
         case let .webSearch(query, _): "web:\(query)"
         }

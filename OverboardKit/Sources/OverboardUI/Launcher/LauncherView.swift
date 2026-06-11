@@ -50,7 +50,7 @@ public struct LauncherView: View {
         HStack(spacing: 8) {
             Image(systemName: "bolt.fill")
                 .foregroundStyle(.secondary)
-            TextField("Calculate, find files, search the web…", text: self.$viewModel.query)
+            TextField("Calculate, search clips, files, the web…", text: self.$viewModel.query)
                 .textFieldStyle(.plain)
                 .font(.title3)
                 .focused(self.$fieldFocused)
@@ -103,6 +103,20 @@ struct LauncherRow: View {
             Image(nsImage: Self.fileIcon(for: url))
                 .resizable()
                 .aspectRatio(contentMode: .fit)
+        case .snippet:
+            Image(systemName: "text.badge.star")
+                .font(.title2)
+                .foregroundStyle(.purple)
+        case let .clip(item):
+            if let appIcon = AppIconCache.shared.icon(forBundleID: item.sourceBundleID) {
+                Image(nsImage: appIcon)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+            } else {
+                Image(systemName: Self.kindSymbol(for: item.kind))
+                    .font(.title2)
+                    .foregroundStyle(.secondary)
+            }
         case .webSearch:
             Image(systemName: "magnifyingglass.circle.fill")
                 .font(.title2)
@@ -114,6 +128,8 @@ struct LauncherRow: View {
         switch self.result {
         case let .calculation(_, display): display
         case let .app(name, _): name
+        case let .snippet(snippet): snippet.title
+        case let .clip(item): Self.clipTitle(for: item)
         case let .file(name, _): name
         case let .webSearch(query, _): "Search Google for “\(query)”"
         }
@@ -127,6 +143,8 @@ struct LauncherRow: View {
         switch self.result {
         case let .calculation(input, _): "\(input.trimmingCharacters(in: .whitespaces)) ="
         case .app: "Application"
+        case let .snippet(snippet): Self.firstLine(of: snippet.body) ?? "Snippet"
+        case let .clip(item): Self.clipSubtitle(for: item)
         case let .file(_, url): (url.path as NSString).abbreviatingWithTildeInPath
         case .webSearch: "Open in browser"
         }
@@ -146,8 +164,52 @@ struct LauncherRow: View {
         switch self.result {
         case .calculation: "↩ copy   ⌘↩ paste"
         case .app: "↩ open   ⌘↩ reveal   ⌥↩ copy path"
+        case .snippet: "↩ paste   ⌘↩ copy"
+        case .clip: "↩ paste   ⌘↩ copy   ⌥↩ paste plain"
         case .file: "↩ open   ⌘↩ reveal   ⌥↩ copy path"
         case .webSearch: "↩ search"
+        }
+    }
+
+    // MARK: - Clip row helpers
+
+    private static func clipTitle(for item: ClipItem) -> String {
+        item.aiTitle
+            ?? self.firstLine(of: item.previewText ?? "")
+            ?? self.kindLabel(for: item.kind)
+    }
+
+    private static func clipSubtitle(for item: ClipItem) -> String {
+        let when = item.lastUsedAt.formatted(.relative(presentation: .named))
+        guard let app = item.sourceAppName else { return when }
+        return "\(app) · \(when)"
+    }
+
+    private static func firstLine(of text: String) -> String? {
+        let line = text
+            .split(whereSeparator: \.isNewline)
+            .first?
+            .trimmingCharacters(in: .whitespaces)
+        return (line?.isEmpty ?? true) ? nil : line
+    }
+
+    private static func kindSymbol(for kind: ItemKind) -> String {
+        switch kind {
+        case .text: "text.alignleft"
+        case .link: "link"
+        case .image: "photo"
+        case .file: "doc"
+        case .color: "paintpalette"
+        }
+    }
+
+    private static func kindLabel(for kind: ItemKind) -> String {
+        switch kind {
+        case .text: "Text"
+        case .link: "Link"
+        case .image: "Image"
+        case .file: "File"
+        case .color: "Color"
         }
     }
 }

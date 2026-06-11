@@ -25,6 +25,10 @@ public final class LauncherViewModel {
     public var onRevealFile: (URL) -> Void = { _ in }
     public var onCopyPath: (String) -> Void = { _ in }
     public var onOpenWebSearch: (URL) -> Void = { _ in }
+    public var onPasteClip: (ClipItem, PasteMode) -> Void = { _, _ in }
+    public var onCopyClip: (ClipItem) -> Void = { _ in }
+    public var onPasteSnippet: (Snippet) -> Void = { _ in }
+    public var onCopySnippet: (Snippet) -> Void = { _ in }
     /// Lets the panel controller resize as rows come and go.
     public var onResultCountChanged: (Int) -> Void = { _ in }
 
@@ -105,6 +109,14 @@ public final class LauncherViewModel {
             case .none: self.onOpenFile(url)
             case .command: self.onRevealFile(url)
             case .option: self.onCopyPath(url.path)
+            }
+        case let .snippet(snippet):
+            modifier == .command ? self.onCopySnippet(snippet) : self.onPasteSnippet(snippet)
+        case let .clip(item):
+            switch modifier {
+            case .none: self.onPasteClip(item, .full)
+            case .command: self.onCopyClip(item)
+            case .option: self.onPasteClip(item, .plainText)
             }
         case let .webSearch(_, url):
             self.onOpenWebSearch(url)
