@@ -18,9 +18,10 @@ person's workflow and taste.
 
 ## Install
 
-Grab the notarized zip from
-[Releases](https://github.com/nickysemenza/overboard/releases), or build from
-source (macOS 14+, Xcode 16+):
+Grab the zip from
+[Releases](https://github.com/nickysemenza/overboard/releases) — it's
+unsigned (no paid Developer Program behind this project), so the first launch
+needs **right-click → Open**. Or build from source (macOS 14+, Xcode 16+):
 
 ```sh
 git clone https://github.com/nickysemenza/overboard && cd overboard
@@ -193,13 +194,12 @@ Screen Recording permission.
 ### Cutting a release
 
 ```sh
-./scripts/release.sh 1.0.0
+git tag v1.0.0 && git push --tags
 ```
 
-Builds Release with the hardened runtime, signs with Developer ID, submits to
-Apple notarization, staples, and zips into `dist/`. One-time setup (a
-"Developer ID Application" certificate and a `notarytool` keychain profile) is
-documented in the script header.
+The Release workflow builds the unsigned zip and attaches it to a GitHub
+Release. `./scripts/release.sh 1.0.0` produces the same zip locally into
+`dist/`.
 
 ## License
 
