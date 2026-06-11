@@ -1,5 +1,7 @@
 # Overboard ⛵️
 
+[![CI](https://github.com/nickysemenza/overboard/actions/workflows/ci.yml/badge.svg)](https://github.com/nickysemenza/overboard/actions/workflows/ci.yml)
+
 Everything you copy goes overboard. A native macOS clipboard manager — a personal,
 better Paste: clipboard history, a bottom-drawer picker on a hotkey, instant
 full-text search, and paste-back into whatever app you were using.
@@ -10,7 +12,32 @@ full-text search, and paste-back into whatever app you were using.
 
 ## Status
 
-All planned milestones (M0–M4) complete. Daily-drivable.
+Feature-complete against the original roadmap and daily-driven by its author.
+It's a personal tool first — issues and PRs are welcome, but it tracks one
+person's workflow and taste.
+
+## Install
+
+Grab the notarized zip from
+[Releases](https://github.com/nickysemenza/overboard/releases), or build from
+source (macOS 14+, Xcode 16+):
+
+```sh
+git clone https://github.com/nickysemenza/overboard && cd overboard
+xcodebuild -project Overboard.xcodeproj -scheme Overboard \
+  -configuration Release -derivedDataPath build build
+open build/Build/Products/Release   # drag Overboard.app to /Applications
+```
+
+Building from source signs with *your* Apple Development identity — set your
+team in Xcode's Signing settings, or pass `CODE_SIGNING_ALLOWED=NO` (see the
+signing note below for the TCC consequences).
+
+Overboard lives in the menu bar (no Dock icon). On first run, grant
+**Accessibility** when prompted (System Settings → Privacy & Security) —
+paste-back synthesizes ⌘V into the target app and falls back to copy-only
+without it. Nothing ever leaves your machine: no network, no analytics, no
+account.
 
 ## Features
 
@@ -162,3 +189,18 @@ Screen Recording permission.
 - [ ] With "restore clipboard" on → after paste-back, the previous clipboard
       contents are back and history isn't polluted.
 - [ ] Activity Monitor: ~0% CPU idle, memory flat with images in history.
+
+### Cutting a release
+
+```sh
+./scripts/release.sh 1.0.0
+```
+
+Builds Release with the hardened runtime, signs with Developer ID, submits to
+Apple notarization, staples, and zips into `dist/`. One-time setup (a
+"Developer ID Application" certificate and a `notarytool` keychain profile) is
+documented in the script header.
+
+## License
+
+[MIT](LICENSE)
