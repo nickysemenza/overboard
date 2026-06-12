@@ -144,7 +144,13 @@ have to re-grant Accessibility after every build and paste-back will look
 ```sh
 xcodebuild -project Overboard.xcodeproj -scheme Overboard build   # app
 cd OverboardKit && swift test                                     # core tests
+./scripts/dogfood.sh   # build Release, install to /Applications, relaunch
 ```
+
+`dogfood.sh` is the daily-driver loop: it signs with the stable Apple
+Development identity so the Accessibility grant survives the rebuild (see the
+signing note above), then swaps the new build into `/Applications` and
+relaunches it.
 
 ### Headless debug hooks (DEBUG builds only)
 
