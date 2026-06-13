@@ -145,7 +145,13 @@ public final class LauncherPanelController {
         let panel = self.panel ?? self.makePanel()
         self.panel = panel
 
-        panel.setFrame(self.frame(forRows: 0, on: self.screenWithMouse()), display: false)
+        // Open at the height of the preserved rows (0 on a first-ever open) so a
+        // reopened launcher doesn't snap up from one row to a full list — that
+        // abrupt resize left ghost frames of the rows mid-reflow.
+        panel.setFrame(
+            self.frame(forRows: self.viewModel.results.count, on: self.screenWithMouse()),
+            display: false
+        )
         self.viewModel.prepareForShow()
         panel.makeKeyAndOrderFront(nil)
         // Preserved text refocuses select-all by default; drop the caret at the

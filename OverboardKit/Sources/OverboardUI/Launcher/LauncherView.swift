@@ -28,6 +28,13 @@ public struct LauncherView: View {
                             }
                     }
                 }
+                // Rows stream in (instant, then debounced) while the panel
+                // resizes; animating insertions left ghost frames of the rows
+                // (and their image thumbnails) mid-reflow.
+                .transaction { $0.disablesAnimations = true }
+                // Hard-clip so nothing (a loading thumbnail, a row mid-reflow)
+                // can paint outside the list bounds.
+                .clipped()
             }
         }
         .padding(14)
@@ -130,6 +137,10 @@ struct LauncherRow: View {
                 Image(nsImage: thumbnail)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
+                    // Constrain to the icon slot *before* clipping — without the
+                    // explicit frame the full-size thumbnail briefly painted
+                    // outside the row (the lower-left ghost cards).
+                    .frame(width: 28, height: 28)
                     .clipShape(RoundedRectangle(cornerRadius: 6))
             } else if let appIcon = AppIconCache.shared.icon(forBundleID: item.sourceBundleID) {
                 Image(nsImage: appIcon)
