@@ -115,6 +115,30 @@ private struct GeneralSettingsTab: View {
             } footer: {
                 Text("Needed only for direct paste (⌘V into the previous app). Everything else works without it.")
             }
+
+            Section {
+                LabeledContent("Version", value: AppVersion.marketing)
+                LabeledContent("Build", value: AppVersion.build)
+                if let git = AppVersion.gitDescribe {
+                    LabeledContent("Source") {
+                        HStack(spacing: 6) {
+                            if AppVersion.isDirtyOrAhead {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .foregroundStyle(.orange)
+                            }
+                            Text(git).font(.body.monospaced())
+                        }
+                    }
+                }
+                Button("Copy version info") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(AppVersion.summary, forType: .string)
+                }
+            } header: {
+                Text("About")
+            } footer: {
+                Text("“Version” is the tagged release this build descends from; it only changes when a release is cut. “Source” is the exact git state it was built from — \(AppVersion.isDirtyOrAhead ? "this build is ahead of, or dirty against, that tag." : "matching the tag means it’s a clean release build.")")
+            }
         }
         .formStyle(.grouped)
         .onAppear {

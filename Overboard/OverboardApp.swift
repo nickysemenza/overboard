@@ -25,8 +25,11 @@ struct OverboardApp: App {
 
             Divider()
 
-            SettingsLink {
-                Text("Settings…")
+            // Not SettingsLink: it can't raise an already-open Settings window
+            // sitting behind another app (a menu-bar app can't self-activate).
+            // AppServices.openSettings handles create / re-show / front uniformly.
+            Button("Settings…") {
+                AppServices.openSettings()
             }
             .keyboardShortcut(",")
 

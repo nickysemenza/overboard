@@ -247,6 +247,49 @@ final class AppServices {
             let expanded = SnippetTemplate.expand(snippet.body, clipboard: clipboard)
             self.copyString(expanded, hud: "Snippet copied — ⌘V to paste")
         }
+        self.launcher.onRunCommand = { command in
+            switch command {
+            case .version: Self.openSettings()
+            }
+        }
+    }
+
+    /// SwiftUI's stable identifier for the `Settings` scene's window.
+    private static let settingsWindowID = "com_apple_SwiftUI_Settings_window"
+
+    /// Pops the Settings scene from a menu-bar (LSUIElement) app — harder than it
+    /// looks. The launcher is a non-activating panel, so when this fires the app
+    /// is in the background, and a background accessory app can't self-activate
+    /// on Sonoma (`NSApp.activate` no-ops). So:
+    ///   - If the window doesn't exist (or was closed), build/re-show it via the
+    ///     main menu's ⌘, key-equivalent — the one path that materializes the
+    ///     SwiftUI Settings scene from our background state.
+    ///   - Then `orderFrontRegardless` raises it even while we're inactive, which
+    ///     is the only thing that works when Settings is already open behind
+    ///     another app (⌘, / showSettingsWindow: both no-op in that case).
+    static func openSettings() {
+        NSApp.activate(ignoringOtherApps: true)
+        let existing = self.settingsWindow()
+        if existing == nil || existing?.isVisible == false {
+            // keyCode 0x2B = ",".
+            if let comma = NSEvent.keyEvent(
+                with: .keyDown, location: .zero, modifierFlags: .command,
+                timestamp: 0, windowNumber: 0, context: nil,
+                characters: ",", charactersIgnoringModifiers: ",", isARepeat: false, keyCode: 0x2B
+            ) {
+                NSApp.mainMenu?.performKeyEquivalent(with: comma)
+            }
+        }
+        // Deferred so a just-created window is in `NSApp.windows` by now.
+        DispatchQueue.main.async {
+            guard let settings = settingsWindow() else { return }
+            settings.makeKeyAndOrderFront(nil)
+            settings.orderFrontRegardless()
+        }
+    }
+
+    private static func settingsWindow() -> NSWindow? {
+        NSApp.windows.first { $0.identifier?.rawValue == self.settingsWindowID }
     }
 
     private func registerHotkeys() {

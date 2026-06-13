@@ -29,6 +29,7 @@ public final class LauncherViewModel {
     public var onCopyClip: (ClipItem) -> Void = { _ in }
     public var onPasteSnippet: (Snippet) -> Void = { _ in }
     public var onCopySnippet: (Snippet) -> Void = { _ in }
+    public var onRunCommand: (LauncherCommand) -> Void = { _ in }
     /// Lets the panel controller resize as rows come and go.
     public var onResultCountChanged: (Int) -> Void = { _ in }
 
@@ -41,7 +42,7 @@ public final class LauncherViewModel {
     /// in the debounced pass and splice in above the web row.
     public init(instantProviders: [any LauncherProvider] = [], secondaryProviders: [any LauncherProvider]) {
         self.instantRouter = QueryRouter(
-            providers: [CalculatorProvider()] + instantProviders + [WebSearchProvider()]
+            providers: [CommandProvider(), CalculatorProvider()] + instantProviders + [WebSearchProvider()]
         )
         self.secondaryProviders = secondaryProviders
     }
@@ -68,6 +69,9 @@ public final class LauncherViewModel {
             guard !Task.isCancelled else { return }
             self.selectedIndex = 0
             self.setResults(instant)
+
+            // Command mode (":…") is instant-only — no clip/file/Spotlight rows.
+            guard !query.hasPrefix(":") else { return }
 
             let providers = self.secondaryProviders
             guard !providers.isEmpty else { return }
@@ -120,6 +124,8 @@ public final class LauncherViewModel {
             }
         case let .webSearch(_, url):
             self.onOpenWebSearch(url)
+        case let .command(command):
+            self.onRunCommand(command)
         }
     }
 

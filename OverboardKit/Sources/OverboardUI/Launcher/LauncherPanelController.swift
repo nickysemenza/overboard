@@ -28,6 +28,7 @@ public final class LauncherPanelController {
     public var onCopyClip: (ClipItem) -> Void = { _ in }
     public var onPasteSnippet: (Snippet, NSRunningApplication?) -> Void = { _, _ in }
     public var onCopySnippet: (Snippet) -> Void = { _ in }
+    public var onRunCommand: (LauncherCommand) -> Void = { _ in }
 
     private enum Metrics {
         static let panelWidth: CGFloat = 640
@@ -96,6 +97,11 @@ public final class LauncherPanelController {
             guard let self else { return }
             self.hide()
             self.onCopySnippet(snippet)
+        }
+        viewModel.onRunCommand = { [weak self] command in
+            guard let self else { return }
+            self.hide()
+            self.onRunCommand(command)
         }
         viewModel.onResultCountChanged = { [weak self] count in
             self?.resizePanel(rows: count)

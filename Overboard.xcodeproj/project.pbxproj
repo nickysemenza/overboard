@@ -68,6 +68,7 @@
 				0B420000000000000000C002 /* Sources */,
 				0B420000000000000000C001 /* Frameworks */,
 				0B420000000000000000C003 /* Resources */,
+				0B420000000000000000C004 /* Embed git version */,
 			);
 			buildRules = (
 			);
@@ -133,6 +134,25 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		0B420000000000000000C004 /* Embed git version */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"$(TARGET_BUILD_DIR)/$(INFOPLIST_PATH)",
+			);
+			name = "Embed git version";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Bake the git state into the built Info.plist, read back at runtime by\n# AppVersion (OverboardCore). MARKETING_VERSION only moves on tagged\n# releases, so a dogfood build a few commits past the last tag would\n# otherwise call itself by the tag and lie about the bits. Best-effort:\n# never fails the build over version metadata.\nset -e\nplist=\"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}\"\nif [ ! -f \"$plist\" ]; then echo \"warning: Embed git version: Info.plist not found at $plist\"; exit 0; fi\ncd \"${SRCROOT}\"\ndescribe=$(git describe --tags --always --dirty 2>/dev/null || true)\nsha=$(git rev-parse --short HEAD 2>/dev/null || true)\nset_key() {\n  /usr/libexec/PlistBuddy -c \"Add :$1 string $2\" \"$plist\" 2>/dev/null || /usr/libexec/PlistBuddy -c \"Set :$1 $2\" \"$plist\"\n}\nset_key GitDescribe \"$describe\"\nset_key GitSHA \"$sha\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		0B420000000000000000C002 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -180,7 +200,7 @@
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -243,7 +263,7 @@
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;

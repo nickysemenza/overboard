@@ -69,6 +69,36 @@ struct LauncherCommitRoutingTests {
         }
     }
 
+    @Test func commandRowRoutesToRunCommand() async {
+        let viewModel = await makeViewModel(rows: [.command(.version)])
+
+        var ran: [LauncherCommand] = []
+        viewModel.onRunCommand = { ran.append($0) }
+
+        viewModel.commit()
+
+        #expect(ran == [.version])
+    }
+
+    @Test func commandModeSkipsSecondaryRows() async {
+        // ":"-queries are instant-only — no clip/file/Spotlight splice. The
+        // command row itself comes from the real CommandProvider in the
+        // instant router; the secondary clip below must never appear.
+        let viewModel = LauncherViewModel(
+            instantProviders: [],
+            secondaryProviders: [StubProvider(rows: [.clip(Fixtures.item(preview: "x"))])]
+        )
+        viewModel.query = ":version"
+        viewModel.scheduleSearch()
+        while viewModel.results.isEmpty {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        // Give the (skipped) debounce window a chance to wrongly fire.
+        try? await Task.sleep(for: .milliseconds(300))
+
+        #expect(viewModel.results == [.command(.version)])
+    }
+
     @Test func snippetRowRoutesPerModifier() async {
         let snippet = Snippet(title: "Standup", body: "Yesterday / Today")
         let viewModel = await makeViewModel(rows: [.snippet(snippet)])

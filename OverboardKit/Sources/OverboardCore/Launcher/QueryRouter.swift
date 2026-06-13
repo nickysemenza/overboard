@@ -72,7 +72,8 @@ public struct WebSearchProvider: LauncherProvider {
     }
 
     public func results(for query: String) async -> [LauncherResult] {
-        guard let url = Self.searchURL(for: query) else { return [] }
+        // ":"-prefixed queries are commands — don't offer to google them.
+        guard !query.hasPrefix(":"), let url = Self.searchURL(for: query) else { return [] }
         return [.webSearch(query: query, url: url)]
     }
 }
