@@ -1,5 +1,6 @@
 import Foundation
 import OverboardCore
+import OverboardMac
 @testable import OverboardUI
 import Testing
 
@@ -10,7 +11,9 @@ private struct StubProvider: LauncherProvider {
     }
 }
 
-/// Pure logic, no snapshots — runs on CI too.
+/// Pure logic, no snapshots — runs on CI too. Serialized because the history
+/// tests share the process-wide `Defaults[.launcherSearchHistory]` key.
+@Suite(.serialized)
 @MainActor
 struct LauncherCommitRoutingTests {
     private func makeViewModel(rows: [LauncherResult]) async -> LauncherViewModel {
@@ -134,7 +137,7 @@ struct LauncherCommitRoutingTests {
         let viewModel = await makeViewModel(rows: [.command(.version)])
         #expect(viewModel.query == "zzz")
 
-        viewModel.prepareForShow()
+        viewModel.prepareForShow(clearQuery: false)
         #expect(viewModel.query == "zzz")
         while viewModel.results.isEmpty {
             try? await Task.sleep(for: .milliseconds(10))
@@ -144,14 +147,101 @@ struct LauncherCommitRoutingTests {
         #expect(viewModel.results.first == .command(.version))
     }
 
-    /// A first-ever open (empty query) still opens to a blank bar.
-    @Test func prepareForShowWithEmptyQueryClearsResults() async {
+    /// A stale reopen (`clearQuery: true`) with no history opens to a blank bar.
+    @Test func prepareForShowClearingResetsQueryAndResults() async {
+        Defaults[.launcherSearchHistory] = []
         let viewModel = await makeViewModel(rows: [.command(.version)])
 
-        viewModel.query = ""
-        viewModel.prepareForShow()
+        viewModel.prepareForShow(clearQuery: true)
         try? await Task.sleep(for: .milliseconds(50))
 
+        #expect(viewModel.query.isEmpty)
         #expect(viewModel.results.isEmpty)
+    }
+
+    // MARK: - Search history
+
+    private func freshViewModel() -> LauncherViewModel {
+        Defaults[.launcherSearchHistory] = []
+        return LauncherViewModel(instantProviders: [], secondaryProviders: [])
+    }
+
+    /// Recording de-dupes (moves an existing entry to most-recent) and persists.
+    @Test func recordDeDupesAndPersists() {
+        let viewModel = self.freshViewModel()
+
+        for query in ["alpha", "beta", "alpha"] {
+            viewModel.query = query
+            viewModel.recordCurrentQuery()
+        }
+
+        #expect(viewModel.history == ["beta", "alpha"])
+        #expect(Defaults[.launcherSearchHistory] == ["beta", "alpha"])
+    }
+
+    /// Empty/whitespace queries never enter history.
+    @Test func recordIgnoresBlankQuery() {
+        let viewModel = self.freshViewModel()
+        viewModel.query = "   "
+        viewModel.recordCurrentQuery()
+        #expect(viewModel.history.isEmpty)
+    }
+
+    /// History is capped to the most-recent `maxHistory` entries.
+    @Test func recordCapsHistory() {
+        let viewModel = self.freshViewModel()
+        for index in 0 ..< 25 {
+            viewModel.query = "q\(index)"
+            viewModel.recordCurrentQuery()
+        }
+        #expect(viewModel.history.count == 20)
+        #expect(viewModel.history.first == "q5")
+        #expect(viewModel.history.last == "q24")
+    }
+
+    /// An empty field lists recent searches as rows, most-recent first.
+    @Test func emptyFieldListsRecentSearches() {
+        let viewModel = self.freshViewModel()
+        for query in ["one", "two", "three"] {
+            viewModel.query = query
+            viewModel.recordCurrentQuery()
+        }
+
+        viewModel.query = ""
+        viewModel.scheduleSearch()
+
+        #expect(viewModel.results == [
+            .recentSearch(query: "three"),
+            .recentSearch(query: "two"),
+            .recentSearch(query: "one"),
+        ])
+    }
+
+    /// Committing a recents row refills the bar and re-runs that search in place
+    /// (no dismiss, no row action fired).
+    @Test func committingRecentSearchReRunsInPlace() async {
+        Defaults[.launcherSearchHistory] = []
+        let app = LauncherResult.app(name: "Notes", url: URL(fileURLWithPath: "/Applications/Notes.app"))
+        let viewModel = LauncherViewModel(
+            instantProviders: [StubProvider(rows: [app])],
+            secondaryProviders: []
+        )
+
+        viewModel.query = "foo"
+        viewModel.recordCurrentQuery()
+        viewModel.query = ""
+        viewModel.scheduleSearch()
+        #expect(viewModel.results == [.recentSearch(query: "foo")])
+
+        var opened = false
+        viewModel.onOpenFile = { _ in opened = true }
+        viewModel.commit() // selection 0 is the recents row
+
+        #expect(viewModel.query == "foo")
+        while viewModel.results.contains(where: { if case .recentSearch = $0 { true } else { false } }) {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(viewModel.results.contains(app))
+        #expect(!opened) // re-running a recent must not commit a row
     }
 }

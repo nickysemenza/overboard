@@ -14,6 +14,11 @@ public final class LauncherPanelController {
     private var clickMonitor: Any?
     private var resignObserver: NSObjectProtocol?
 
+    /// When the launcher was last dismissed; reopening within `resumeWindow`
+    /// resumes the previous text, otherwise the bar opens fresh.
+    private var lastHiddenAt: Date?
+    private static let resumeWindow: TimeInterval = 10
+
     /// The app that was frontmost when the launcher was summoned — i.e.
     /// where a pasted calculator result should land.
     public private(set) var targetApp: NSRunningApplication?
@@ -145,14 +150,18 @@ public final class LauncherPanelController {
         let panel = self.panel ?? self.makePanel()
         self.panel = panel
 
-        // Open at the height of the preserved rows (0 on a first-ever open) so a
+        // Resume the previous text only briefly after a dismiss; later reopens
+        // (or the first-ever open) start fresh.
+        let stale = self.lastHiddenAt.map { Date().timeIntervalSince($0) > Self.resumeWindow } ?? true
+
+        // Open at the height of the preserved rows (0 when clearing) so a
         // reopened launcher doesn't snap up from one row to a full list — that
         // abrupt resize left ghost frames of the rows mid-reflow.
         panel.setFrame(
-            self.frame(forRows: self.viewModel.results.count, on: self.screenWithMouse()),
+            self.frame(forRows: stale ? 0 : self.viewModel.results.count, on: self.screenWithMouse()),
             display: false
         )
-        self.viewModel.prepareForShow()
+        self.viewModel.prepareForShow(clearQuery: stale)
         panel.makeKeyAndOrderFront(nil)
         // Preserved text refocuses select-all by default; drop the caret at the
         // end so the next keystroke appends instead of replacing. The field
@@ -165,9 +174,13 @@ public final class LauncherPanelController {
     }
 
     public func hide() {
+        // Every commit also funnels through here, so this captures Enter,
+        // Escape, and click-outside alike.
+        self.viewModel.recordCurrentQuery()
         self.removeMonitors()
         self.panel?.orderOut(nil)
         self.targetApp = nil
+        self.lastHiddenAt = Date()
     }
 
     // MARK: - Setup

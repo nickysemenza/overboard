@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import OverboardCore
+import OverboardMac
 
 /// State machine for the launcher bar: instant calculator/web rows on every
 /// keystroke, Spotlight file rows spliced in after a debounce.
@@ -17,6 +18,11 @@ public final class LauncherViewModel {
     /// Bumped on every summon so the view re-asserts text-field focus
     /// (onAppear only fires once — the hosting view is reused).
     public private(set) var showGeneration = 0
+
+    /// Recent searches, most-recent last; persisted across launches. Surfaced as
+    /// the result rows when the field is empty.
+    public private(set) var history: [String] = Defaults[.launcherSearchHistory]
+    private let maxHistory = 20
 
     // Effects, executed by the app layer.
     public var onCopyText: (String) -> Void = { _ in }
@@ -48,11 +54,18 @@ public final class LauncherViewModel {
         self.secondaryProviders = secondaryProviders
     }
 
-    /// Keeps the previous `query` so a reopened launcher resumes where it left
-    /// off; `scheduleSearch()` repopulates its rows (and clears them when the
-    /// preserved query is empty, i.e. a first-ever open).
-    public func prepareForShow() {
+    /// Preps state for a summon. When `clearQuery` is false the previous `query`
+    /// is kept so a quickly-reopened launcher resumes where it left off;
+    /// `scheduleSearch()` repopulates its rows (and clears them when the query is
+    /// empty). When `clearQuery` is true the bar opens fresh.
+    public func prepareForShow(clearQuery: Bool) {
         self.searchTask?.cancel()
+        if clearQuery {
+            self.query = ""
+        }
+        // Pick up entries this session has saved since the model was created so
+        // the empty-field recents list is current.
+        self.history = Defaults[.launcherSearchHistory]
         self.selectedIndex = 0
         self.showGeneration += 1
         self.scheduleSearch()
@@ -62,8 +75,10 @@ public final class LauncherViewModel {
         self.searchTask?.cancel()
         let query = self.query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else {
+            // Empty field shows recent searches as the result list (most-recent
+            // first); committing a row refills the bar and re-runs it.
             self.selectedIndex = 0
-            self.setResults([])
+            self.setResults(self.history.reversed().map { .recentSearch(query: $0) })
             return
         }
         self.searchTask = Task {
@@ -106,6 +121,23 @@ public final class LauncherViewModel {
         self.selectedIndex = min(max(self.selectedIndex + delta, 0), self.results.count - 1)
     }
 
+    // MARK: - Search history
+
+    /// Save the current query as the most-recent history entry. Called on every
+    /// dismissal (commit / escape / click-outside); no-ops on empty queries.
+    public func recordCurrentQuery() {
+        let trimmed = self.query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        var updated = self.history
+        updated.removeAll { $0 == trimmed }
+        updated.append(trimmed)
+        if updated.count > self.maxHistory {
+            updated.removeFirst(updated.count - self.maxHistory)
+        }
+        self.history = updated
+        Defaults[.launcherSearchHistory] = updated
+    }
+
     public func commit(modifier: CommitModifier = .none) {
         guard self.results.indices.contains(self.selectedIndex) else { return }
         switch self.results[self.selectedIndex] {
@@ -131,6 +163,11 @@ public final class LauncherViewModel {
             self.onOpenSystemSetting(url)
         case let .command(command):
             self.onRunCommand(command)
+        case let .recentSearch(query):
+            // Re-run the past search in place — refill the bar, stay open.
+            self.query = query
+            self.selectedIndex = 0
+            self.scheduleSearch()
         }
     }
 

@@ -30,6 +30,8 @@ public extension Defaults.Keys {
     static let launcherSettingsResults = Key<Bool>("launcherSettingsResults", default: true)
     /// Launcher app-search aliases, one "alias = App Name" per line.
     static let launcherAppAliases = Key<String>("launcherAppAliases", default: "")
+    /// Recent launcher search queries, most-recent last; de-duped and capped.
+    static let launcherSearchHistory = Key<[String]>("launcherSearchHistory", default: [])
 }
 
 /// Parsed views over the newline-list preference keys.

@@ -11,6 +11,9 @@ public enum LauncherResult: Sendable, Equatable, Identifiable {
     /// A macOS System Settings pane; `url` is its `x-apple.systempreferences:` link.
     case systemSetting(name: String, url: URL)
     case command(LauncherCommand)
+    /// A past search shown on the empty-field "recents" list; committing it
+    /// refills the bar with `query` and re-runs the search.
+    case recentSearch(query: String)
 
     public var id: String {
         switch self {
@@ -22,6 +25,7 @@ public enum LauncherResult: Sendable, Equatable, Identifiable {
         case let .webSearch(query, _): "web:\(query)"
         case let .systemSetting(_, url): "setting:\(url.absoluteString)"
         case let .command(command): "command:\(command.rawValue)"
+        case let .recentSearch(query): "recent:\(query)"
         }
     }
 }

@@ -163,6 +163,10 @@ struct LauncherRow: View {
             Image(systemName: "info.circle.fill")
                 .font(.title2)
                 .foregroundStyle(.teal)
+        case .recentSearch:
+            Image(systemName: "clock.arrow.circlepath")
+                .font(.title2)
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -191,6 +195,7 @@ struct LauncherRow: View {
         case let .webSearch(query, _): "Search Google for “\(query)”"
         case let .systemSetting(name, _): name
         case let .command(command): command.title
+        case let .recentSearch(query): query
         }
     }
 
@@ -208,6 +213,7 @@ struct LauncherRow: View {
         case .webSearch: "Open in browser"
         case .systemSetting: "System Settings"
         case let .command(command): command.subtitle
+        case .recentSearch: "Recent search"
         }
     }
 
@@ -231,6 +237,7 @@ struct LauncherRow: View {
         case .webSearch: "↩ search"
         case .systemSetting: "↩ open"
         case .command: "↩ open settings"
+        case .recentSearch: "↩ search"
         }
     }
 
