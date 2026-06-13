@@ -8,6 +8,8 @@ public enum LauncherResult: Sendable, Equatable, Identifiable {
     case clip(ClipItem)
     case file(name: String, url: URL)
     case webSearch(query: String, url: URL)
+    /// A macOS System Settings pane; `url` is its `x-apple.systempreferences:` link.
+    case systemSetting(name: String, url: URL)
     case command(LauncherCommand)
 
     public var id: String {
@@ -18,6 +20,7 @@ public enum LauncherResult: Sendable, Equatable, Identifiable {
         case let .clip(item): "clip:\(item.id)"
         case let .file(_, url): "file:\(url.path)"
         case let .webSearch(query, _): "web:\(query)"
+        case let .systemSetting(_, url): "setting:\(url.absoluteString)"
         case let .command(command): "command:\(command.rawValue)"
         }
     }

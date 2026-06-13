@@ -144,6 +144,10 @@ struct LauncherRow: View {
             Image(systemName: "magnifyingglass.circle.fill")
                 .font(.title2)
                 .foregroundStyle(.blue)
+        case .systemSetting:
+            Image(systemName: "gearshape.fill")
+                .font(.title2)
+                .foregroundStyle(.gray)
         case .command:
             Image(systemName: "info.circle.fill")
                 .font(.title2)
@@ -174,6 +178,7 @@ struct LauncherRow: View {
         case let .clip(item): Self.clipTitle(for: item)
         case let .file(name, _): name
         case let .webSearch(query, _): "Search Google for “\(query)”"
+        case let .systemSetting(name, _): name
         case let .command(command): command.title
         }
     }
@@ -190,6 +195,7 @@ struct LauncherRow: View {
         case let .clip(item): Self.clipSubtitle(for: item)
         case let .file(_, url): (url.path as NSString).abbreviatingWithTildeInPath
         case .webSearch: "Open in browser"
+        case .systemSetting: "System Settings"
         case let .command(command): command.subtitle
         }
     }
@@ -212,6 +218,7 @@ struct LauncherRow: View {
         case .clip: "↩ paste   ⌘↩ copy   ⌥↩ paste plain"
         case .file: "↩ open   ⌘↩ reveal   ⌥↩ copy path"
         case .webSearch: "↩ search"
+        case .systemSetting: "↩ open"
         case .command: "↩ open settings"
         }
     }

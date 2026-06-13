@@ -64,6 +64,7 @@ private struct GeneralSettingsTab: View {
     @Default(.launcherFileResults) private var launcherFileResults
     @Default(.launcherClipResults) private var launcherClipResults
     @Default(.launcherSnippetResults) private var launcherSnippetResults
+    @Default(.launcherSettingsResults) private var launcherSettingsResults
     @Default(.launcherAppAliases) private var launcherAppAliases
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var accessibilityGranted = PermissionService.isTrusted
@@ -80,6 +81,7 @@ private struct GeneralSettingsTab: View {
                 Toggle("Show snippet results in launcher", isOn: self.$launcherSnippetResults)
                 Toggle("Show clipboard history in launcher", isOn: self.$launcherClipResults)
                 Toggle("Show file results in launcher", isOn: self.$launcherFileResults)
+                Toggle("Show system settings in launcher", isOn: self.$launcherSettingsResults)
                 LabeledContent("App aliases") {
                     TextEditor(text: self.$launcherAppAliases)
                         .font(.body.monospaced())
@@ -89,7 +91,7 @@ private struct GeneralSettingsTab: View {
                         .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
                 }
             } footer: {
-                Text("The launcher always calculates and offers a web search; snippet and clipboard rows search your saved snippets and history (operators like kind:image work), and file results add Spotlight hits from your home folder. Aliases are one “sm = Sublime Merge” per line — initials like “sm” already match without one; use aliases to override or shorten further.")
+                Text("The launcher always calculates and offers a web search; snippet and clipboard rows search your saved snippets and history (operators like kind:image work), file results add Spotlight hits from your home folder, and system settings rows open macOS Settings panes (Displays, Bluetooth, Wi-Fi…). Aliases are one “sm = Sublime Merge” per line — initials like “sm” already match without one; use aliases to override or shorten further.")
             }
 
             Section {

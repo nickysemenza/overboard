@@ -115,4 +115,43 @@ struct LauncherCommitRoutingTests {
         #expect(pasted == [snippet.id, snippet.id])
         #expect(copied == [snippet.id])
     }
+
+    @Test func systemSettingRowRoutesToOpen() async throws {
+        let url = try #require(URL(string: "x-apple.systempreferences:com.apple.Displays-Settings.extension"))
+        let viewModel = await makeViewModel(rows: [.systemSetting(name: "Displays", url: url)])
+
+        var opened: [URL] = []
+        viewModel.onOpenSystemSetting = { opened.append($0) }
+
+        viewModel.commit()
+
+        #expect(opened == [url])
+    }
+
+    /// Reopening the launcher keeps the prior query (cursor resumes there) and
+    /// repopulates its rows instead of clearing to a blank bar.
+    @Test func prepareForShowPreservesQueryAndResults() async {
+        let viewModel = await makeViewModel(rows: [.command(.version)])
+        #expect(viewModel.query == "zzz")
+
+        viewModel.prepareForShow()
+        #expect(viewModel.query == "zzz")
+        while viewModel.results.isEmpty {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        // Rows repopulate from the preserved query (instant router also appends
+        // its standing web-search row).
+        #expect(viewModel.results.first == .command(.version))
+    }
+
+    /// A first-ever open (empty query) still opens to a blank bar.
+    @Test func prepareForShowWithEmptyQueryClearsResults() async {
+        let viewModel = await makeViewModel(rows: [.command(.version)])
+
+        viewModel.query = ""
+        viewModel.prepareForShow()
+        try? await Task.sleep(for: .milliseconds(50))
+
+        #expect(viewModel.results.isEmpty)
+    }
 }

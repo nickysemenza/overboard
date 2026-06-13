@@ -66,6 +66,9 @@ final class AppServices {
                     AppSearchProvider(index: AppIndex(), limit: 5) {
                         AppMatcher.parseAliases(Defaults[.launcherAppAliases])
                     },
+                    ConditionalProvider(SettingsPaneSearchProvider(index: SettingsPaneIndex())) {
+                        Defaults[.launcherSettingsResults]
+                    },
                 ],
                 secondaryProviders: [
                     ConditionalProvider(SnippetSearchProvider(store: self.store)) {
@@ -218,6 +221,9 @@ final class AppServices {
             self?.copyString(path, hud: "Path copied")
         }
         self.launcher.onOpenWebSearch = { url in
+            NSWorkspace.shared.open(url)
+        }
+        self.launcher.onOpenSystemSetting = { url in
             NSWorkspace.shared.open(url)
         }
         self.launcher.onPasteClip = { [weak self] item, mode, target in

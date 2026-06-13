@@ -24,6 +24,7 @@ public final class LauncherPanelController {
     public var onRevealFile: (URL) -> Void = { _ in }
     public var onCopyPath: (String) -> Void = { _ in }
     public var onOpenWebSearch: (URL) -> Void = { _ in }
+    public var onOpenSystemSetting: (URL) -> Void = { _ in }
     public var onPasteClip: (ClipItem, PasteMode, NSRunningApplication?) -> Void = { _, _, _ in }
     public var onCopyClip: (ClipItem) -> Void = { _ in }
     public var onPasteSnippet: (Snippet, NSRunningApplication?) -> Void = { _, _ in }
@@ -74,6 +75,11 @@ public final class LauncherPanelController {
             guard let self else { return }
             self.hide()
             self.onOpenWebSearch(url)
+        }
+        viewModel.onOpenSystemSetting = { [weak self] url in
+            guard let self else { return }
+            self.hide()
+            self.onOpenSystemSetting(url)
         }
         viewModel.onPasteClip = { [weak self] item, mode in
             guard let self else { return }
@@ -142,6 +148,13 @@ public final class LauncherPanelController {
         panel.setFrame(self.frame(forRows: 0, on: self.screenWithMouse()), display: false)
         self.viewModel.prepareForShow()
         panel.makeKeyAndOrderFront(nil)
+        // Preserved text refocuses select-all by default; drop the caret at the
+        // end so the next keystroke appends instead of replacing. The field
+        // editor only exists once SwiftUI begins editing, so defer a tick.
+        DispatchQueue.main.async { [weak panel] in
+            guard let editor = panel?.fieldEditor(false, for: nil) as? NSTextView else { return }
+            editor.selectedRange = NSRange(location: editor.string.count, length: 0)
+        }
         self.installMonitors()
     }
 

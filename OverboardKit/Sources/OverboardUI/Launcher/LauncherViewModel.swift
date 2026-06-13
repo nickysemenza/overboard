@@ -25,6 +25,7 @@ public final class LauncherViewModel {
     public var onRevealFile: (URL) -> Void = { _ in }
     public var onCopyPath: (String) -> Void = { _ in }
     public var onOpenWebSearch: (URL) -> Void = { _ in }
+    public var onOpenSystemSetting: (URL) -> Void = { _ in }
     public var onPasteClip: (ClipItem, PasteMode) -> Void = { _, _ in }
     public var onCopyClip: (ClipItem) -> Void = { _ in }
     public var onPasteSnippet: (Snippet) -> Void = { _ in }
@@ -47,12 +48,14 @@ public final class LauncherViewModel {
         self.secondaryProviders = secondaryProviders
     }
 
+    /// Keeps the previous `query` so a reopened launcher resumes where it left
+    /// off; `scheduleSearch()` repopulates its rows (and clears them when the
+    /// preserved query is empty, i.e. a first-ever open).
     public func prepareForShow() {
         self.searchTask?.cancel()
-        self.query = ""
         self.selectedIndex = 0
         self.showGeneration += 1
-        self.setResults([])
+        self.scheduleSearch()
     }
 
     public func scheduleSearch() {
@@ -124,6 +127,8 @@ public final class LauncherViewModel {
             }
         case let .webSearch(_, url):
             self.onOpenWebSearch(url)
+        case let .systemSetting(_, url):
+            self.onOpenSystemSetting(url)
         case let .command(command):
             self.onRunCommand(command)
         }

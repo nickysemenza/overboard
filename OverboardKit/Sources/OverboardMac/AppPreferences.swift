@@ -26,6 +26,8 @@ public extension Defaults.Keys {
     static let launcherClipResults = Key<Bool>("launcherClipResults", default: true)
     /// Snippet results in the launcher bar.
     static let launcherSnippetResults = Key<Bool>("launcherSnippetResults", default: true)
+    /// System Settings pane results in the launcher bar.
+    static let launcherSettingsResults = Key<Bool>("launcherSettingsResults", default: true)
     /// Launcher app-search aliases, one "alias = App Name" per line.
     static let launcherAppAliases = Key<String>("launcherAppAliases", default: "")
 }
