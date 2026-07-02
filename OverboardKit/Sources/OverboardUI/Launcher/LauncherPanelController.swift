@@ -49,6 +49,9 @@ public final class LauncherPanelController {
         /// Divider plus its VStack gaps.
         static let dividerHeight: CGFloat = 17
         static let rowHeight: CGFloat = 45
+        /// LauncherSectionHeader: caption2 line (~13) + top padding (2) + the
+        /// list VStack gap (2), rounded up — undershooting clips the last row.
+        static let headerHeight: CGFloat = 18
         /// Fraction of the screen's visible height where the bar's top sits.
         static let topFraction: CGFloat = 0.72
     }
@@ -130,8 +133,8 @@ public final class LauncherPanelController {
             self.hide()
             self.onOpenSpotify(track)
         }
-        viewModel.onResultCountChanged = { [weak self] count in
-            self?.resizePanel(rows: count)
+        viewModel.onLayoutChanged = { [weak self] rows, headers in
+            self?.resizePanel(rows: rows, headers: headers)
         }
     }
 
@@ -183,7 +186,11 @@ public final class LauncherPanelController {
         // reopened launcher doesn't snap up from one row to a full list — that
         // abrupt resize left ghost frames of the rows mid-reflow.
         panel.setFrame(
-            self.frame(forRows: stale ? 0 : self.viewModel.results.count, on: self.screenWithMouse()),
+            self.frame(
+                forRows: stale ? 0 : self.viewModel.results.count,
+                headers: stale ? 0 : self.viewModel.headerCount,
+                on: self.screenWithMouse()
+            ),
             display: false
         )
         self.viewModel.prepareForShow(clearQuery: stale)
@@ -222,11 +229,12 @@ public final class LauncherPanelController {
         return panel
     }
 
-    private func frame(forRows rows: Int, on screen: NSScreen) -> NSRect {
+    private func frame(forRows rows: Int, headers: Int, on screen: NSScreen) -> NSRect {
         let visible = screen.visibleFrame
         var height = Metrics.barOnlyHeight
         if rows > 0 {
             height += Metrics.dividerHeight + CGFloat(rows) * Metrics.rowHeight
+                + CGFloat(headers) * Metrics.headerHeight
         }
         let top = visible.minY + visible.height * Metrics.topFraction
         return NSRect(
@@ -238,10 +246,10 @@ public final class LauncherPanelController {
     }
 
     /// Grows downward as rows arrive; the bar's top edge stays put.
-    private func resizePanel(rows: Int) {
+    private func resizePanel(rows: Int, headers: Int) {
         guard let panel, panel.isVisible else { return }
         let screen = panel.screen ?? self.screenWithMouse()
-        panel.setFrame(self.frame(forRows: rows, on: screen), display: true)
+        panel.setFrame(self.frame(forRows: rows, headers: headers, on: screen), display: true)
     }
 
     private func screenWithMouse() -> NSScreen {
