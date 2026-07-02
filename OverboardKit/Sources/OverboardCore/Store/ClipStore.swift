@@ -94,19 +94,26 @@ public actor ClipStore {
                 isSecret: classified.isSecret,
                 createdAt: now,
                 lastUsedAt: now,
-                updatedAt: now
+                updatedAt: now,
+                charCount: classified.charCount,
+                lineCount: classified.lineCount,
+                pixelWidth: classified.pixelWidth,
+                pixelHeight: classified.pixelHeight,
+                fileCount: classified.fileCount
             )
             try db.execute(
                 sql: """
                 INSERT INTO item (id, contentHash, kind, previewText, searchText,
                                   sourceBundleID, sourceAppName, byteSize, isPinned, isSecret,
-                                  useCount, createdAt, lastUsedAt, updatedAt, lamport, deletedAt)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 1, ?, ?, ?, 0, NULL)
+                                  useCount, createdAt, lastUsedAt, updatedAt, lamport, deletedAt,
+                                  charCount, lineCount, pixelWidth, pixelHeight, fileCount)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 1, ?, ?, ?, 0, NULL, ?, ?, ?, ?, ?)
                 """,
                 arguments: [
                     item.id, item.contentHash, item.kind.rawValue, item.previewText,
                     classified.searchText, item.sourceBundleID, item.sourceAppName,
                     item.byteSize, item.isSecret, now, now, now,
+                    item.charCount, item.lineCount, item.pixelWidth, item.pixelHeight, item.fileCount,
                 ]
             )
 

@@ -23,6 +23,13 @@ public struct ClipItem: Codable, Sendable, Equatable, Identifiable {
     public var updatedAt: Date
     public var lamport: Int64
     public var deletedAt: Date?
+    /// Card-footer metadata (migration v2); nil for kinds without a footer or
+    /// for rows captured before backfill. Codable auto-maps to GRDB columns.
+    public var charCount: Int?
+    public var lineCount: Int?
+    public var pixelWidth: Int?
+    public var pixelHeight: Int?
+    public var fileCount: Int?
 
     public init(
         id: String = UUID().uuidString,
@@ -42,7 +49,12 @@ public struct ClipItem: Codable, Sendable, Equatable, Identifiable {
         lastUsedAt: Date,
         updatedAt: Date,
         lamport: Int64 = 0,
-        deletedAt: Date? = nil
+        deletedAt: Date? = nil,
+        charCount: Int? = nil,
+        lineCount: Int? = nil,
+        pixelWidth: Int? = nil,
+        pixelHeight: Int? = nil,
+        fileCount: Int? = nil
     ) {
         self.id = id
         self.contentHash = contentHash
@@ -62,9 +74,79 @@ public struct ClipItem: Codable, Sendable, Equatable, Identifiable {
         self.updatedAt = updatedAt
         self.lamport = lamport
         self.deletedAt = deletedAt
+        self.charCount = charCount
+        self.lineCount = lineCount
+        self.pixelWidth = pixelWidth
+        self.pixelHeight = pixelHeight
+        self.fileCount = fileCount
     }
 }
 
 extension ClipItem: FetchableRecord, PersistableRecord {
     public static let databaseTableName = "item"
+}
+
+// MARK: - Card metadata footer
+
+extension ClipItem {
+    /// One-line footer summarizing the clip's shape, shown under the card
+    /// content. Pure and unit-testable; nil means "render no footer".
+    public var metadataFooter: String? {
+        guard !self.isSecret else { return nil }
+        switch self.kind {
+        case .text, .link:
+            // link footers are a later feature; text needs a char count.
+            guard self.kind == .text, let chars = charCount else { return nil }
+            let charsPart = "\(Self.decimal(chars)) \(chars == 1 ? "char" : "chars")"
+            guard let lines = lineCount, lines > 1 else { return charsPart }
+            return "\(charsPart) · \(lines) lines"
+        case .image:
+            // Prefer backfilled columns; fall back to the render-time preview
+            // parse for rows the migration couldn't reach.
+            if let width = pixelWidth, let height = pixelHeight {
+                return "\(width) × \(height)"
+            }
+            guard let size = Self.imageDimensions(fromPreview: previewText) else { return nil }
+            return "\(size.width) × \(size.height)"
+        case .file:
+            guard let count = fileCount else { return nil }
+            let filesPart = count == 1 ? "1 file" : "\(count) files"
+            return "\(filesPart) · \(Self.byteCount(self.byteSize))"
+        case .color:
+            return nil
+        }
+    }
+
+    /// Parses the "Image W×H" preview string produced by
+    /// `CaptureClassifier.previewText`. Used to backfill and to render footers
+    /// for images captured before migration v2.
+    static func imageDimensions(fromPreview preview: String?) -> (width: Int, height: Int)? {
+        guard let preview else { return nil }
+        let scanner = Scanner(string: preview)
+        // Skip up to the first digit ("Image " prefix, tolerant of variants).
+        _ = scanner.scanUpToCharacters(from: .decimalDigits)
+        guard let width = scanner.scanInt(),
+              scanner.scanString("×") != nil,
+              let height = scanner.scanInt()
+        else { return nil }
+        return (width, height)
+    }
+
+    private static func decimal(_ value: Int) -> String {
+        value.formatted(.number.grouping(.automatic))
+    }
+
+    /// Matches the History settings tab's disk-usage formatting (`.file` style).
+    private static func byteCount(_ bytes: Int) -> String {
+        ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
+    }
+}
+
+extension String {
+    /// Number of lines, counting the last line even without a trailing newline.
+    /// An empty string is zero lines.
+    var lineCount: Int {
+        guard !isEmpty else { return 0 }
+        return reduce(1) { $1 == "\n" ? $0 + 1 : $0 }
+    }
 }

@@ -12,6 +12,12 @@ public enum CaptureClassifier {
         public var searchText: String?
         public var byteSize: Int
         public var isSecret: Bool = false
+        /// Card-footer metadata, derived from the full payload at capture time.
+        public var charCount: Int?
+        public var lineCount: Int?
+        public var pixelWidth: Int?
+        public var pixelHeight: Int?
+        public var fileCount: Int?
     }
 
     static let previewLimit = 500
@@ -49,12 +55,31 @@ public enum CaptureClassifier {
             )
         }
 
+        // Compute the image size once and reuse it for both the preview string
+        // and the footer metadata, rather than parsing it back out of the text.
+        let pixelSize: (width: Int, height: Int)? = kind == .image
+            ? (byUTI[WellKnownUTI.png] ?? byUTI[WellKnownUTI.tiff]).flatMap(self.imagePixelSize)
+            : nil
+
+        // Counts come from the full plainText, not the truncated preview.
+        var charCount: Int?
+        var lineCount: Int?
+        if kind == .text || kind == .link, let text = plainText {
+            charCount = text.count
+            lineCount = text.lineCount
+        }
+
         return Classified(
             kind: kind,
             contentHash: self.hash(kind: kind, primary: primary),
-            previewText: self.previewText(for: kind, byUTI: byUTI, plainText: plainText),
+            previewText: self.previewText(for: kind, pixelSize: pixelSize, byUTI: byUTI, plainText: plainText),
             searchText: self.searchText(for: kind, byUTI: byUTI, plainText: plainText),
-            byteSize: totalBytes
+            byteSize: totalBytes,
+            charCount: charCount,
+            lineCount: lineCount,
+            pixelWidth: pixelSize?.width,
+            pixelHeight: pixelSize?.height,
+            fileCount: kind == .file ? self.fileNames(byUTI: byUTI)?.count : nil
         )
     }
 
@@ -107,16 +132,16 @@ public enum CaptureClassifier {
     // MARK: - Preview & search text
 
     private static func previewText(
-        for kind: ItemKind, byUTI: [String: Data], plainText: String?
+        for kind: ItemKind, pixelSize: (width: Int, height: Int)?,
+        byUTI: [String: Data], plainText: String?
     ) -> String? {
         switch kind {
         case .text, .link:
             guard let text = plainText else { return nil }
             return String(text.trimmingCharacters(in: .whitespacesAndNewlines).prefix(self.previewLimit))
         case .image:
-            let data = byUTI[WellKnownUTI.png] ?? byUTI[WellKnownUTI.tiff]
-            if let data, let size = imagePixelSize(data) {
-                return "Image \(size.width)×\(size.height)"
+            if let pixelSize {
+                return "Image \(pixelSize.width)×\(pixelSize.height)"
             }
             return "Image"
         case .file:

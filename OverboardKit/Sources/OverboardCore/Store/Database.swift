@@ -115,6 +115,69 @@ enum Migrations {
             )
         }
 
+        // v2: card metadata footers. Nullable counters backfilled from data
+        // already on hand; secrets are skipped so no derived shape leaks.
+        migrator.registerMigration("v2") { db in
+            for column in ["charCount", "lineCount", "pixelWidth", "pixelHeight", "fileCount"] {
+                try db.execute(sql: "ALTER TABLE item ADD COLUMN \(column) INTEGER")
+            }
+
+            // text/link: char count is cheap in SQL, but rows whose searchText
+            // sits at the cap were truncated, so their length would be wrong —
+            // leave those NULL rather than store a lie.
+            try db.execute(sql: """
+            UPDATE item SET charCount = LENGTH(searchText)
+            WHERE isSecret = 0 AND kind IN ('text', 'link')
+              AND searchText IS NOT NULL AND LENGTH(searchText) < \(CaptureClassifier.searchTextLimit)
+            """)
+
+            // lineCount needs a Swift newline count; do it row by row.
+            let textRows = try Row.fetchAll(db, sql: """
+            SELECT id, searchText FROM item
+            WHERE isSecret = 0 AND kind IN ('text', 'link') AND searchText IS NOT NULL
+            """)
+            for row in textRows {
+                let text: String = row["searchText"]
+                try db.execute(
+                    sql: "UPDATE item SET lineCount = ? WHERE id = ?",
+                    arguments: [text.lineCount, row["id"] as String]
+                )
+            }
+
+            // image: recover dimensions from the previewText we already render
+            // ("Image W×H"), the sole producer being CaptureClassifier.previewText.
+            let imageRows = try Row.fetchAll(db, sql: """
+            SELECT id, previewText FROM item
+            WHERE isSecret = 0 AND kind = 'image' AND previewText IS NOT NULL
+            """)
+            for row in imageRows {
+                guard let size = ClipItem.imageDimensions(fromPreview: row["previewText"]) else { continue }
+                try db.execute(
+                    sql: "UPDATE item SET pixelWidth = ?, pixelHeight = ? WHERE id = ?",
+                    arguments: [size.width, size.height, row["id"] as String]
+                )
+            }
+
+            // file: count entries from the inline fileURLs JSON. Blob-backed
+            // representations (data IS NULL) stay NULL — the count isn't reachable.
+            let fileRows = try Row.fetchAll(db, sql: """
+            SELECT item.id AS id, representation.data AS data
+            FROM item
+            JOIN representation ON representation.itemID = item.id
+            WHERE item.isSecret = 0 AND item.kind = 'file'
+              AND representation.uti = ? AND representation.data IS NOT NULL
+            """, arguments: [WellKnownUTI.fileURLs])
+            for row in fileRows {
+                guard let data = row["data"] as Data?,
+                      let urls = try? JSONDecoder().decode([String].self, from: data)
+                else { continue }
+                try db.execute(
+                    sql: "UPDATE item SET fileCount = ? WHERE id = ?",
+                    arguments: [urls.count, row["id"] as String]
+                )
+            }
+        }
+
         return migrator
     }
 }
