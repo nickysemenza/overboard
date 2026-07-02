@@ -508,6 +508,67 @@ public actor ClipStore {
         return topIDs.compactMap { byID[$0] }
     }
 
+    // MARK: - Related
+
+    /// K-nearest neighbours to a given item by cosine similarity of their
+    /// stored embedding vectors. Excludes the item itself, other copies of
+    /// the same content, secrets, and deleted items. Returns `[]` when the
+    /// target has no embedding.
+    public func relatedItems(
+        to itemID: String,
+        limit: Int = 5,
+        minSimilarity: Double = 0.8
+    ) throws -> [ClipItem] {
+        let (target, neighbours): ([Float], [(id: String, vector: Data)]) = try self.dbWriter.read { db in
+            guard let targetRow = try Row.fetchOne(db, sql: """
+            SELECT i.contentHash AS contentHash, e.vector AS vector
+            FROM item_embedding e
+            JOIN item i ON i.id = e.itemID
+            WHERE e.itemID = ?
+            """, arguments: [itemID])
+            else { return ([], []) }
+
+            let targetVector = EmbeddingCoder.decode(targetRow["vector"] as Data)
+            guard !targetVector.isEmpty else { return ([], []) }
+            let targetHash = targetRow["contentHash"] as String
+
+            let rows = try Row.fetchAll(db, sql: """
+            SELECT e.itemID AS itemID, e.vector AS vector
+            FROM item_embedding e
+            JOIN item i ON i.id = e.itemID
+            WHERE i.deletedAt IS NULL
+              AND i.isSecret = 0
+              AND e.itemID != ?
+              AND i.contentHash != ?
+            """, arguments: [itemID, targetHash])
+
+            let vectors = rows.map { (id: $0["itemID"] as String, vector: $0["vector"] as Data) }
+            return (targetVector, vectors)
+        }
+
+        guard !target.isEmpty else { return [] }
+
+        let scored: [(id: String, score: Float)] = neighbours.compactMap { neighbour in
+            let vector = EmbeddingCoder.decode(neighbour.vector)
+            guard !vector.isEmpty else { return nil }
+            let score = EmbeddingCoder.cosineSimilarity(target, vector)
+            return score >= Float(minSimilarity) ? (neighbour.id, score) : nil
+        }
+
+        let topIDs = scored.sorted { $0.score > $1.score }.prefix(limit).map(\.id)
+        guard !topIDs.isEmpty else { return [] }
+
+        let items = try self.dbWriter.read { db in
+            try ClipItem
+                .filter(sql: "deletedAt IS NULL")
+                .filter(keys: topIDs)
+                .fetchAll(db)
+        }
+        // Preserve similarity order.
+        let byID = Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0) })
+        return topIDs.compactMap { byID[$0] }
+    }
+
     // MARK: - AI enrichment
 
     /// Attaches OCR'd text to an item that had none (images): becomes its
