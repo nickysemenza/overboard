@@ -1,8 +1,10 @@
 import AppKit
+import ImageIO
 import OverboardCore
 import SnapshotTesting
 import SwiftUI
 import Testing
+import UniformTypeIdentifiers
 
 extension Trait where Self == ConditionTrait {
     /// Snapshots are recorded on a local Retina Mac; the CI VM renders at a
@@ -32,7 +34,11 @@ enum Fixtures {
         lineCount: Int? = nil,
         pixelWidth: Int? = nil,
         pixelHeight: Int? = nil,
-        fileCount: Int? = nil
+        fileCount: Int? = nil,
+        linkTitle: String? = nil,
+        linkDescription: String? = nil,
+        faviconData: Data? = nil,
+        previewImageData: Data? = nil
     ) -> ClipItem {
         ClipItem(
             id: "fixture-\(preview.prefix(24))",
@@ -54,8 +60,34 @@ enum Fixtures {
             lineCount: lineCount,
             pixelWidth: pixelWidth,
             pixelHeight: pixelHeight,
-            fileCount: fileCount
+            fileCount: fileCount,
+            linkTitle: linkTitle,
+            linkDescription: linkDescription,
+            faviconData: faviconData,
+            previewImageData: previewImageData
         )
+    }
+
+    /// A tiny solid-color PNG, generated in-memory via ImageIO — no external
+    /// fixture files, no AppKit drawing. Stands in for a fetched favicon /
+    /// og:image in card snapshots.
+    static func solidPNG(width: Int, height: Int, red: CGFloat, green: CGFloat, blue: CGFloat) -> Data {
+        let context = CGContext(
+            data: nil, width: width, height: height,
+            bitsPerComponent: 8, bytesPerRow: 0,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        )!
+        context.setFillColor(CGColor(red: red, green: green, blue: blue, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        let image = context.makeImage()!
+        let data = NSMutableData()
+        let destination = CGImageDestinationCreateWithData(
+            data, UTType.png.identifier as CFString, 1, nil
+        )!
+        CGImageDestinationAddImage(destination, image, nil)
+        CGImageDestinationFinalize(destination)
+        return data as Data
     }
 
     static func store() throws -> ClipStore {

@@ -68,6 +68,7 @@ private struct GeneralSettingsTab: View {
     @Default(.launcherNowPlaying) private var launcherNowPlaying
     @Default(.launcherAppAliases) private var launcherAppAliases
     @Default(.updateCheckEnabled) private var updateCheckEnabled
+    @Default(.richLinkPreviews) private var richLinkPreviews
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var accessibilityGranted = PermissionService.isTrusted
 
@@ -103,6 +104,12 @@ private struct GeneralSettingsTab: View {
                         self.applyLaunchAtLogin()
                     }
                 Toggle("Restore previous clipboard after paste", isOn: self.$restoreClipboard)
+            }
+
+            Section {
+                Toggle("Fetch link titles and icons", isOn: self.$richLinkPreviews)
+            } footer: {
+                Text("Connects to the URLs you copy to fetch each page’s title, description, favicon, and preview image, rendered on link cards. Requests come only from your Mac; nothing is sent anywhere else. Turn this off to keep Overboard fully offline.")
             }
 
             Section {
