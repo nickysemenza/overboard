@@ -12,6 +12,12 @@ public final class LauncherViewModel {
         case none, command, option
     }
 
+    /// How an "Ask AI" row delivers its result: ↩ pastes into the target app,
+    /// ⌘↩ copies to the clipboard.
+    public enum AskAIDelivery: Sendable {
+        case paste, copy
+    }
+
     public var query = ""
     public private(set) var results: [LauncherResult] = []
     public var selectedIndex = 0
@@ -42,6 +48,9 @@ public final class LauncherViewModel {
     public var onRunCommand: (LauncherCommand) -> Void = { _ in }
     public var onCopyNowPlayingLink: (NowPlayingTrack) -> Void = { _ in }
     public var onOpenSpotify: (NowPlayingTrack) -> Void = { _ in }
+    /// Run a free-text Apple Intelligence prompt over the clipboard text and
+    /// deliver the result (↩ paste / ⌘↩ copy).
+    public var onAskAI: (String, AskAIDelivery) -> Void = { _, _ in }
     /// Terminate a running app (⌘K → Quit on a running app row); the URL is the
     /// app bundle's file URL.
     public var onQuitApp: (URL) -> Void = { _ in }
@@ -76,10 +85,14 @@ public final class LauncherViewModel {
     public init(
         instantProviders: [any LauncherProvider] = [],
         secondaryProviders: [any LauncherProvider],
-        commandProvider: CommandProvider = CommandProvider()
+        commandProvider: CommandProvider = CommandProvider(),
+        // The "Ask AI" fallback row (after the web row). Default dark so
+        // tests/previews don't light it up; AppServices injects the real gate.
+        askAIProvider: AskAIProvider = AskAIProvider(isAvailable: { false })
     ) {
         self.instantRouter = QueryRouter(
-            providers: [commandProvider, CalculatorProvider()] + instantProviders + [WebSearchProvider()]
+            providers: [commandProvider, CalculatorProvider()] + instantProviders
+                + [WebSearchProvider(), askAIProvider]
         )
         self.secondaryProviders = secondaryProviders
     }
@@ -131,9 +144,17 @@ public final class LauncherViewModel {
 
             // Splice each provider's rows in as it finishes — apps come back
             // well before the broad home-folder file query, and waiting for
-            // the slowest provider made the whole bar feel sluggish.
-            let head = instant.filter { if case .webSearch = $0 { false } else { true } }
-            let tail = instant.filter { if case .webSearch = $0 { true } else { false } }
+            // the slowest provider made the whole bar feel sluggish. The web
+            // row (and, after it, the Ask AI row) are pinned to the bottom of
+            // the instant section, below whatever the secondary providers add.
+            let isTail: (LauncherResult) -> Bool = { result in
+                switch result {
+                case .webSearch, .askAI: true
+                default: false
+                }
+            }
+            let head = instant.filter { !isTail($0) }
+            let tail = instant.filter(isTail)
             var buckets = [[LauncherResult]](repeating: [], count: providers.count)
             await withTaskGroup(of: (Int, [LauncherResult]).self) { group in
                 for (index, provider) in providers.enumerated() {
@@ -276,6 +297,10 @@ public final class LauncherViewModel {
             self.onCopyNowPlayingLink(track)
         case let (.openInSpotify, .nowPlaying(track)):
             self.onOpenSpotify(track)
+        case let (.paste, .askAI(prompt)):
+            self.onAskAI(prompt, .paste)
+        case let (.copy, .askAI(prompt)):
+            self.onAskAI(prompt, .copy)
         case let (.rerunSearch, .recentSearch(query)):
             // Re-run the past search in place — refill the bar, stay open.
             self.query = query

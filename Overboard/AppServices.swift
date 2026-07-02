@@ -131,6 +131,11 @@ final class AppServices {
                     guard let stats = try? await store.libraryStats() else { return nil }
                     return Self.statsSubtitle(stats)
                 }
+            ),
+            // "Ask AI" fallback row — only when the on-device model is ready and
+            // the user hasn't turned AI features off.
+            askAIProvider: AskAIProvider(
+                isAvailable: { AITransformer.isAvailable && Defaults[.aiFeatures] }
             )
         )
         // Pin the Spotify now-playing row under every result list when enabled
@@ -391,6 +396,29 @@ final class AppServices {
                 app.activate()
             } else if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: id) {
                 NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
+            }
+        }
+        self.launcher.onAskAI = { [weak self] prompt, delivery, target in
+            guard let self else { return }
+            // Read the clipboard text now — the launcher captured `target`
+            // before hiding, so a paste lands back in the originating app.
+            guard let text = NSPasteboard.general.string(forType: .string), !text.isEmpty else {
+                HUDController.shared.flash("Clipboard is empty")
+                return
+            }
+            Task {
+                guard #available(macOS 26.0, *) else { return }
+                HUDController.shared.flash("✨ Thinking…", duration: .seconds(15))
+                do {
+                    let result = try await AITransformer.apply(prompt: prompt, to: text)
+                    switch delivery {
+                    case .paste: self.pasteString(result, into: target)
+                    case .copy: self.copyString(result, hud: "Copied — ⌘V to paste")
+                    }
+                } catch {
+                    HUDController.shared.flash("AI transform failed")
+                    self.logger.error("Ask AI failed: \(String(describing: error), privacy: .public)")
+                }
             }
         }
         self.launcher.onQuitApp = { url in

@@ -69,4 +69,18 @@ public enum AITransformer {
         let response = try await session.respond(to: "\(transform.instruction)\n\nText:\n\(input)")
         return response.content.trimmingCharacters(in: .whitespacesAndNewlines)
     }
+
+    /// Runs a free-text user instruction (the launcher's "Ask AI" row) over the
+    /// clipboard text. Same stateless-session, same 6000-char input cap as the
+    /// fixed transforms; only the instruction is user-supplied.
+    @available(macOS 26.0, *)
+    public static func apply(prompt: String, to text: String) async throws -> String {
+        let session = LanguageModelSession(instructions: """
+        Apply the user's requested transformation to the text. Return only the \
+        transformed text with no preamble, no quotes, and no commentary.
+        """)
+        let input = String(text.prefix(6000))
+        let response = try await session.respond(to: "\(prompt)\n\nText:\n\(input)")
+        return response.content.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 }

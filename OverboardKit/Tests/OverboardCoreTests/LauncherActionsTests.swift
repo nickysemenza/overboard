@@ -88,6 +88,11 @@ struct LauncherActionsTests {
         #expect(LauncherActions.actions(for: result) == [.copyLink, .openInSpotify])
     }
 
+    @Test func askAI() {
+        let result = LauncherResult.askAI(prompt: "make this concise")
+        #expect(LauncherActions.actions(for: result) == [.paste, .copy])
+    }
+
     // MARK: Positional hint mapping
 
     @Test func hintMapsFirstThreePositions() {

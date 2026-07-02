@@ -18,8 +18,9 @@ public enum LauncherSection: Sendable, Equatable {
         }
     }
 
-    /// The section a row belongs to. Calculation, web-search, and now-playing
-    /// rows are singletons that read fine bare, so they're never headered.
+    /// The section a row belongs to. Calculation, web-search, ask-AI, and
+    /// now-playing rows are singletons that read fine bare, so they're never
+    /// headered.
     public static func section(for result: LauncherResult) -> LauncherSection? {
         switch result {
         case .command: .commands
@@ -29,7 +30,7 @@ public enum LauncherSection: Sendable, Equatable {
         case .file: .files
         case .systemSetting: .settings
         case .recentSearch: .recent
-        case .calculation, .webSearch, .nowPlaying: nil
+        case .calculation, .webSearch, .askAI, .nowPlaying: nil
         }
     }
 

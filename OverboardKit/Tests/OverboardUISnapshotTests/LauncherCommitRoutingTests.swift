@@ -156,8 +156,8 @@ struct LauncherCommitRoutingTests {
 
     /// ⌘↩ on a single-action row must fall back to the primary action rather
     /// than index past the action list (regression: crashed on web-search rows).
-    @Test func commandModifierOnSingleActionRowFallsBackToPrimary() async {
-        let url = URL(string: "https://example.com/search?q=zzz")!
+    @Test func commandModifierOnSingleActionRowFallsBackToPrimary() async throws {
+        let url = try #require(URL(string: "https://example.com/search?q=zzz"))
         let viewModel = await makeViewModel(rows: [.webSearch(query: "zzz", url: url)])
 
         var opened: [URL] = []
@@ -286,6 +286,51 @@ struct LauncherCommitRoutingTests {
 
         #expect(copied == [Self.track.trackID, Self.track.trackID])
         #expect(opened == [Self.track.trackID])
+    }
+
+    // MARK: - Ask AI fallback
+
+    /// ↩ runs the prompt with paste delivery; ⌘↩ with copy delivery. ⌥↩ falls
+    /// back to ↩ (paste) since askAI has only two actions.
+    @Test func askAIRowRoutesPerModifier() async {
+        let viewModel = await makeViewModel(rows: [.askAI(prompt: "make this concise")])
+
+        var calls: [(String, LauncherViewModel.AskAIDelivery)] = []
+        viewModel.onAskAI = { calls.append(($0, $1)) }
+
+        viewModel.commit() // ↩ paste
+        viewModel.commit(modifier: .command) // ⌘↩ copy
+        viewModel.commit(modifier: .option) // ⌥↩ falls back to ↩ (paste)
+
+        #expect(calls.map(\.0) == ["make this concise", "make this concise", "make this concise"])
+        #expect(calls.map(\.1) == [.paste, .copy, .paste])
+    }
+
+    /// The Ask AI row pins after the web row (and below the debounced secondary
+    /// rows), above the pinned now-playing footer.
+    @Test func askAIPinsAfterWebRowAndBeforeNowPlaying() async {
+        let clip = Fixtures.item(preview: "deploy checklist")
+        let viewModel = LauncherViewModel(
+            instantProviders: [],
+            secondaryProviders: [StubProvider(rows: [.clip(clip)])],
+            askAIProvider: AskAIProvider(isAvailable: { true })
+        )
+        viewModel.pinnedResults = { [.nowPlaying(Self.track)] }
+        viewModel.query = "make this shorter"
+        viewModel.scheduleSearch()
+        // Wait for the debounced splice: clip + web + askAI + pinned now-playing.
+        while viewModel.results.count < 4 {
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+
+        // clip (secondary), then web, then askAI, then the pinned footer last.
+        #expect(viewModel.results[0] == .clip(clip))
+        guard case .webSearch = viewModel.results[1] else {
+            Issue.record("expected web row after the clip, got \(viewModel.results)")
+            return
+        }
+        #expect(viewModel.results[2] == .askAI(prompt: "make this shorter"))
+        #expect(viewModel.results.last == .nowPlaying(Self.track))
     }
 
     @Test func systemSettingRowRoutesToOpen() async throws {
