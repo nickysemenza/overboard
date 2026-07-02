@@ -37,6 +37,10 @@ public final class LauncherPanelController {
     public var onRunCommand: (LauncherCommand) -> Void = { _ in }
     public var onCopyNowPlayingLink: (NowPlayingTrack) -> Void = { _ in }
     public var onOpenSpotify: (NowPlayingTrack) -> Void = { _ in }
+    /// Run a free-text Apple Intelligence prompt over the clipboard text and
+    /// deliver the result. Paste delivery needs the frontmost app captured
+    /// before the panel hides, mirroring `onPasteClip`.
+    public var onAskAI: (String, LauncherViewModel.AskAIDelivery, NSRunningApplication?) -> Void = { _, _, _ in }
     /// Quit a running app (⌘K → Quit); the URL is the app bundle's file URL.
     public var onQuitApp: (URL) -> Void = { _ in }
     /// Open a link clip's URL in the browser (⌘K → Open Link on a link clip).
@@ -142,6 +146,14 @@ public final class LauncherPanelController {
             guard let self else { return }
             self.hide()
             self.onOpenSpotify(track)
+        }
+        viewModel.onAskAI = { [weak self] prompt, delivery in
+            guard let self else { return }
+            // Capture before hide() — hiding clears targetApp — so a pasted
+            // result lands in the app that was frontmost when we were summoned.
+            let target = self.targetApp
+            self.hide()
+            self.onAskAI(prompt, delivery, target)
         }
         viewModel.onQuitApp = { [weak self] url in
             guard let self else { return }

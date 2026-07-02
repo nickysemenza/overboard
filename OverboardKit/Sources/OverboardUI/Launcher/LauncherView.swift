@@ -244,6 +244,11 @@ struct LauncherRow: View {
             Image(systemName: track.state == .playing ? "music.note" : "pause.fill")
                 .font(.title2)
                 .foregroundStyle(.green)
+        case .askAI:
+            // Sparkles in the purple/accent tint the AI ✨ transforms use.
+            Image(systemName: "sparkles")
+                .font(.title2)
+                .foregroundStyle(.purple)
         }
     }
 
@@ -274,6 +279,7 @@ struct LauncherRow: View {
         case let .command(command, _): command.title
         case let .recentSearch(query): query
         case let .nowPlaying(track): track.title
+        case let .askAI(prompt): "Ask AI: “\(prompt)”"
         }
     }
 
@@ -298,6 +304,7 @@ struct LauncherRow: View {
             track.artist.isEmpty
                 ? (track.state == .playing ? "Now playing" : "Paused")
                 : "\(track.artist) · \(track.state == .playing ? "Now playing" : "Paused")"
+        case .askAI: "Runs on your current clipboard text"
         }
     }
 

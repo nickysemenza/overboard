@@ -20,6 +20,10 @@ public enum LauncherResult: Sendable, Equatable, Identifiable {
     /// Spotify's currently-playing track, pinned as a footer under every
     /// result list while music is playing (or paused).
     case nowPlaying(NowPlayingTrack)
+    /// A free-text Apple Intelligence instruction run over the current
+    /// clipboard text — the launcher's "Ask AI" fallback row. Sits last in the
+    /// instant section (after the web row), above the pinned now-playing footer.
+    case askAI(prompt: String)
 
     public var id: String {
         switch self {
@@ -34,6 +38,7 @@ public enum LauncherResult: Sendable, Equatable, Identifiable {
         case let .recentSearch(query): "recent:\(query)"
         // State in the id re-renders the row on play↔pause.
         case let .nowPlaying(track): "nowplaying:\(track.trackID):\(track.state.rawValue)"
+        case let .askAI(prompt): "askai:\(prompt)"
         }
     }
 }

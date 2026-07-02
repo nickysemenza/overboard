@@ -35,6 +35,7 @@ struct LauncherSectionTests {
         #expect(LauncherSection.section(for: Self.calculation) == nil)
         #expect(LauncherSection.section(for: Self.webSearch) == nil)
         #expect(LauncherSection.section(for: Self.nowPlaying) == nil)
+        #expect(LauncherSection.section(for: .askAI(prompt: "make this concise")) == nil)
     }
 
     @Test func recentSearchMapsToRecentSection() {

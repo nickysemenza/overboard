@@ -123,6 +123,9 @@ public enum LauncherActions {
         case .nowPlaying:
             // ↩ copy link, ⌘↩ open Spotify.
             return [.copyLink, .openInSpotify]
+        case .askAI:
+            // ↩ run + paste the result, ⌘↩ run + copy it.
+            return [.paste, .copy]
         }
     }
 
