@@ -47,6 +47,77 @@ struct LauncherCommitRoutingTests {
         #expect(copied == [item.id])
     }
 
+    // MARK: - perform(_:) routing
+
+    @Test func performRoutesAppActions() async {
+        let url = URL(fileURLWithPath: "/Applications/Notes.app")
+        let viewModel = await makeViewModel(rows: [.app(name: "Notes", url: url)])
+
+        var opened: [URL] = []
+        var revealed: [URL] = []
+        var copiedPaths: [String] = []
+        var quit: [URL] = []
+        viewModel.onOpenFile = { opened.append($0) }
+        viewModel.onRevealFile = { revealed.append($0) }
+        viewModel.onCopyPath = { copiedPaths.append($0) }
+        viewModel.onQuitApp = { quit.append($0) }
+
+        viewModel.perform(.open)
+        viewModel.perform(.switchTo)
+        viewModel.perform(.revealInFinder)
+        viewModel.perform(.copyPath)
+        viewModel.perform(.quitApp)
+
+        #expect(opened == [url, url]) // open + switchTo both raise the app
+        #expect(revealed == [url])
+        #expect(copiedPaths == [url.path])
+        #expect(quit == [url])
+    }
+
+    @Test func performOpensLinkClip() async {
+        let item = Fixtures.item(kind: .link, preview: " https://example.com ")
+        let viewModel = await makeViewModel(rows: [.clip(item)])
+
+        var opened: [URL] = []
+        viewModel.onOpenClipLink = { opened.append($0) }
+
+        viewModel.perform(.openLink)
+
+        #expect(opened == [URL(string: "https://example.com")])
+    }
+
+    /// A whitespace-only link clip yields no open — the URL parse fails safely
+    /// (matches `ClipAction.openLink`'s permissive `URL(string:)` behavior).
+    @Test func performIgnoresBlankClipLink() async {
+        let item = Fixtures.item(kind: .link, preview: "   ")
+        let viewModel = await makeViewModel(rows: [.clip(item)])
+
+        var opened = false
+        viewModel.onOpenClipLink = { _ in opened = true }
+        viewModel.perform(.openLink)
+
+        #expect(!opened)
+    }
+
+    /// ⌘↩ on a recent-search row removes it (the second, palette-only-in-position
+    /// action), while ↩ still re-runs it.
+    @Test func commandOnRecentRemovesIt() {
+        Defaults[.launcherSearchHistory] = []
+        let viewModel = self.freshViewModel()
+        for query in ["one", "two"] {
+            viewModel.query = query
+            viewModel.recordCurrentQuery()
+        }
+        viewModel.query = ""
+        viewModel.scheduleSearch()
+        // Rows: [two, one]. ⌘↩ on "two" removes it.
+        viewModel.selectedIndex = 0
+        viewModel.commit(modifier: .command)
+
+        #expect(viewModel.results == [.recentSearch(query: "one")])
+        #expect(viewModel.history == ["one"])
+    }
+
     @Test func secondaryRowsSpliceAboveWebRow() async {
         let snippet = Snippet(title: "Standup", body: "notes")
         let clip = Fixtures.item(preview: "deploy checklist")
@@ -241,6 +312,53 @@ struct LauncherCommitRoutingTests {
 
         #expect(viewModel.query.isEmpty)
         #expect(viewModel.results.isEmpty)
+    }
+
+    // MARK: - ⌘K palette
+
+    @Test func paletteOpensFiltersAndRuns() async {
+        let item = Fixtures.item(kind: .link, preview: "https://example.com")
+        let viewModel = await makeViewModel(rows: [.clip(item)])
+
+        // Opens only when a row with actions is selected.
+        #expect(!viewModel.isPaletteOpen)
+        viewModel.togglePalette()
+        #expect(viewModel.isPaletteOpen)
+        // Link clip actions: paste, copy, paste plain, open link.
+        #expect(viewModel.filteredPaletteActions == [.paste, .copy, .pastePlain, .openLink])
+
+        // Case-insensitive substring filter over the label.
+        viewModel.paletteQuery = "LINK"
+        #expect(viewModel.filteredPaletteActions == [.openLink])
+
+        // Running the filtered action closes the palette and fires the effect.
+        var opened: [URL] = []
+        viewModel.onOpenClipLink = { opened.append($0) }
+        viewModel.paletteIndex = 0
+        viewModel.runPaletteAction()
+
+        #expect(!viewModel.isPaletteOpen)
+        #expect(opened == [URL(string: "https://example.com")])
+    }
+
+    @Test func paletteSelectionClampsToFilteredCount() async {
+        let viewModel = await makeViewModel(rows: [.clip(Fixtures.item(preview: "x"))])
+        viewModel.togglePalette()
+        // Three actions for a text clip; ↓ past the end clamps to the last.
+        viewModel.movePaletteSelection(1)
+        viewModel.movePaletteSelection(1)
+        viewModel.movePaletteSelection(1)
+        #expect(viewModel.paletteIndex == 2)
+        viewModel.movePaletteSelection(-5)
+        #expect(viewModel.paletteIndex == 0)
+    }
+
+    @Test func togglePaletteClosesWhenAlreadyOpen() async {
+        let viewModel = await makeViewModel(rows: [.command(.version)])
+        viewModel.togglePalette()
+        #expect(viewModel.isPaletteOpen)
+        viewModel.togglePalette()
+        #expect(!viewModel.isPaletteOpen)
     }
 
     // MARK: - Search history

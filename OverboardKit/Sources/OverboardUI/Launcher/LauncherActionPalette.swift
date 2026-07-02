@@ -1,11 +1,10 @@
 import OverboardCore
 import SwiftUI
 
-/// ⌘K command palette: fuzzy-filtered actions for the current selection,
-/// floating over the card strip. A thin projection of the drawer's
-/// `ClipAction`s onto the shared `CommandPaletteView` chrome.
-struct ActionPalette: View {
-    @Bindable var viewModel: DrawerViewModel
+/// ⌘K command palette for the launcher: the actions applicable to the selected
+/// row, projected onto the shared `CommandPaletteView` chrome.
+struct LauncherActionPalette: View {
+    @Bindable var viewModel: LauncherViewModel
 
     var body: some View {
         CommandPaletteView(
@@ -14,7 +13,7 @@ struct ActionPalette: View {
             },
             query: self.$viewModel.paletteQuery,
             index: self.$viewModel.paletteIndex,
-            emptyMessage: "No matching actions for this selection",
+            emptyMessage: "No actions for this result",
             onRun: { self.viewModel.runPaletteAction(at: $0) }
         )
     }

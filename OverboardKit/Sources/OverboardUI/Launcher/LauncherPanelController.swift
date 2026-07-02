@@ -37,6 +37,10 @@ public final class LauncherPanelController {
     public var onRunCommand: (LauncherCommand) -> Void = { _ in }
     public var onCopyNowPlayingLink: (NowPlayingTrack) -> Void = { _ in }
     public var onOpenSpotify: (NowPlayingTrack) -> Void = { _ in }
+    /// Quit a running app (⌘K → Quit); the URL is the app bundle's file URL.
+    public var onQuitApp: (URL) -> Void = { _ in }
+    /// Open a link clip's URL in the browser (⌘K → Open Link on a link clip).
+    public var onOpenClipLink: (URL) -> Void = { _ in }
     /// Called as the launcher is summoned, before rows render — the hook that
     /// reconciles the Spotify now-playing snapshot so a missed notification is
     /// caught exactly when the stale row would otherwise be visible.
@@ -52,8 +56,14 @@ public final class LauncherPanelController {
         /// LauncherSectionHeader: caption2 line (~13) + top padding (2) + the
         /// list VStack gap (2), rounded up — undershooting clips the last row.
         static let headerHeight: CGFloat = 18
+        /// Persistent footer action bar: its top Divider (~1) + two 8 pt VStack
+        /// gaps + the 20 pt bar. Added to every panel frame, rows or not.
+        static let footerHeight: CGFloat = 37
         /// Fraction of the screen's visible height where the bar's top sits.
         static let topFraction: CGFloat = 0.72
+        /// While the ⌘K palette is open, keep the panel at least this tall so the
+        /// overlay isn't clipped by a short (or empty) result list.
+        static let paletteMinHeight: CGFloat = 320
     }
 
     public init(store: ClipStore, viewModel: LauncherViewModel) {
@@ -133,6 +143,16 @@ public final class LauncherPanelController {
             self.hide()
             self.onOpenSpotify(track)
         }
+        viewModel.onQuitApp = { [weak self] url in
+            guard let self else { return }
+            self.hide()
+            self.onQuitApp(url)
+        }
+        viewModel.onOpenClipLink = { [weak self] url in
+            guard let self else { return }
+            self.hide()
+            self.onOpenClipLink(url)
+        }
         viewModel.onLayoutChanged = { [weak self] rows, headers in
             self?.resizePanel(rows: rows, headers: headers)
         }
@@ -208,6 +228,7 @@ public final class LauncherPanelController {
     public func hide() {
         // Every commit also funnels through here, so this captures Enter,
         // Escape, and click-outside alike.
+        self.viewModel.closePalette()
         self.viewModel.recordCurrentQuery()
         self.removeMonitors()
         self.panel?.orderOut(nil)
@@ -231,10 +252,17 @@ public final class LauncherPanelController {
 
     private func frame(forRows rows: Int, headers: Int, on screen: NSScreen) -> NSRect {
         let visible = screen.visibleFrame
-        var height = Metrics.barOnlyHeight
+        // The footer bar is always present, so its height is unconditional; the
+        // result-list block (divider + rows + headers) is only added when there
+        // are rows.
+        var height = Metrics.barOnlyHeight + Metrics.footerHeight
         if rows > 0 {
             height += Metrics.dividerHeight + CGFloat(rows) * Metrics.rowHeight
                 + CGFloat(headers) * Metrics.headerHeight
+        }
+        // While the palette is open, floor the height so the overlay has room.
+        if self.viewModel.isPaletteOpen {
+            height = max(height, Metrics.paletteMinHeight)
         }
         let top = visible.minY + visible.height * Metrics.topFraction
         return NSRect(
@@ -252,6 +280,19 @@ public final class LauncherPanelController {
         panel.setFrame(self.frame(forRows: rows, headers: headers, on: screen), display: true)
     }
 
+    /// Opens or closes the ⌘K palette and reflows the panel: opening floors the
+    /// height at `paletteMinHeight` (via `frame(forRows:)`), closing restores
+    /// the pre-palette height so the panel doesn't stay stretched.
+    private func setPaletteOpen(_ open: Bool) {
+        guard open != self.viewModel.isPaletteOpen else { return }
+        self.viewModel.togglePalette()
+        // `togglePalette` no-ops when there's nothing to show — only reflow if
+        // the state actually changed. On close, `frame(forRows:)` recomputes the
+        // natural (footer + rows) height, so the panel shrinks back on its own.
+        guard self.viewModel.isPaletteOpen == open else { return }
+        self.resizePanel(rows: self.viewModel.results.count, headers: self.viewModel.headerCount)
+    }
+
     private func screenWithMouse() -> NSScreen {
         let mouse = NSEvent.mouseLocation
         return NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) }
@@ -265,6 +306,28 @@ public final class LauncherPanelController {
         // Everything not handled here falls through to the text field.
         self.keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self, let panel = self.panel, event.window === panel else { return event }
+
+            // The ⌘K palette owns the keyboard while open (mirrors the drawer):
+            // esc closes only the palette, ↑/↓ move its selection, ↩ runs it.
+            if self.viewModel.isPaletteOpen {
+                switch event.keyCode {
+                case 53: // esc closes the palette, not the launcher
+                    self.setPaletteOpen(false)
+                    return nil
+                case 36, 76: // return runs the highlighted action
+                    self.viewModel.runPaletteAction()
+                    return nil
+                case 126: // up
+                    self.viewModel.movePaletteSelection(-1)
+                    return nil
+                case 125: // down
+                    self.viewModel.movePaletteSelection(1)
+                    return nil
+                default: // typing filters
+                    return event
+                }
+            }
+
             switch event.keyCode {
             case 53: // esc
                 self.hide()
@@ -274,6 +337,9 @@ public final class LauncherPanelController {
                 return nil
             case 125: // down
                 self.viewModel.moveSelection(1)
+                return nil
+            case 40 where event.modifierFlags.contains(.command): // ⌘K action palette
+                self.setPaletteOpen(!self.viewModel.isPaletteOpen)
                 return nil
             case 51 where event.modifierFlags.contains(.command): // ⌘⌫
                 // Delete the highlighted recent search; fall through to normal

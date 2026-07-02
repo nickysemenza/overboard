@@ -368,6 +368,15 @@ final class AppServices {
                 NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
             }
         }
+        self.launcher.onQuitApp = { url in
+            // Match the running instance by its bundle URL and ask it to quit.
+            NSWorkspace.shared.runningApplications
+                .first { $0.bundleURL == url }?
+                .terminate()
+        }
+        self.launcher.onOpenClipLink = { url in
+            NSWorkspace.shared.open(url)
+        }
     }
 
     /// SwiftUI's stable identifier for the `Settings` scene's window.
