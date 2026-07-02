@@ -18,18 +18,17 @@ public struct LauncherView: View {
             self.searchBar
             if !self.viewModel.results.isEmpty {
                 Divider()
-                if self.isShowingRecents {
-                    Text("Recent")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                        .textCase(.uppercase)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 8)
-                        .padding(.top, 2)
-                }
                 VStack(spacing: 2) {
-                    ForEach(Array(self.viewModel.results.enumerated()), id: \.element.id) { index, result in
-                        LauncherRow(result: result, store: self.store, isSelected: index == self.viewModel.selectedIndex)
+                    // Per-run section headers from `annotate`; the flat index
+                    // stays the selection key, headers are purely decorative.
+                    ForEach(
+                        Array(LauncherSection.annotate(self.viewModel.results).enumerated()),
+                        id: \.element.result.id
+                    ) { index, row in
+                        if let header = row.header {
+                            LauncherSectionHeader(title: header)
+                        }
+                        LauncherRow(result: row.result, store: self.store, isSelected: index == self.viewModel.selectedIndex)
                             .contentShape(RoundedRectangle(cornerRadius: 8))
                             .onTapGesture {
                                 self.viewModel.selectedIndex = index
@@ -64,14 +63,6 @@ public struct LauncherView: View {
         }
     }
 
-    /// The empty field surfaces recent searches; label that section so the rows
-    /// read as an intentional "Recent" list rather than live search results.
-    /// Keyed on the actual rows, not just an empty query, so a lone pinned
-    /// now-playing row on the empty field isn't mislabeled "Recent".
-    private var isShowingRecents: Bool {
-        self.viewModel.results.contains { if case .recentSearch = $0 { true } else { false } }
-    }
-
     private var searchBar: some View {
         HStack(spacing: 8) {
             Image(systemName: "bolt.fill")
@@ -83,6 +74,23 @@ public struct LauncherView: View {
         }
         .padding(.horizontal, 6)
         .frame(height: 30)
+    }
+}
+
+/// Section label above the first row of each provider run ("Apps", "Files",
+/// "Recent", …). Panel height budgets `Metrics.headerHeight` per header, so
+/// keep this in sync with LauncherPanelController if the styling changes.
+struct LauncherSectionHeader: View {
+    let title: String
+
+    var body: some View {
+        Text(self.title)
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(.tertiary)
+            .textCase(.uppercase)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 8)
+            .padding(.top, 2)
     }
 }
 

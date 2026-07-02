@@ -42,8 +42,8 @@ public final class LauncherViewModel {
     public var onRunCommand: (LauncherCommand) -> Void = { _ in }
     public var onCopyNowPlayingLink: (NowPlayingTrack) -> Void = { _ in }
     public var onOpenSpotify: (NowPlayingTrack) -> Void = { _ in }
-    /// Lets the panel controller resize as rows come and go.
-    public var onResultCountChanged: (Int) -> Void = { _ in }
+    /// Lets the panel controller resize as rows and section headers come and go.
+    public var onLayoutChanged: (_ rows: Int, _ headers: Int) -> Void = { _, _ in }
 
     /// Rows pinned under every result list (the Spotify now-playing footer).
     /// Evaluated on each `setResults` pass, so it covers the empty-query recents
@@ -54,6 +54,10 @@ public final class LauncherViewModel {
     private let instantRouter: QueryRouter
     private let secondaryProviders: [any LauncherProvider]
     private var searchTask: Task<Void, Never>?
+    /// Header count of the current `results` — the panel controller sizes with
+    /// it, and `setResults` only fires `onLayoutChanged` when it (or the row
+    /// count) actually moves.
+    public private(set) var headerCount = 0
 
     /// Instant providers (apps) answer from memory and render on every
     /// keystroke alongside the calculator; secondary providers (files) run
@@ -212,13 +216,16 @@ public final class LauncherViewModel {
         // recents, the instant pass, and the debounced splice alike.
         let combined = newResults + self.pinnedResults()
         obTrace("launcher results: \(combined.map(\.id))")
-        let countChanged = combined.count != self.results.count
+        // Same annotation the view renders — header rows add panel height too.
+        let headers = LauncherSection.annotate(combined).count { $0.header != nil }
+        let layoutChanged = combined.count != self.results.count || headers != self.headerCount
         self.results = combined
+        self.headerCount = headers
         if self.selectedIndex >= combined.count {
             self.selectedIndex = max(combined.count - 1, 0)
         }
-        if countChanged {
-            self.onResultCountChanged(combined.count)
+        if layoutChanged {
+            self.onLayoutChanged(combined.count, headers)
         }
     }
 }
