@@ -6,6 +6,7 @@ struct OverboardApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @Environment(\.openWindow) private var openWindow
     private let updates = AppServices.shared.updates
+    private let captureState = AppServices.shared.captureState
 
     var body: some Scene {
         MenuBarExtra {
@@ -33,6 +34,12 @@ struct OverboardApp: App {
 
             Divider()
 
+            Button(self.captureState.isPaused ? "Resume Capture" : "Pause Capture") {
+                AppServices.shared.setCapturePaused(!self.captureState.isPaused)
+            }
+
+            Divider()
+
             // Not SettingsLink: it can't raise an already-open Settings window
             // sitting behind another app (a menu-bar app can't self-activate).
             // AppServices.openSettings handles create / re-show / front uniformly.
@@ -46,7 +53,11 @@ struct OverboardApp: App {
             }
             .keyboardShortcut("q")
         } label: {
-            MenuBarLabel(signal: AppServices.shared.signal, updates: self.updates)
+            MenuBarLabel(
+                signal: AppServices.shared.signal,
+                updates: self.updates,
+                captureState: self.captureState
+            )
         }
 
         Window("Overboard History", id: "history") {
@@ -68,13 +79,22 @@ struct OverboardApp: App {
 }
 
 /// The boat bounces whenever something is captured, and gains a badge when a
-/// newer release is waiting to be downloaded.
+/// newer release is waiting to be downloaded. While capture is paused it dims
+/// to the secondary style so an off clipboard is visible at a glance.
 private struct MenuBarLabel: View {
     let signal: CaptureSignal
     let updates: UpdateChecker
+    let captureState: CaptureState
 
     var body: some View {
-        Image(systemName: self.updates.availableTag != nil ? "sailboat.fill.circle" : "sailboat.fill")
+        Image(systemName: self.symbolName)
             .symbolEffect(.bounce, value: self.signal.count)
+            // Dim the boat while paused so an off clipboard is obvious. Update
+            // state still owns the circle-badge variant; pause owns the opacity.
+            .foregroundStyle(self.captureState.isPaused ? .secondary : .primary)
+    }
+
+    private var symbolName: String {
+        self.updates.availableTag != nil ? "sailboat.fill.circle" : "sailboat.fill"
     }
 }

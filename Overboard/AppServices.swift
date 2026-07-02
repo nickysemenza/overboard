@@ -14,6 +14,28 @@ final class CaptureSignal {
     }
 }
 
+/// Whether clipboard capture is paused (via `:pause` or the menu-bar toggle).
+/// Session-only — deliberately NOT persisted, so a relaunch always resumes
+/// capturing and the user can't get stuck with a silently-off clipboard.
+///
+/// The `@Observable`, main-actor `isPaused` drives the UI (menu-bar icon and
+/// toggle). `snapshot` mirrors the same value behind a lock so the launcher's
+/// `CommandProvider.isIncluded` — a `@Sendable` closure that runs off the main
+/// actor inside a task group — can read it without hopping actors. `setPaused`
+/// is the single writer that keeps the two in sync.
+@MainActor
+@Observable
+final class CaptureState {
+    private(set) var isPaused = false
+    /// Thread-safe mirror of `isPaused`, readable from any executor.
+    nonisolated let snapshot = OSAllocatedUnfairLock(initialState: false)
+
+    func setPaused(_ paused: Bool) {
+        self.isPaused = paused
+        self.snapshot.withLock { $0 = paused }
+    }
+}
+
 /// Composition root: owns the store, monitor, overlay, hotkey, and paste-back.
 @MainActor
 final class AppServices {
@@ -26,6 +48,7 @@ final class AppServices {
     nonisolated static let isDemo = ProcessInfo.processInfo.environment["OVERBOARD_DEMO"] == "1"
 
     let signal = CaptureSignal()
+    let captureState = CaptureState()
     let updates = UpdateChecker()
 
     let store: ClipStore
@@ -64,6 +87,8 @@ final class AppServices {
         self.overlay = OverlayController(store: self.store, stack: self.stack)
         let spotify = SpotifyNowPlayingMonitor()
         self.spotify = spotify
+        let pausedSnapshot = self.captureState.snapshot
+        let store = self.store
         let launcherViewModel = LauncherViewModel(
             instantProviders: [
                 AppSearchProvider(index: AppIndex(), limit: 5) {
@@ -86,7 +111,26 @@ final class AppServices {
                     : ConditionalProvider(FileSearchProvider(search: SpotlightFileSearch(), limit: 8)) {
                         Defaults[.launcherFileResults]
                     },
-            ]
+            ],
+            // `isIncluded` runs off the main actor (inside QueryRouter's task
+            // group), so it reads the lock-backed paused snapshot rather than
+            // the main-actor `isPaused`. The store lookup is a normal await.
+            commandProvider: CommandProvider(
+                isIncluded: { command in
+                    let paused = pausedSnapshot.withLock { $0 }
+                    switch command {
+                    // Only one of pause/resume applies at a time.
+                    case .pause: return !paused
+                    case .resume: return paused
+                    default: return true
+                    }
+                },
+                dynamicSubtitle: { command in
+                    guard command == .stats else { return nil }
+                    guard let stats = try? await store.libraryStats() else { return nil }
+                    return Self.statsSubtitle(stats)
+                }
+            )
         )
         // Pin the Spotify now-playing row under every result list when enabled
         // and a track is present. The monitor stays nil in demo mode (never
@@ -299,9 +343,17 @@ final class AppServices {
             let expanded = SnippetTemplate.expand(snippet.body, clipboard: clipboard)
             self.copyString(expanded, hud: "Snippet copied — ⌘V to paste")
         }
-        self.launcher.onRunCommand = { command in
+        self.launcher.onRunCommand = { [weak self] command in
+            guard let self else { return }
             switch command {
-            case .version: Self.openSettings()
+            // `:stats` has no action of its own — ↩ opens Settings, where the
+            // full library breakdown lives (the row subtitle is the summary).
+            // Settings has no tab-selection binding today, so this opens the
+            // default (General) tab rather than History specifically.
+            case .version, .stats, .settings: Self.openSettings()
+            case .pause: self.setCapturePaused(true)
+            case .resume: self.setCapturePaused(false)
+            case .clear: self.confirmAndClearHistory()
             }
         }
         self.launcher.onCopyNowPlayingLink = { [weak self] track in
@@ -354,6 +406,77 @@ final class AppServices {
 
     private static func settingsWindow() -> NSWindow? {
         NSApp.windows.first { $0.identifier?.rawValue == self.settingsWindowID }
+    }
+
+    // MARK: - Capture pause / resume
+
+    /// Pauses or resumes clipboard capture. Drives both `:pause`/`:resume` and
+    /// the menu-bar toggle, and flips `captureState` so the menu-bar icon and
+    /// the command list (`:pause` vs `:resume`) stay in sync. No-op in demo
+    /// mode, where the monitor is never started.
+    func setCapturePaused(_ paused: Bool) {
+        guard !Self.isDemo, self.captureState.isPaused != paused else { return }
+        self.captureState.setPaused(paused)
+        if paused {
+            self.monitor.stop()
+            HUDController.shared.flash("Clipboard capture paused")
+        } else {
+            self.monitor.start()
+            HUDController.shared.flash("Clipboard capture resumed")
+        }
+    }
+
+    /// `:clear` — confirm, then wipe all history (pinned items survive `purge`).
+    /// The launcher panel has already hidden itself by the time `onRunCommand`
+    /// fires, so the modal alert isn't stacked over the non-activating launcher.
+    private func confirmAndClearHistory() {
+        let alert = NSAlert()
+        alert.alertStyle = .critical
+        alert.messageText = "Clear all clipboard history?"
+        alert.informativeText = "Pinned items are kept."
+        alert.addButton(withTitle: "Clear")
+        alert.addButton(withTitle: "Cancel")
+        NSApp.activate(ignoringOtherApps: true)
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        Task {
+            do {
+                try await self.store.purge(keepingLatest: 0)
+                HUDController.shared.flash("Clipboard history cleared")
+            } catch {
+                self.logger.error("clear history failed: \(String(describing: error), privacy: .public)")
+                HUDController.shared.flash("Couldn't clear history")
+            }
+        }
+    }
+
+    /// One-line library summary for the `:stats` row, e.g.
+    /// "1,234 items · 812 text · 96 links · 12 images". Shows the top kinds from
+    /// `byKind` (already most-frequent first); no byte total.
+    /// `nonisolated` so the launcher's off-main `dynamicSubtitle` closure can
+    /// call it — it's pure.
+    private nonisolated static func statsSubtitle(_ stats: LibraryStats) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        func number(_ value: Int) -> String {
+            formatter.string(from: NSNumber(value: value)) ?? String(value)
+        }
+        let itemWord = stats.total == 1 ? "item" : "items"
+        var parts = ["\(number(stats.total)) \(itemWord)"]
+        for kindCount in stats.byKind.prefix(3) {
+            parts.append("\(number(kindCount.count)) \(Self.kindLabel(kindCount.kind, count: kindCount.count))")
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    /// Human, pluralized name for a kind in the stats summary ("text", "links").
+    private nonisolated static func kindLabel(_ kind: ItemKind, count: Int) -> String {
+        switch kind {
+        case .text: "text"
+        case .link: count == 1 ? "link" : "links"
+        case .image: count == 1 ? "image" : "images"
+        case .file: count == 1 ? "file" : "files"
+        case .color: count == 1 ? "color" : "colors"
+        }
     }
 
     private func registerHotkeys() {

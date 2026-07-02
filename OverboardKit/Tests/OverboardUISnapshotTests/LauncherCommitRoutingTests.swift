@@ -83,6 +83,19 @@ struct LauncherCommitRoutingTests {
         #expect(ran == [.version])
     }
 
+    /// A command row with a resolved subtitle still routes on the command, not
+    /// the subtitle (e.g. the live `:stats` row).
+    @Test func commandRowWithSubtitleRoutesToRunCommand() async {
+        let viewModel = await makeViewModel(rows: [.command(.stats, subtitle: "42 items")])
+
+        var ran: [LauncherCommand] = []
+        viewModel.onRunCommand = { ran.append($0) }
+
+        viewModel.commit()
+
+        #expect(ran == [.stats])
+    }
+
     @Test func commandModeSkipsSecondaryRows() async {
         // ":"-queries are instant-only — no clip/file/Spotlight splice. The
         // command row itself comes from the real CommandProvider in the
