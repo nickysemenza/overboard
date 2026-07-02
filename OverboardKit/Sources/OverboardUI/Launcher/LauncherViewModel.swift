@@ -224,11 +224,12 @@ public final class LauncherViewModel {
     public func commit(modifier: CommitModifier = .none) {
         let actions = self.selectedActions
         guard !actions.isEmpty else { return }
+        // Modifiers on rows with fewer actions fall back to ↩ — single-action
+        // rows (web search, settings panes, commands) must not index past the
+        // list, and snippet/calc ⌥↩ keeps its old alias-of-↩ behavior.
         let index: Int = switch modifier {
         case .none: 0
-        case .command: 1
-        // ⌥↩ maps to the third action; rows without one (snippet, calc) fall
-        // back to ↩ — matching the old commit's snippet/calc option behavior.
+        case .command: actions.indices.contains(1) ? 1 : 0
         case .option: actions.indices.contains(2) ? 2 : 0
         }
         self.perform(actions[index])

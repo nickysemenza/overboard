@@ -154,6 +154,20 @@ struct LauncherCommitRoutingTests {
         #expect(ran == [.version])
     }
 
+    /// ⌘↩ on a single-action row must fall back to the primary action rather
+    /// than index past the action list (regression: crashed on web-search rows).
+    @Test func commandModifierOnSingleActionRowFallsBackToPrimary() async {
+        let url = URL(string: "https://example.com/search?q=zzz")!
+        let viewModel = await makeViewModel(rows: [.webSearch(query: "zzz", url: url)])
+
+        var opened: [URL] = []
+        viewModel.onOpenWebSearch = { opened.append($0) }
+
+        viewModel.commit(modifier: .command)
+
+        #expect(opened == [url])
+    }
+
     /// A command row with a resolved subtitle still routes on the command, not
     /// the subtitle (e.g. the live `:stats` row).
     @Test func commandRowWithSubtitleRoutesToRunCommand() async {
