@@ -95,6 +95,10 @@ public actor ClipStore {
                 return (bumped, false)
             }
 
+            // Never record where a credential came from: secrets store NULL
+            // provenance even if the snapshot carried a browser URL.
+            let sourceURL = classified.isSecret ? nil : snapshot.sourceURL
+            let sourceTitle = classified.isSecret ? nil : snapshot.sourceTitle
             let item = ClipItem(
                 contentHash: classified.contentHash,
                 kind: classified.kind,
@@ -110,21 +114,25 @@ public actor ClipStore {
                 lineCount: classified.lineCount,
                 pixelWidth: classified.pixelWidth,
                 pixelHeight: classified.pixelHeight,
-                fileCount: classified.fileCount
+                fileCount: classified.fileCount,
+                sourceURL: sourceURL,
+                sourceTitle: sourceTitle
             )
             try db.execute(
                 sql: """
                 INSERT INTO item (id, contentHash, kind, previewText, searchText,
                                   sourceBundleID, sourceAppName, byteSize, isPinned, isSecret,
                                   useCount, createdAt, lastUsedAt, updatedAt, lamport, deletedAt,
-                                  charCount, lineCount, pixelWidth, pixelHeight, fileCount)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 1, ?, ?, ?, 0, NULL, ?, ?, ?, ?, ?)
+                                  charCount, lineCount, pixelWidth, pixelHeight, fileCount,
+                                  sourceURL, sourceTitle)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 1, ?, ?, ?, 0, NULL, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 arguments: [
                     item.id, item.contentHash, item.kind.rawValue, item.previewText,
                     classified.searchText, item.sourceBundleID, item.sourceAppName,
                     item.byteSize, item.isSecret, now, now, now,
                     item.charCount, item.lineCount, item.pixelWidth, item.pixelHeight, item.fileCount,
+                    item.sourceURL, item.sourceTitle,
                 ]
             )
 

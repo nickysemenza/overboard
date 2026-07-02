@@ -289,7 +289,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
-				INFOPLIST_KEY_NSAppleEventsUsageDescription = "Overboard asks Spotify for the currently playing track.";
+				INFOPLIST_KEY_NSAppleEventsUsageDescription = "Overboard asks Spotify for the current track and your browser for the page you copied from.";
 				DEVELOPMENT_TEAM = HDPU3NY6TJ;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
@@ -314,7 +314,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
-				INFOPLIST_KEY_NSAppleEventsUsageDescription = "Overboard asks Spotify for the currently playing track.";
+				INFOPLIST_KEY_NSAppleEventsUsageDescription = "Overboard asks Spotify for the current track and your browser for the page you copied from.";
 				DEVELOPMENT_TEAM = HDPU3NY6TJ;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;

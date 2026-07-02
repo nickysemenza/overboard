@@ -17,17 +17,25 @@ public struct PasteboardSnapshot: Sendable, Equatable {
     public var reps: [Rep]
     public var sourceBundleID: String?
     public var sourceAppName: String?
+    /// Back-to-source provenance: the front-tab URL/title of the browser the
+    /// copy came from, attached after capture (nil for non-browser copies).
+    public var sourceURL: String?
+    public var sourceTitle: String?
     public var capturedAt: Date
 
     public init(
         reps: [Rep],
         sourceBundleID: String?,
         sourceAppName: String?,
+        sourceURL: String? = nil,
+        sourceTitle: String? = nil,
         capturedAt: Date = Date()
     ) {
         self.reps = reps
         self.sourceBundleID = sourceBundleID
         self.sourceAppName = sourceAppName
+        self.sourceURL = sourceURL
+        self.sourceTitle = sourceTitle
         self.capturedAt = capturedAt
     }
 }

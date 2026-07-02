@@ -2,12 +2,15 @@ import Foundation
 @testable import OverboardCore
 import Testing
 
-private func makeItem(kind: ItemKind, preview: String = "p", aiTitle: String? = nil) -> ClipItem {
+private func makeItem(
+    kind: ItemKind, preview: String = "p", aiTitle: String? = nil, sourceURL: String? = nil
+) -> ClipItem {
     ClipItem(
         contentHash: UUID().uuidString, kind: kind, previewText: preview,
         sourceBundleID: nil, sourceAppName: nil, byteSize: 1,
         aiTitle: aiTitle,
-        createdAt: Date(), lastUsedAt: Date(), updatedAt: Date()
+        createdAt: Date(), lastUsedAt: Date(), updatedAt: Date(),
+        sourceURL: sourceURL
     )
 }
 
@@ -130,5 +133,37 @@ struct ClipActionTests {
     @Test func wordCount() {
         let effect = ClipAction.wordCount.run([input(.text, text: "three short words")])
         #expect(effect == .showMessage("3 words · 17 characters"))
+    }
+
+    @Test func openSourceApplicability() {
+        let noSource = makeItem(kind: .text, sourceURL: nil)
+        let emptySource = makeItem(kind: .text, sourceURL: "")
+        let withSource = makeItem(kind: .text, sourceURL: "https://example.com/page")
+
+        // No / empty source URL → not applicable.
+        #expect(!ClipAction.applicable(to: [noSource]).contains(.openSource))
+        #expect(!ClipAction.applicable(to: [emptySource]).contains(.openSource))
+        // A non-empty source URL → applicable, regardless of kind.
+        #expect(ClipAction.applicable(to: [withSource]).contains(.openSource))
+        #expect(ClipAction.applicable(to: [makeItem(kind: .image, sourceURL: "https://ex.com")])
+            .contains(.openSource))
+        // Single-selection only — never on a multi-selection.
+        #expect(!ClipAction.applicable(to: [withSource, withSource]).contains(.openSource))
+    }
+
+    @Test func openSourceOpensTheSourceURL() throws {
+        let item = makeItem(kind: .text, sourceURL: "https://example.com/article")
+        let effect = ClipAction.openSource.run([
+            ActionInput(item: item, plainText: "some copied text", fileURLs: []),
+        ])
+        #expect(try effect == .openURLs([#require(URL(string: "https://example.com/article"))]))
+    }
+
+    @Test func openSourceWithoutURLReportsMessage() {
+        let item = makeItem(kind: .text, sourceURL: nil)
+        let effect = ClipAction.openSource.run([
+            ActionInput(item: item, plainText: "text", fileURLs: []),
+        ])
+        #expect(effect == .showMessage("No source page"))
     }
 }

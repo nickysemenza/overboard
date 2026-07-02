@@ -37,6 +37,11 @@ public struct ClipItem: Codable, Sendable, Equatable, Identifiable {
     public var linkDescription: String?
     public var faviconData: Data?
     public var previewImageData: Data?
+    /// Back-to-source provenance (migration v4): the front-tab URL/title of the
+    /// browser this clip was copied from. nil for non-browser copies and for
+    /// secrets (we never record where a credential came from).
+    public var sourceURL: String?
+    public var sourceTitle: String?
 
     public init(
         id: String = UUID().uuidString,
@@ -65,7 +70,9 @@ public struct ClipItem: Codable, Sendable, Equatable, Identifiable {
         linkTitle: String? = nil,
         linkDescription: String? = nil,
         faviconData: Data? = nil,
-        previewImageData: Data? = nil
+        previewImageData: Data? = nil,
+        sourceURL: String? = nil,
+        sourceTitle: String? = nil
     ) {
         self.id = id
         self.contentHash = contentHash
@@ -94,6 +101,8 @@ public struct ClipItem: Codable, Sendable, Equatable, Identifiable {
         self.linkDescription = linkDescription
         self.faviconData = faviconData
         self.previewImageData = previewImageData
+        self.sourceURL = sourceURL
+        self.sourceTitle = sourceTitle
     }
 }
 

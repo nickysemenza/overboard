@@ -215,6 +215,32 @@ struct ClipStoreTests {
         #expect(recent.first?.previewText == "older")
         #expect(recent.first?.useCount == 2)
     }
+
+    @Test func ingestPersistsBrowserProvenance() async throws {
+        let store = try makeStore()
+        var snapshot = textSnapshot("from a web page")
+        snapshot.sourceURL = "https://example.com/article"
+        snapshot.sourceTitle = "An Example Article"
+        try await store.ingest(snapshot)
+
+        let item = try await store.recent(limit: 1).first
+        #expect(item?.sourceURL == "https://example.com/article")
+        #expect(item?.sourceTitle == "An Example Article")
+    }
+
+    @Test func secretIngestNeverRecordsProvenance() async throws {
+        let store = try makeStore()
+        // A secret payload with provenance attached: the URL/title must not be
+        // persisted — we never record where a credential came from.
+        var snapshot = textSnapshot("AKIAIOSFODNN7EXAMPLE")
+        snapshot.sourceURL = "https://secret-console.example.com/keys"
+        snapshot.sourceTitle = "IAM Console"
+        let item = try await store.ingest(snapshot)
+
+        #expect(item?.isSecret == true)
+        #expect(item?.sourceURL == nil)
+        #expect(item?.sourceTitle == nil)
+    }
 }
 
 // MARK: - FTSQuery
