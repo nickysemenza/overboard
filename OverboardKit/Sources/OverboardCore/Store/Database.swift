@@ -188,6 +188,15 @@ enum Migrations {
             try db.execute(sql: "ALTER TABLE item ADD COLUMN previewImageData BLOB")
         }
 
+        // v4: back-to-source provenance. When a copy comes from a browser we
+        // record that browser's front-tab URL + title, so the clip can link
+        // back to where it came from. No backfill — provenance is only knowable
+        // at capture time; history predating this can't be reconstructed.
+        migrator.registerMigration("v4") { db in
+            try db.execute(sql: "ALTER TABLE item ADD COLUMN sourceURL TEXT")
+            try db.execute(sql: "ALTER TABLE item ADD COLUMN sourceTitle TEXT")
+        }
+
         return migrator
     }
 }

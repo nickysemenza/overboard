@@ -179,7 +179,18 @@ final class AppServices {
         self.ingestTask = Task(priority: .utility) { [logger] in
             for await snapshot in snapshots {
                 do {
-                    let snapshot = Self.applyingAutoTransforms(to: snapshot)
+                    var snapshot = Self.applyingAutoTransforms(to: snapshot)
+                    // Browser copies carry back-to-source provenance: ask the
+                    // browser for its front-tab URL/title before storing. Bounded
+                    // by the fetch's own ~500ms timeout, and only round-trips at
+                    // all when the source app is a scriptable browser.
+                    if let bundleID = snapshot.sourceBundleID,
+                       BrowserScript.dialect(forBundleID: bundleID) != nil,
+                       let provenance = await BrowserProvenanceService.fetch(bundleID: bundleID)
+                    {
+                        snapshot.sourceURL = provenance.url
+                        snapshot.sourceTitle = provenance.title
+                    }
                     if let item = try await store.ingest(snapshot) {
                         self.signal.bump()
                         // Fire-and-forget so a slow OCR/LLM pass never delays

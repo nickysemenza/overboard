@@ -23,6 +23,9 @@ struct PreviewPane: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             self.header
+            if let item, let source = item.sourceURL, !source.isEmpty {
+                self.provenanceRow(source: source, title: item.sourceTitle)
+            }
             self.content
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             if !self.related.isEmpty {
@@ -82,6 +85,31 @@ struct PreviewPane: View {
                 }
             }
         }
+    }
+
+    /// Back-to-source provenance: a clickable row linking to the browser page
+    /// this clip was copied from. Shows the page title when known, else the URL
+    /// host. Opens the source in the default browser via NSWorkspace.
+    private func provenanceRow(source: String, title: String?) -> some View {
+        let label = (title?.isEmpty == false ? title : nil)
+            ?? ClipItem.linkHost(fromPreview: source)
+            ?? source
+        return Button {
+            if let url = URL(string: source) {
+                NSWorkspace.shared.open(url)
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "globe")
+                Text(label)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+        .buttonStyle(.plain)
+        .help("Open source page — \(source)")
     }
 
     @ViewBuilder

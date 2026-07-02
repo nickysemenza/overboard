@@ -58,6 +58,7 @@ public struct ClipActionInfo: Sendable {
 public enum ClipAction: String, CaseIterable, Identifiable, Sendable {
     // Single item
     case openLink
+    case openSource
     case openAllLinks
     case copyAsMarkdownLink
     case revealInFinder
@@ -79,6 +80,7 @@ public enum ClipAction: String, CaseIterable, Identifiable, Sendable {
     public var label: String {
         switch self {
         case .openLink: "Open Link in Browser"
+        case .openSource: "Open Source Page"
         case .openAllLinks: "Open All Links"
         case .copyAsMarkdownLink: "Copy as Markdown Link"
         case .revealInFinder: "Reveal in Finder"
@@ -96,6 +98,7 @@ public enum ClipAction: String, CaseIterable, Identifiable, Sendable {
     public var systemImage: String {
         switch self {
         case .openLink, .openAllLinks: "safari"
+        case .openSource: "arrow.uturn.backward.circle"
         case .copyAsMarkdownLink: "text.badge.checkmark"
         case .revealInFinder: "folder"
         case .saveImageToDownloads: "square.and.arrow.down"
@@ -116,6 +119,8 @@ public enum ClipAction: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .openLink, .copyAsMarkdownLink:
             ClipActionInfo(kinds: [.link], selection: .single, condition: nil)
+        case .openSource:
+            ClipActionInfo(kinds: [], selection: .single, condition: "copied from a browser")
         case .openAllLinks:
             ClipActionInfo(kinds: [.text], selection: .single, condition: "contains a link")
         case .revealInFinder:
@@ -154,6 +159,8 @@ public enum ClipAction: String, CaseIterable, Identifiable, Sendable {
             guard Set(items.map(\.kind)).isSubset(of: info.kinds) else { return false }
         }
         switch self {
+        case .openSource:
+            return !(first.sourceURL ?? "").isEmpty
         case .openAllLinks:
             return (first.previewText ?? "").lowercased().contains("http")
         case .prettyPrintJSON:
@@ -181,6 +188,12 @@ public enum ClipAction: String, CaseIterable, Identifiable, Sendable {
             guard let text = texts.first,
                   let url = URL(string: text.trimmingCharacters(in: .whitespacesAndNewlines))
             else { return .showMessage("No URL found") }
+            return .openURLs([url])
+
+        case .openSource:
+            guard let source = inputs.first?.item.sourceURL,
+                  let url = URL(string: source)
+            else { return .showMessage("No source page") }
             return .openURLs([url])
 
         case .openAllLinks:
