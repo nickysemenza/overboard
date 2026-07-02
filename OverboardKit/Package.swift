@@ -8,6 +8,7 @@ let package = Package(
         .library(name: "OverboardCore", targets: ["OverboardCore"]),
         .library(name: "OverboardMac", targets: ["OverboardMac"]),
         .library(name: "OverboardUI", targets: ["OverboardUI"]),
+        .executable(name: "overboard", targets: ["OverboardCLI"]),
     ],
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.0.0"),
@@ -47,9 +48,17 @@ let package = Package(
                 .product(name: "MarkdownUI", package: "swift-markdown-ui"),
             ]
         ),
+        .executableTarget(
+            name: "OverboardCLI",
+            dependencies: ["OverboardCore"]
+        ),
         .testTarget(
             name: "OverboardCoreTests",
             dependencies: ["OverboardCore"]
+        ),
+        .testTarget(
+            name: "OverboardCLITests",
+            dependencies: ["OverboardCLI"]
         ),
         .testTarget(
             name: "OverboardUISnapshotTests",

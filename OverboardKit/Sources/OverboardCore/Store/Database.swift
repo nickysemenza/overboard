@@ -27,6 +27,44 @@ public enum OverboardDatabase {
         return pool
     }
 
+    /// Errors an out-of-process reader (the CLI) can hit opening the shared DB
+    /// read-only. Kept small and public so the caller can render a friendly
+    /// message and choose an exit code without inspecting GRDB internals.
+    public enum ReadOnlyOpenError: Error, CustomStringConvertible {
+        /// No database file exists yet — the app has never run.
+        case missing
+        /// The file exists but its schema predates this binary's migrations.
+        case schemaOutOfDate
+
+        public var description: String {
+            switch self {
+            case .missing:
+                "No Overboard database found — launch the app once to create it."
+            case .schemaOutOfDate:
+                "Overboard's database schema is out of date — launch the app once to migrate."
+            }
+        }
+    }
+
+    /// Read-only open for out-of-process readers (the CLI). Never migrates; the
+    /// app owns the schema. Throws ``ReadOnlyOpenError`` when the file is absent
+    /// or its schema hasn't caught up to this binary's migrations.
+    public static func openReadOnly(at directory: URL) throws -> DatabasePool {
+        let path = directory.appendingPathComponent("overboard.sqlite").path
+        guard FileManager.default.fileExists(atPath: path) else {
+            throw ReadOnlyOpenError.missing
+        }
+        var config = Configuration()
+        config.readonly = true
+        let pool = try DatabasePool(path: path, configuration: config)
+        // The app owns migrations; a reader that runs ahead of the app would see
+        // a schema it can't interpret. Refuse rather than fetch against columns
+        // that may not exist yet.
+        let ready = try pool.read { try Migrations.migrator.hasCompletedMigrations($0) }
+        guard ready else { throw ReadOnlyOpenError.schemaOutOfDate }
+        return pool
+    }
+
     /// In-memory database for tests.
     public static func openInMemory() throws -> DatabaseQueue {
         let queue = try DatabaseQueue()
