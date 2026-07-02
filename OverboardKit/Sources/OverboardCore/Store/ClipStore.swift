@@ -781,6 +781,17 @@ public actor ClipStore {
         return try String(data: self.payload(for: rep), encoding: .utf8)
     }
 
+    /// Absolute filesystem paths for a `.file` clip, decoded from the stored
+    /// `fileURLs` representation. Empty for non-file clips or when the payload
+    /// is missing. Used by the CLI's `get` to print paths for file clips.
+    public func filePaths(for itemID: String) throws -> [String] {
+        let reps = try self.representations(for: itemID)
+        guard let rep = reps.first(where: { $0.uti == WellKnownUTI.fileURLs }) else { return [] }
+        let data = try self.payload(for: rep)
+        guard let strings = try? JSONDecoder().decode([String].self, from: data) else { return [] }
+        return strings.compactMap { URL(string: $0)?.path }
+    }
+
     // MARK: - Snippets
 
     public func snippets() throws -> [Snippet] {
