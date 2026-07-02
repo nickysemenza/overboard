@@ -14,6 +14,7 @@ struct PreviewPane: View {
     @State private var markdownSource: String?
     @State private var showRawMarkdown = false
     @State private var largeImage: NSImage?
+    @State private var related: [ClipItem] = []
 
     private var item: ClipItem? {
         self.viewModel.selectedItem
@@ -24,6 +25,9 @@ struct PreviewPane: View {
             self.header
             self.content
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            if !self.related.isEmpty {
+                self.relatedStrip
+            }
             self.hints
         }
         .task(id: self.item?.id) {
@@ -134,6 +138,43 @@ struct PreviewPane: View {
         }
     }
 
+    private var relatedStrip: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Related")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+                ForEach(self.related.prefix(5)) { related in
+                    self.relatedChip(related)
+                }
+            }
+        }
+    }
+
+    private func relatedChip(_ related: ClipItem) -> some View {
+        Button {
+            self.viewModel.jump(toItemID: related.id)
+        } label: {
+            HStack(spacing: 6) {
+                if let icon = AppIconCache.shared.icon(forBundleID: related.sourceBundleID) {
+                    Image(nsImage: icon)
+                        .resizable()
+                        .frame(width: 16, height: 16)
+                }
+                Text(related.aiTitle ?? related.previewText ?? "Clip")
+                    .font(.caption)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+            .frame(maxWidth: 140, alignment: .leading)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(.background.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+        }
+        .buttonStyle(.plain)
+        .help(related.aiTitle ?? related.previewText ?? "Clip")
+    }
+
     private var hints: some View {
         Text(self.viewModel.previewState == .editing
             ? "⌘↩ paste edited text   esc cancel"
@@ -156,6 +197,7 @@ struct PreviewPane: View {
         self.markdownSource = nil
         self.showRawMarkdown = false
         self.largeImage = nil
+        self.related = []
         guard let item else { return }
         let store = self.viewModel.storeForCards
 
@@ -195,5 +237,9 @@ struct PreviewPane: View {
         case .color:
             break
         }
+
+        // Similar items by embedding proximity. Silent-fail to empty — the
+        // strip simply doesn't render when there are no matches or no vector.
+        self.related = await (try? store.relatedItems(to: item.id)) ?? []
     }
 }

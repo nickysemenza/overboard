@@ -84,6 +84,21 @@ public final class DrawerViewModel {
         self.multiSelection.removeAll()
     }
 
+    /// Navigate to a specific item (e.g. from the Related strip). If it is
+    /// already in the current list, just select it; otherwise clear the query
+    /// and refetch so it appears. Preview state is left untouched — the pane
+    /// reloads itself via `task(id:)`.
+    public func jump(toItemID id: String) {
+        if let index = self.items.firstIndex(where: { $0.id == id }) {
+            self.collapseMultiSelection()
+            self.selectedIndex = index
+            return
+        }
+        self.query = ""
+        self.searchTask?.cancel()
+        self.searchTask = Task { await self.refresh(resetSelection: false, followItemID: id) }
+    }
+
     /// Actions applicable to the current selection.
     public var applicableActions: [ClipAction] {
         ClipAction.applicable(to: self.selectedItems)
