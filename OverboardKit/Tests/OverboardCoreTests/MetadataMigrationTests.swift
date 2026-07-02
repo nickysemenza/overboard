@@ -24,19 +24,36 @@ struct MetadataMigrationTests {
         )
     }
 
+    private func insertPlainText(_ db: Database, itemID: String, _ text: String) throws {
+        let data = Data(text.utf8)
+        try db.execute(
+            sql: """
+            INSERT INTO representation (id, itemID, uti, data, byteSize)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            arguments: ["rep-\(itemID)", itemID, WellKnownUTI.plainText, data, data.count]
+        )
+    }
+
     @Test func backfillsCountsForEachKind() throws {
         let queue = try DatabaseQueue()
         try Migrations.migrator.migrate(queue, upTo: "v1")
 
         try queue.write { db in
-            try self.insertItem(db, id: "text", kind: "text",
-                                searchText: "line one\nline two\nline three") // 3 lines
+            let body = "line one\nline two\nline three" // 28 chars, 3 lines
+            try self.insertItem(db, id: "text", kind: "text", searchText: body)
+            try self.insertPlainText(db, itemID: "text", body)
+
             try self.insertItem(db, id: "link", kind: "link",
                                 searchText: "https://example.com")
+            try self.insertPlainText(db, itemID: "link", "https://example.com")
+
             try self.insertItem(db, id: "image", kind: "image",
                                 previewText: "Image 1920×1080")
+
             try self.insertItem(db, id: "secret", kind: "text",
-                                searchText: "super secret value", isSecret: true)
+                                searchText: nil, isSecret: true)
+            try self.insertPlainText(db, itemID: "secret", "super secret value")
 
             // Inline file rep: JSON array of two URLs.
             try self.insertItem(db, id: "file", kind: "file", byteSize: 4096)
@@ -67,7 +84,7 @@ struct MetadataMigrationTests {
 
         try queue.read { db in
             let text = try #require(try ClipItem.fetchOne(db, key: "text"))
-            #expect(text.charCount == 28) // full searchText length
+            #expect(text.charCount == 28)
             #expect(text.lineCount == 3)
 
             let link = try #require(try ClipItem.fetchOne(db, key: "link"))
@@ -90,22 +107,50 @@ struct MetadataMigrationTests {
         }
     }
 
-    @Test func cappedSearchTextStaysNull() throws {
+    /// Enrichment appends AI titles/summaries into searchText, so the backfill
+    /// must count the plainText payload, not searchText.
+    @Test func enrichedRowCountsPayloadNotSearchText() throws {
         let queue = try DatabaseQueue()
         try Migrations.migrator.migrate(queue, upTo: "v1")
 
-        // A row exactly at the cap was truncated on capture, so its length would
-        // be a lie — the backfill must leave charCount NULL.
-        let capped = String(repeating: "a", count: CaptureClassifier.searchTextLimit)
+        let body = String(repeating: "a", count: 300)
         try queue.write { db in
-            try self.insertItem(db, id: "capped", kind: "text", searchText: capped)
+            try self.insertItem(db, id: "enriched", kind: "text",
+                                searchText: body + "\nSome AI Title\nA whole summary sentence.")
+            try self.insertPlainText(db, itemID: "enriched", body)
         }
         try Migrations.migrator.migrate(queue)
 
         try queue.read { db in
-            let item = try #require(try ClipItem.fetchOne(db, key: "capped"))
+            let item = try #require(try ClipItem.fetchOne(db, key: "enriched"))
+            #expect(item.charCount == 300)
+            #expect(item.lineCount == 1)
+        }
+    }
+
+    /// Blob-backed plainText payloads (>32 KB of text) aren't reachable in the
+    /// migration — both counts stay NULL rather than store a truncated value.
+    @Test func blobBackedTextStaysNull() throws {
+        let queue = try DatabaseQueue()
+        try Migrations.migrator.migrate(queue, upTo: "v1")
+
+        try queue.write { db in
+            try self.insertItem(db, id: "big", kind: "text",
+                                searchText: String(repeating: "a", count: 100))
+            try db.execute(
+                sql: """
+                INSERT INTO representation (id, itemID, uti, data, blobHash, byteSize)
+                VALUES (?, ?, ?, NULL, ?, ?)
+                """,
+                arguments: ["rep-big", "big", WellKnownUTI.plainText, "cafebabe", 50000]
+            )
+        }
+        try Migrations.migrator.migrate(queue)
+
+        try queue.read { db in
+            let item = try #require(try ClipItem.fetchOne(db, key: "big"))
             #expect(item.charCount == nil)
-            #expect(item.lineCount == 1) // lineCount is still computed
+            #expect(item.lineCount == nil)
         }
     }
 }

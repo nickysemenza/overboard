@@ -122,25 +122,24 @@ enum Migrations {
                 try db.execute(sql: "ALTER TABLE item ADD COLUMN \(column) INTEGER")
             }
 
-            // text/link: char count is cheap in SQL, but rows whose searchText
-            // sits at the cap were truncated, so their length would be wrong —
-            // leave those NULL rather than store a lie.
-            try db.execute(sql: """
-            UPDATE item SET charCount = LENGTH(searchText)
-            WHERE isSecret = 0 AND kind IN ('text', 'link')
-              AND searchText IS NOT NULL AND LENGTH(searchText) < \(CaptureClassifier.searchTextLimit)
-            """)
-
-            // lineCount needs a Swift newline count; do it row by row.
+            // text/link: count from the inline plainText payload, not searchText —
+            // enrichment appends AI titles/summaries into searchText, so its
+            // LENGTH lies for enriched rows. Blob-backed payloads (>32 KB of
+            // text) stay NULL rather than store a truncated count.
             let textRows = try Row.fetchAll(db, sql: """
-            SELECT id, searchText FROM item
-            WHERE isSecret = 0 AND kind IN ('text', 'link') AND searchText IS NOT NULL
-            """)
+            SELECT item.id AS id, representation.data AS data
+            FROM item
+            JOIN representation ON representation.itemID = item.id
+            WHERE item.isSecret = 0 AND item.kind IN ('text', 'link')
+              AND representation.uti = ? AND representation.data IS NOT NULL
+            """, arguments: [WellKnownUTI.plainText])
             for row in textRows {
-                let text: String = row["searchText"]
+                guard let data = row["data"] as Data?,
+                      let text = String(data: data, encoding: .utf8)
+                else { continue }
                 try db.execute(
-                    sql: "UPDATE item SET lineCount = ? WHERE id = ?",
-                    arguments: [text.lineCount, row["id"] as String]
+                    sql: "UPDATE item SET charCount = ?, lineCount = ? WHERE id = ?",
+                    arguments: [text.count, text.lineCount, row["id"] as String]
                 )
             }
 
