@@ -37,29 +37,49 @@ signing note below for the TCC consequences).
 Overboard lives in the menu bar (no Dock icon). On first run, grant
 **Accessibility** when prompted (System Settings → Privacy & Security) —
 paste-back synthesizes ⌘V into the target app and falls back to copy-only
-without it. Nothing ever leaves your machine: no network, no analytics, no
-account.
+without it. No analytics, no account. Network is used only for two
+opt-outable features: fetching link-preview metadata (page title, favicon,
+description, og:image — toggle in Settings → General), and checking for app
+updates. All clipboard data stays on your machine.
 
 ## Features
 
 - **Capture**: clipboard history for text, rich text, links, images, files,
   and colors, with content-hash dedupe and source-app attribution.
+- **Card metadata**: text cards display character and line counts; images show
+  pixel dimensions; file cards display item counts. Rich link cards fetch page
+  title, favicon, description, and og:image preview (toggle in Settings).
+- **Back-to-source**: clips copied from Safari/Chrome/Arc/Brave/Edge/Vivaldi
+  remember the page URL and title; "Open Source Page" action in Quick Look
+  and context menu. First copy per browser triggers a macOS Automation prompt.
 - **Drawer** (⌘⇧V): bottom overlay over any app that never steals focus.
   Type to search, ←/→ or ⌘1–9 to select, ↩ to paste, ⇧↩ plain text,
   ⌘P pin, ⌘⌫ delete, esc to dismiss. Drag cards out to other apps.
-- **Launcher** (⌥Space): a Spotlight-style bar with an inline calculator
-  (`15% of 80` → ↩ copies, ⌘↩ pastes the result), app launching with
-  initials and custom aliases (`sm` matches Sublime Merge out of the box),
-  clipboard-history and snippet rows (search operators work here too;
-  ↩ pastes into the app you were in, ⌘↩ copies), Spotlight file search,
-  and a web-search fallback row.
+- **Launcher** (⌥Space): a Spotlight-style bar with results grouped under
+  Apps/Clipboard/Snippets/Files/System Settings headers. Inline calculator
+  (`15% of 80` → ↩ copies, ⌘↩ pastes), app launching with initials and custom
+  aliases (`sm` matches Sublime Merge), clipboard-history and snippet rows
+  (search operators work; ↩ pastes into the app, ⌘↩ copies), Spotlight file
+  search, web-search fallback, and Ask AI row (macOS 26: type an instruction
+  like "make this formal", ↩ runs it over the clipboard, ⌘↩ copies result).
+  Footer action bar shows the primary action; **⌘K** opens per-row actions
+  (reveal in Finder, copy path, quit app, open link…). Running apps have
+  indicator dots; Switch to / Quit App actions.
+- **Launcher commands**: `:stats` (word/char/line stats), `:pause` / `:resume`
+  (toggles clipboard capture; menu-bar indicator), `:clear` (clears history,
+  keeps pins), `:settings`, `:version`. Plus `:` to open the commands palette.
+- **CLI**: `overboard history|search|get|copy` with `--json` for scripts and
+  agents; read-only against the app's database, copy goes through the clipboard
+  so the app captures it. Install via `scripts/install-cli.sh`.
 - **Search**: FTS5 full-text with prefix matching, blended with on-device
   semantic search (NLEmbedding) so "money projection" finds "quarterly
   revenue forecast". Filter operators: `kind:image`, `app:claude`,
-  `category:code`. Nothing ever leaves the machine.
+  `category:code`. Searchable by link page title when preview fetch is enabled.
+  All search happens on-device.
 - **Quick Look & edit**: space (or ⌘Y) expands the drawer into a full-content
-  preview — scroll long text, see images large, browse with ←/→. ⌘E edits
-  the text inline before pasting (⌘↩ pastes the edited version).
+  preview — scroll long text, see images large, browse with ←/→, view source-page
+  URL and title. ⌘E edits the text inline before pasting (⌘↩ pastes the edited
+  version).
 - **OCR**: copied images and screenshots are text-recognized (Vision) and
   fully searchable by their contents — find that wifi-password screenshot
   by typing the network name.
@@ -77,7 +97,8 @@ account.
 - **Privacy**: password managers and concealed/transient pasteboards are
   never captured; detected secrets (AWS keys, JWTs, API tokens, PEM keys,
   card numbers) are masked, unsearchable, and auto-expire; per-app
-  plain-text paste rules for terminals.
+  plain-text paste rules for terminals. All data and search stay on-device
+  except the optional link-preview fetch.
 
 <p align="center">
   <img src="docs/screenshots/preview.png" width="900" alt="Quick Look preview pane showing a syntax-highlighted Swift snippet">
