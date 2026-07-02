@@ -44,6 +44,12 @@ public struct LauncherView: View {
                 // can paint outside the list bounds.
                 .clipped()
             }
+            // Persistent action bar — present even with zero rows, so the panel
+            // always advertises the ⌘K palette and the selected row's primary
+            // action. The row hints and source badges that used to live per-row
+            // now live here (plus in the section headers).
+            Divider()
+            LauncherFooterBar(primaryAction: self.viewModel.primaryAction)
         }
         .padding(14)
         .glassPanel(cornerRadius: 16)
@@ -51,6 +57,14 @@ public struct LauncherView: View {
             RoundedRectangle(cornerRadius: 16)
                 .strokeBorder(.primary.opacity(0.12), lineWidth: 1)
         }
+        .overlay(alignment: .bottom) {
+            if self.viewModel.isPaletteOpen {
+                LauncherActionPalette(viewModel: self.viewModel)
+                    .padding(.bottom, 18)
+                    .transition(.scale(scale: 0.95).combined(with: .opacity))
+            }
+        }
+        .animation(.spring(response: 0.22, dampingFraction: 0.85), value: self.viewModel.isPaletteOpen)
         .padding(12)
         .onAppear {
             self.fieldFocused = true
@@ -94,6 +108,42 @@ struct LauncherSectionHeader: View {
     }
 }
 
+/// Persistent bottom action bar. Left brands the panel; right shows the
+/// selected row's primary (↩) action and the ⌘K palette affordance. Rendered
+/// whenever the panel is visible — even with no results — so the bar height is
+/// always budgeted (`Metrics.footerHeight`).
+struct LauncherFooterBar: View {
+    let primaryAction: LauncherAction?
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "bolt.fill")
+                .font(.caption)
+            Text("Overboard")
+                .font(.caption)
+            Spacer(minLength: 12)
+            if let primaryAction {
+                Text(primaryAction.label)
+                    .font(.caption)
+                Image(systemName: "return")
+                    .font(.caption2)
+                Divider()
+                    .frame(height: 12)
+            }
+            Text("Actions")
+                .font(.caption)
+            Text("⌘K")
+                .font(.caption2)
+                .padding(.horizontal, 4)
+                .padding(.vertical, 1)
+                .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 4))
+        }
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 8)
+        .frame(height: 20)
+    }
+}
+
 struct LauncherRow: View {
     let result: LauncherResult
     let store: ClipStore
@@ -115,11 +165,9 @@ struct LauncherRow: View {
                     .truncationMode(.middle)
             }
             Spacer(minLength: 12)
-            if self.isSelected {
-                Text(self.shortcutHint)
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-            }
+            // The footer bar + ⌘K palette + section headers now carry the
+            // per-row hints and source labels; only the Spotify badge stays,
+            // since now-playing rows have no section header to place them under.
             if let badge = self.sourceBadge {
                 HStack(spacing: 3) {
                     Image(systemName: badge.symbol)
@@ -266,17 +314,6 @@ struct LauncherRow: View {
         }
     }
 
-    /// Return-key hint per command — `.stats` opens Settings; the rest run in
-    /// place.
-    private static func commandHint(for command: LauncherCommand) -> String {
-        switch command {
-        case .version, .stats, .settings: "↩ open settings"
-        case .pause: "↩ pause capture"
-        case .resume: "↩ resume capture"
-        case .clear: "↩ clear history"
-        }
-    }
-
     /// Missing paths (demo mode's fake files) get their file-type icon
     /// instead of the blank generic-document one.
     private static func fileIcon(for url: URL) -> NSImage {
@@ -287,27 +324,12 @@ struct LauncherRow: View {
         return NSWorkspace.shared.icon(for: type)
     }
 
-    private var shortcutHint: String {
-        switch self.result {
-        case .calculation: "↩ copy   ⌘↩ paste"
-        case .app: "↩ open   ⌘↩ reveal   ⌥↩ copy path"
-        case .snippet: "↩ paste   ⌘↩ copy"
-        case .clip: "↩ paste   ⌘↩ copy   ⌥↩ paste plain"
-        case .file: "↩ open   ⌘↩ reveal   ⌥↩ copy path"
-        case .webSearch: "↩ search"
-        case .systemSetting: "↩ open"
-        case let .command(command, _): Self.commandHint(for: command)
-        case .recentSearch: "↩ search   ⌘⌫ remove"
-        case .nowPlaying: "↩ copy link   ⌘↩ open Spotify"
-        }
-    }
-
-    /// Clip and snippet rows carry a trailing source badge — an app icon plus
-    /// a title reads as "app row" otherwise.
+    /// Only the now-playing row keeps a trailing badge: it's the one row kind
+    /// with no section header above it, so the "Spotify" label is what marks it
+    /// as music rather than a plain clip. Snippet/Clipboard badges moved to the
+    /// section headers + footer.
     private var sourceBadge: (symbol: String, label: String)? {
         switch self.result {
-        case .snippet: (symbol: "text.badge.star", label: "Snippet")
-        case .clip: (symbol: "doc.on.clipboard", label: "Clipboard")
         case .nowPlaying: (symbol: "music.note", label: "Spotify")
         default: nil
         }

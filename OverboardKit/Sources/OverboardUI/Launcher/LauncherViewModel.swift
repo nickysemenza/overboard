@@ -42,8 +42,19 @@ public final class LauncherViewModel {
     public var onRunCommand: (LauncherCommand) -> Void = { _ in }
     public var onCopyNowPlayingLink: (NowPlayingTrack) -> Void = { _ in }
     public var onOpenSpotify: (NowPlayingTrack) -> Void = { _ in }
+    /// Terminate a running app (⌘K → Quit on a running app row); the URL is the
+    /// app bundle's file URL.
+    public var onQuitApp: (URL) -> Void = { _ in }
+    /// Open a link clip's URL in the browser (⌘K → Open Link on a link clip).
+    public var onOpenClipLink: (URL) -> Void = { _ in }
     /// Lets the panel controller resize as rows and section headers come and go.
     public var onLayoutChanged: (_ rows: Int, _ headers: Int) -> Void = { _, _ in }
+
+    /// Bundle paths of apps macOS currently reports as running. A later slice
+    /// populates this (from `NSWorkspace.runningApplications`); for now it stays
+    /// empty, so `isSelectedAppRunning` is always false and the "Switch to" /
+    /// Quit actions never surface.
+    public var runningAppPaths: Set<String> = []
 
     /// Rows pinned under every result list (the Spotify now-playing footer).
     /// Evaluated on each `setResults` pass, so it covers the empty-query recents
@@ -179,39 +190,157 @@ public final class LauncherViewModel {
         return true
     }
 
+    // MARK: - Commit / actions
+
+    /// Actions available for the currently-selected row, in footer/palette
+    /// order (index 0/1/2 = ↩/⌘↩/⌥↩). Empty when nothing is selected.
+    public var selectedActions: [LauncherAction] {
+        guard self.results.indices.contains(self.selectedIndex) else { return [] }
+        return LauncherActions.actions(for: self.results[self.selectedIndex], context: self.actionContext)
+    }
+
+    /// The row's primary (↩) action — what the footer bar advertises.
+    public var primaryAction: LauncherAction? {
+        self.selectedActions.first
+    }
+
+    /// Whether the selected app row is one macOS reports as running. Drives
+    /// the "Switch to" label and the Quit action; always false until a later
+    /// slice fills `runningAppPaths`.
+    public var isSelectedAppRunning: Bool {
+        guard self.results.indices.contains(self.selectedIndex),
+              case let .app(_, url) = self.results[self.selectedIndex]
+        else { return false }
+        return self.runningAppPaths.contains(url.path)
+    }
+
+    private var actionContext: LauncherActionContext {
+        LauncherActionContext(isAppRunning: self.isSelectedAppRunning)
+    }
+
+    /// Keyboard commit (↩/⌘↩/⌥↩). A thin wrapper that maps the modifier to the
+    /// positional action for the selected row and routes it through `perform`,
+    /// so the footer, palette, and keyboard all share one execution path.
     public func commit(modifier: CommitModifier = .none) {
+        let actions = self.selectedActions
+        guard !actions.isEmpty else { return }
+        let index: Int = switch modifier {
+        case .none: 0
+        case .command: 1
+        // ⌥↩ maps to the third action; rows without one (snippet, calc) fall
+        // back to ↩ — matching the old commit's snippet/calc option behavior.
+        case .option: actions.indices.contains(2) ? 2 : 0
+        }
+        self.perform(actions[index])
+    }
+
+    /// Executes one action against the selected row. The single routing point
+    /// for the footer's primary action, the ⌘K palette, and `commit`.
+    public func perform(_ action: LauncherAction) {
         guard self.results.indices.contains(self.selectedIndex) else { return }
-        switch self.results[self.selectedIndex] {
-        case let .calculation(_, display):
-            modifier == .command ? self.onPasteText(display) : self.onCopyText(display)
-        case let .app(_, url), let .file(_, url):
-            switch modifier {
-            case .none: self.onOpenFile(url)
-            case .command: self.onRevealFile(url)
-            case .option: self.onCopyPath(url.path)
-            }
-        case let .snippet(snippet):
-            modifier == .command ? self.onCopySnippet(snippet) : self.onPasteSnippet(snippet)
-        case let .clip(item):
-            switch modifier {
-            case .none: self.onPasteClip(item, .full)
-            case .command: self.onCopyClip(item)
-            case .option: self.onPasteClip(item, .plainText)
-            }
-        case let .webSearch(_, url):
+        let result = self.results[self.selectedIndex]
+        switch (action, result) {
+        case let (.copy, .calculation(_, display)):
+            self.onCopyText(display)
+        case let (.paste, .calculation(_, display)):
+            self.onPasteText(display)
+        case let (.open, .app(_, url)), let (.switchTo, .app(_, url)),
+             let (.open, .file(_, url)):
+            self.onOpenFile(url)
+        case let (.revealInFinder, .app(_, url)), let (.revealInFinder, .file(_, url)):
+            self.onRevealFile(url)
+        case let (.copyPath, .app(_, url)), let (.copyPath, .file(_, url)):
+            self.onCopyPath(url.path)
+        case let (.quitApp, .app(_, url)):
+            self.onQuitApp(url)
+        case let (.paste, .snippet(snippet)):
+            self.onPasteSnippet(snippet)
+        case let (.copy, .snippet(snippet)):
+            self.onCopySnippet(snippet)
+        case let (.paste, .clip(item)):
+            self.onPasteClip(item, .full)
+        case let (.pastePlain, .clip(item)):
+            self.onPasteClip(item, .plainText)
+        case let (.copy, .clip(item)):
+            self.onCopyClip(item)
+        case let (.openLink, .clip(item)):
+            if let url = Self.clipLinkURL(item) { self.onOpenClipLink(url) }
+        case let (.search, .webSearch(_, url)):
             self.onOpenWebSearch(url)
-        case let .systemSetting(_, url):
+        case let (.openSetting, .systemSetting(_, url)):
             self.onOpenSystemSetting(url)
-        case let .command(command, _):
+        case let (.runCommand, .command(command, _)):
             self.onRunCommand(command)
-        case let .nowPlaying(track):
-            modifier == .command ? self.onOpenSpotify(track) : self.onCopyNowPlayingLink(track)
-        case let .recentSearch(query):
+        case let (.copyLink, .nowPlaying(track)):
+            self.onCopyNowPlayingLink(track)
+        case let (.openInSpotify, .nowPlaying(track)):
+            self.onOpenSpotify(track)
+        case let (.rerunSearch, .recentSearch(query)):
             // Re-run the past search in place — refill the bar, stay open.
             self.query = query
             self.selectedIndex = 0
             self.scheduleSearch()
+        case (.removeRecent, .recentSearch):
+            self.deleteSelectedRecent()
+        default:
+            break
         }
+    }
+
+    /// The link clip's destination URL, trimmed the same way `ClipAction.openLink`
+    /// parses it. `previewText` is the launcher's available text (full payload
+    /// isn't prefetched here); links are short, so it's the whole URL.
+    private static func clipLinkURL(_ item: ClipItem) -> URL? {
+        guard let text = item.previewText?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !text.isEmpty
+        else { return nil }
+        return URL(string: text)
+    }
+
+    // MARK: - ⌘K action palette
+
+    public private(set) var isPaletteOpen = false
+    public var paletteQuery: String = ""
+    public var paletteIndex: Int = 0
+
+    /// Actions for the selected row filtered by a case-insensitive substring of
+    /// the label; empty query shows them all.
+    public var filteredPaletteActions: [LauncherAction] {
+        let all = self.selectedActions
+        let needle = self.paletteQuery.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !needle.isEmpty else { return all }
+        return all.filter { $0.label.lowercased().contains(needle) }
+    }
+
+    /// Opens the palette (only when a row with actions is selected) or closes it
+    /// if already open.
+    public func togglePalette() {
+        if self.isPaletteOpen {
+            self.closePalette()
+        } else {
+            guard !self.selectedActions.isEmpty else { return }
+            self.paletteQuery = ""
+            self.paletteIndex = 0
+            self.isPaletteOpen = true
+        }
+    }
+
+    public func closePalette() {
+        self.isPaletteOpen = false
+    }
+
+    public func movePaletteSelection(_ delta: Int) {
+        let count = self.filteredPaletteActions.count
+        guard count > 0 else { return }
+        self.paletteIndex = min(max(self.paletteIndex + delta, 0), count - 1)
+    }
+
+    public func runPaletteAction(at index: Int? = nil) {
+        let actions = self.filteredPaletteActions
+        let chosen = index ?? self.paletteIndex
+        guard actions.indices.contains(chosen) else { return }
+        self.closePalette()
+        self.perform(actions[chosen])
     }
 
     private func setResults(_ newResults: [LauncherResult]) {
