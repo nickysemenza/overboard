@@ -20,11 +20,22 @@ public struct LibraryStats: Sendable {
         }
     }
 
+    /// One of the heaviest live items, for the storage breakdown.
+    public struct LargeItem: Sendable, Identifiable {
+        public let id: String
+        public let kind: ItemKind
+        /// Short human label — AI title, preview snippet, or the kind name.
+        public let label: String
+        public let byteSize: Int
+    }
+
     public let total: Int
     /// Kinds with at least one item, most-frequent first.
     public let byKind: [KindCount]
     /// Top source apps by item count, most-frequent first.
     public let bySource: [SourceCount]
+    /// The heaviest items by stored byte size, largest first.
+    public let largest: [LargeItem]
 }
 
 /// The single owner of all persistence: items, representations, FTS index,
@@ -144,18 +155,28 @@ public actor ClipStore {
 
     // MARK: - Queries
 
+    /// Pins first, then a gentle frecency blend: recency plus a capped bonus for
+    /// reuse (`useCount`), so items you paste over and over stop scrolling away —
+    /// while a brand-new copy (useCount 1, just now) still lands on top. The
+    /// bonus is in julian days and saturates at useCount 8 (~7.7h of lift), so it
+    /// only ever reorders near-neighbors, never buries fresh clips. `min(a, b)`
+    /// is core SQLite (no math extension needed).
+    static let frecencyOrderSQL =
+        "isPinned DESC, (julianday(lastUsedAt) + 0.04 * min(useCount, 8)) DESC"
+
     public func recent(limit: Int = 100) throws -> [ClipItem] {
         try self.dbWriter.read { db in
             try ClipItem
                 .filter(sql: "deletedAt IS NULL")
-                .order(sql: "isPinned DESC, lastUsedAt DESC")
+                .order(sql: Self.frecencyOrderSQL)
                 .limit(limit)
                 .fetchAll(db)
         }
     }
 
-    /// Counts of live items grouped by kind and by source app, for Settings.
-    public func libraryStats(topSources: Int = 5) throws -> LibraryStats {
+    /// Counts of live items grouped by kind and by source app, plus the
+    /// heaviest items, for the History settings tab.
+    public func libraryStats(topSources: Int = 5, topLargest: Int = 5) throws -> LibraryStats {
         try self.dbWriter.read { db in
             let total = try Int.fetchOne(
                 db, sql: "SELECT COUNT(*) FROM item WHERE deletedAt IS NULL"
@@ -184,7 +205,30 @@ public actor ClipStore {
                 LibraryStats.SourceCount(app: row["app"], count: row["c"])
             }
 
-            return LibraryStats(total: total, byKind: byKind, bySource: bySource)
+            let largest = try Row.fetchAll(
+                db,
+                sql: """
+                SELECT id, kind, previewText, aiTitle, byteSize FROM item
+                WHERE deletedAt IS NULL ORDER BY byteSize DESC LIMIT ?
+                """,
+                arguments: [topLargest]
+            ).compactMap { row -> LibraryStats.LargeItem? in
+                guard let raw: String = row["kind"], let kind = ItemKind(rawValue: raw)
+                else { return nil }
+                let title: String? = row["aiTitle"]
+                let preview: String? = row["previewText"]
+                let label = [title, preview].compactMap(\.self)
+                    .first { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                return LibraryStats.LargeItem(
+                    id: row["id"],
+                    kind: kind,
+                    label: label.map { String($0.prefix(60)) } ?? kind.rawValue.capitalized,
+                    byteSize: row["byteSize"]
+                )
+            }
+
+            return LibraryStats(total: total, byKind: byKind, bySource: bySource, largest: largest)
         }
     }
 
@@ -226,11 +270,11 @@ public actor ClipStore {
             """
             arguments.insert(match, at: 0)
         } else {
-            // Filters only ("kind:image") — filtered recency listing.
+            // Filters only ("kind:image") — filtered frecency listing.
             sql = """
             SELECT item.* FROM item
             WHERE \(conditions.joined(separator: " AND "))
-            ORDER BY item.isPinned DESC, item.lastUsedAt DESC
+            ORDER BY \(Self.frecencyOrderSQL)
             LIMIT ?
             """
         }
@@ -247,6 +291,14 @@ public actor ClipStore {
                 .filter(sql: "itemID = ?", arguments: [itemID])
                 .fetchAll(db)
         }
+    }
+
+    /// On-disk URL for a blob-backed representation (nil when the payload is
+    /// stored inline). Lets callers stream the file — e.g. downsample a preview
+    /// — without pulling a large payload fully into memory via `payload(for:)`.
+    public func blobURL(for rep: Representation) -> URL? {
+        guard let hash = rep.blobHash else { return nil }
+        return self.blobs.url(for: hash)
     }
 
     /// Resolves a representation's payload, whether inline or blob-stored.
@@ -336,6 +388,51 @@ public actor ClipStore {
         for hash in candidateHashes {
             try? self.blobs.delete(hash: hash)
         }
+    }
+
+    // MARK: - Maintenance
+
+    /// Outcome of a maintenance sweep, for logging/diagnostics.
+    public struct SweepResult: Sendable, Equatable {
+        /// On-disk blobs deleted because no representation referenced them
+        /// (leftovers from interrupted transactions or crashes).
+        public var orphanedBlobsDeleted: Int
+        /// Representations whose blob file is missing — data already lost;
+        /// counted so the gap is visible rather than silently failing at read.
+        public var missingBlobs: Int
+    }
+
+    /// Reclaims orphaned blob files, reports representations with missing blobs,
+    /// and compacts the database. Safe to run repeatedly (idempotent). Meant for
+    /// startup + a daily timer; complements `purge`, which only reclaims blobs
+    /// of items it deletes and can't see files left by a failed write.
+    @discardableResult
+    public func maintenanceSweep() throws -> SweepResult {
+        let referenced: Set<String> = try self.dbWriter.read { db in
+            try String.fetchSet(
+                db,
+                sql: "SELECT DISTINCT blobHash FROM representation WHERE blobHash IS NOT NULL"
+            )
+        }
+
+        // On-disk files no live representation points at → safe to delete.
+        let onDisk = self.blobs.allHashes()
+        let orphans = onDisk.subtracting(referenced)
+        var deleted = 0
+        for hash in orphans where (try? self.blobs.delete(hash: hash)) != nil {
+            deleted += 1
+        }
+
+        // References pointing at a file that isn't there → unrecoverable gap.
+        let missing = referenced.subtracting(onDisk).count
+
+        // Reclaim page space from purged rows; best-effort.
+        try? self.dbWriter.writeWithoutTransaction { db in
+            try db.execute(sql: "PRAGMA optimize")
+            try db.execute(sql: "VACUUM")
+        }
+
+        return SweepResult(orphanedBlobsDeleted: deleted, missingBlobs: missing)
     }
 
     private static func removeFromFTS(_ db: GRDB.Database, itemID: String) throws {
@@ -601,7 +698,7 @@ public actor ClipStore {
             .tracking { db in
                 try ClipItem
                     .filter(sql: "deletedAt IS NULL")
-                    .order(sql: "isPinned DESC, lastUsedAt DESC")
+                    .order(sql: Self.frecencyOrderSQL)
                     .limit(limit)
                     .fetchAll(db)
             }

@@ -2,6 +2,7 @@
 // their existing OverboardMac import without a pbxproj package reference.
 @_exported import Defaults
 import Foundation
+import OverboardCore
 
 public extension Defaults.Keys {
     // Raw key strings predate the Defaults migration — keep them byte-identical
@@ -16,10 +17,15 @@ public extension Defaults.Keys {
         "plainTextBundleIDs",
         default: "com.apple.Terminal\ncom.googlecode.iterm2"
     )
+    /// Auto-transform-on-copy rules, one "bundleID = transform" per line
+    /// (transform is a ClipTransform raw value, e.g. stripTrackingParams).
+    static let autoTransformRules = Key<String>("autoTransformRules", default: "")
     /// Minutes before detected secrets are hard-deleted; 0 disables expiry.
     static let secretTTLMinutes = Key<Int>("secretTTLMinutes", default: 10)
     /// Apple Intelligence features: auto-titles, categories, AI transforms.
     static let aiFeatures = Key<Bool>("aiFeatures", default: true)
+    /// Poll GitHub Releases for a newer version and surface it in the menu bar.
+    static let updateCheckEnabled = Key<Bool>("updateCheckEnabled", default: true)
     /// Spotlight file results in the launcher bar.
     static let launcherFileResults = Key<Bool>("launcherFileResults", default: true)
     /// Clipboard-history results in the launcher bar.
@@ -32,6 +38,8 @@ public extension Defaults.Keys {
     static let launcherAppAliases = Key<String>("launcherAppAliases", default: "")
     /// Recent launcher search queries, most-recent last; de-duped and capped.
     static let launcherSearchHistory = Key<[String]>("launcherSearchHistory", default: [])
+    /// Pinned drawer searches (raw query strings), shown as chips above history.
+    static let savedSearches = Key<[String]>("savedSearches", default: [])
 }
 
 /// Parsed views over the newline-list preference keys.
@@ -43,6 +51,11 @@ public enum Preferences {
     /// Apps where pasted text should always be plain (terminals etc.).
     public static func currentPlainTextApps() -> Set<String> {
         self.bundleIDSet(Defaults[.plainTextBundleIDs])
+    }
+
+    /// Parsed auto-transform-on-copy rules.
+    public static func currentAutoTransformRules() -> [AutoTransformRule] {
+        AutoTransform.parseRules(Defaults[.autoTransformRules])
     }
 
     private static func bundleIDSet(_ raw: String) -> Set<String> {

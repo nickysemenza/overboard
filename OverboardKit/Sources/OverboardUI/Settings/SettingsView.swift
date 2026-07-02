@@ -66,6 +66,7 @@ private struct GeneralSettingsTab: View {
     @Default(.launcherSnippetResults) private var launcherSnippetResults
     @Default(.launcherSettingsResults) private var launcherSettingsResults
     @Default(.launcherAppAliases) private var launcherAppAliases
+    @Default(.updateCheckEnabled) private var updateCheckEnabled
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var accessibilityGranted = PermissionService.isTrusted
 
@@ -132,6 +133,7 @@ private struct GeneralSettingsTab: View {
                         }
                     }
                 }
+                Toggle("Check for updates automatically", isOn: self.$updateCheckEnabled)
                 Button("Copy version info") {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(AppVersion.summary, forType: .string)
@@ -139,7 +141,7 @@ private struct GeneralSettingsTab: View {
             } header: {
                 Text("About")
             } footer: {
-                Text("“Version” is the tagged release this build descends from; it only changes when a release is cut. “Source” is the exact git state it was built from — \(AppVersion.isDirtyOrAhead ? "this build is ahead of, or dirty against, that tag." : "matching the tag means it’s a clean release build.")")
+                Text("“Version” is the tagged release this build descends from; it only changes when a release is cut. “Source” is the exact git state it was built from — \(AppVersion.isDirtyOrAhead ? "this build is ahead of, or dirty against, that tag." : "matching the tag means it’s a clean release build."). Update checks look at GitHub Releases once a day; installing stays a manual download.")
             }
         }
         .formStyle(.grouped)
@@ -222,6 +224,25 @@ private struct HistorySettingsTab: View {
                     }
                 }
             }
+
+            if let stats = self.stats, !stats.largest.isEmpty {
+                Section {
+                    ForEach(stats.largest) { item in
+                        LabeledContent {
+                            Text(ByteCountFormatter.string(fromByteCount: Int64(item.byteSize), countStyle: .file))
+                                .monospacedDigit()
+                        } label: {
+                            Label(item.label, systemImage: item.kind.symbolName)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
+                    }
+                } header: {
+                    Text("Largest items")
+                } footer: {
+                    Text("The heaviest clips in your history — usually images. Delete these first if storage grows.")
+                }
+            }
         }
         .formStyle(.grouped)
         .confirmationDialog(
@@ -277,6 +298,11 @@ private struct HistorySettingsTab: View {
 private struct AppsSettingsTab: View {
     @Default(.excludedBundleIDs) private var excludedBundleIDs
     @Default(.plainTextBundleIDs) private var plainTextBundleIDs
+    @Default(.autoTransformRules) private var autoTransformRules
+
+    private var transformList: String {
+        ClipTransform.allCases.map(\.rawValue).joined(separator: ", ")
+    }
 
     var body: some View {
         Form {
@@ -294,6 +320,19 @@ private struct AppsSettingsTab: View {
                 Text("Always paste as plain text into")
             } footer: {
                 Text("Pasting text into these apps (terminals, editors) strips formatting automatically.")
+            }
+
+            Section {
+                TextEditor(text: self.$autoTransformRules)
+                    .font(.body.monospaced())
+                    .frame(height: 72)
+                    .scrollContentBackground(.hidden)
+                    .padding(4)
+                    .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
+            } header: {
+                Text("Clean up copies from")
+            } footer: {
+                Text("One “bundleID = transform” per line — e.g. “com.apple.Safari = stripTrackingParams” strips ?utm_… from every link you copy in Safari. Transforms run at capture time on the plain-text copy. Available: \(self.transformList).")
             }
         }
         .formStyle(.grouped)

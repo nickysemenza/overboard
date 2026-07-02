@@ -217,6 +217,53 @@ struct LauncherCommitRoutingTests {
         ])
     }
 
+    /// The empty field shows only a short list of the most recent searches, not
+    /// the whole stored history — it's a hint, not a panel-filling dump.
+    @Test func emptyFieldCapsRecentSearchesShown() {
+        let viewModel = self.freshViewModel()
+        for index in 0 ..< 12 {
+            viewModel.query = "q\(index)"
+            viewModel.recordCurrentQuery()
+        }
+
+        viewModel.query = ""
+        viewModel.scheduleSearch()
+
+        #expect(viewModel.results.count == 3)
+        // Most-recent first: q11 down to q9.
+        #expect(viewModel.results.first == .recentSearch(query: "q11"))
+        #expect(viewModel.results.last == .recentSearch(query: "q9"))
+    }
+
+    @Test func deleteSelectedRecentRemovesItFromHistory() {
+        let viewModel = self.freshViewModel()
+        for query in ["one", "two", "three"] {
+            viewModel.query = query
+            viewModel.recordCurrentQuery()
+        }
+        viewModel.query = ""
+        viewModel.scheduleSearch()
+
+        // Rows are most-recent first: [three, two, one]. Delete "two".
+        viewModel.selectedIndex = 1
+        #expect(viewModel.deleteSelectedRecent())
+
+        #expect(viewModel.results == [.recentSearch(query: "three"), .recentSearch(query: "one")])
+        #expect(viewModel.history == ["one", "three"])
+        #expect(Defaults[.launcherSearchHistory] == ["one", "three"])
+        // Selection stays valid, landing on the row that shifted up.
+        #expect(viewModel.selectedIndex == 1)
+    }
+
+    @Test func deleteSelectedRecentNoOpsWithoutRecents() {
+        let viewModel = self.freshViewModel()
+        viewModel.query = ""
+        viewModel.scheduleSearch()
+        // No history → empty recents list → nothing to delete.
+        #expect(viewModel.results.isEmpty)
+        #expect(!viewModel.deleteSelectedRecent())
+    }
+
     /// Committing a recents row refills the bar and re-runs that search in place
     /// (no dismiss, no row action fired).
     @Test func committingRecentSearchReRunsInPlace() async {

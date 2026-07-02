@@ -5,9 +5,17 @@ import SwiftUI
 struct OverboardApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @Environment(\.openWindow) private var openWindow
+    private let updates = AppServices.shared.updates
 
     var body: some Scene {
         MenuBarExtra {
+            if let tag = self.updates.availableTag {
+                Button("Download \(tag)…") {
+                    AppServices.shared.updates.openReleasePage()
+                }
+                Divider()
+            }
+
             Button("Show Drawer") {
                 AppServices.shared.overlay.show()
             }
@@ -38,7 +46,7 @@ struct OverboardApp: App {
             }
             .keyboardShortcut("q")
         } label: {
-            MenuBarLabel(signal: AppServices.shared.signal)
+            MenuBarLabel(signal: AppServices.shared.signal, updates: self.updates)
         }
 
         Window("Overboard History", id: "history") {
@@ -59,12 +67,14 @@ struct OverboardApp: App {
     }
 }
 
-/// The boat bounces whenever something is captured.
+/// The boat bounces whenever something is captured, and gains a badge when a
+/// newer release is waiting to be downloaded.
 private struct MenuBarLabel: View {
     let signal: CaptureSignal
+    let updates: UpdateChecker
 
     var body: some View {
-        Image(systemName: "sailboat.fill")
+        Image(systemName: self.updates.availableTag != nil ? "sailboat.fill.circle" : "sailboat.fill")
             .symbolEffect(.bounce, value: self.signal.count)
     }
 }

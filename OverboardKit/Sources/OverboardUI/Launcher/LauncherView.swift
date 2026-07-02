@@ -18,6 +18,15 @@ public struct LauncherView: View {
             self.searchBar
             if !self.viewModel.results.isEmpty {
                 Divider()
+                if self.isShowingRecents {
+                    Text("Recent")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                        .textCase(.uppercase)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 8)
+                        .padding(.top, 2)
+                }
                 VStack(spacing: 2) {
                     ForEach(Array(self.viewModel.results.enumerated()), id: \.element.id) { index, result in
                         LauncherRow(result: result, store: self.store, isSelected: index == self.viewModel.selectedIndex)
@@ -53,6 +62,13 @@ public struct LauncherView: View {
         .onChange(of: self.viewModel.query) {
             self.viewModel.scheduleSearch()
         }
+    }
+
+    /// The empty field surfaces recent searches; label that section so the rows
+    /// read as an intentional "Recent" list rather than live search results.
+    private var isShowingRecents: Bool {
+        self.viewModel.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !self.viewModel.results.isEmpty
     }
 
     private var searchBar: some View {
@@ -237,7 +253,7 @@ struct LauncherRow: View {
         case .webSearch: "↩ search"
         case .systemSetting: "↩ open"
         case .command: "↩ open settings"
-        case .recentSearch: "↩ search"
+        case .recentSearch: "↩ search   ⌘⌫ remove"
         }
     }
 

@@ -1,10 +1,13 @@
+import Defaults
 import OverboardCore
+import OverboardMac
 import SwiftUI
 
 public struct DrawerView: View {
     @Bindable var viewModel: DrawerViewModel
     @FocusState private var searchFocused: Bool
     @Environment(\.openSettings) private var openSettings
+    @Default(.savedSearches) private var savedSearches
 
     public init(viewModel: DrawerViewModel) {
         self.viewModel = viewModel
@@ -14,6 +17,9 @@ public struct DrawerView: View {
         VStack(spacing: 10) {
             if self.viewModel.previewState == .hidden {
                 self.searchBar
+                if self.viewModel.mode == .history, !self.savedSearches.isEmpty {
+                    self.savedSearchBar
+                }
                 self.cardStrip
                 self.footerHints
             } else {
@@ -65,6 +71,17 @@ public struct DrawerView: View {
             .font(.title3)
             .focused(self.$searchFocused)
 
+            if self.canSaveCurrentSearch {
+                Button {
+                    self.saveCurrentSearch()
+                } label: {
+                    Image(systemName: "bookmark")
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(.secondary)
+                .help("Save this search")
+            }
+
             if self.viewModel.stack.count > 0 {
                 Text("Stack: \(self.viewModel.stack.count)")
                     .font(.caption.weight(.medium).monospacedDigit())
@@ -80,6 +97,48 @@ public struct DrawerView: View {
             }
         }
         .padding(.horizontal, 6)
+    }
+
+    /// Pinned-search chips: tap to run, right-click to remove.
+    private var savedSearchBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ForEach(self.savedSearches, id: \.self) { query in
+                    Button {
+                        self.viewModel.query = query
+                    } label: {
+                        Text(SavedSearch.label(for: query))
+                            .font(.caption.weight(.medium))
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 4)
+                            .background(.quaternary.opacity(0.6), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .contextMenu {
+                        Button("Remove", role: .destructive) {
+                            self.removeSavedSearch(query)
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, 6)
+        }
+    }
+
+    private var canSaveCurrentSearch: Bool {
+        guard self.viewModel.mode == .history else { return false }
+        let trimmed = self.viewModel.query.trimmingCharacters(in: .whitespaces)
+        return !trimmed.isEmpty && !self.savedSearches.contains(trimmed)
+    }
+
+    private func saveCurrentSearch() {
+        let trimmed = self.viewModel.query.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty, !self.savedSearches.contains(trimmed) else { return }
+        self.savedSearches.append(trimmed)
+    }
+
+    private func removeSavedSearch(_ query: String) {
+        self.savedSearches.removeAll { $0 == query }
     }
 
     private var cardStrip: some View {

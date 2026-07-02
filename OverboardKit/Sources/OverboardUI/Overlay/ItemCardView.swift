@@ -353,10 +353,17 @@ struct ItemCardView: View {
         case .image:
             guard self.thumbnail == nil,
                   let rep = try? await store.representations(for: item.id)
-                  .first(where: { $0.uti == WellKnownUTI.png }),
-                  let data = try? await store.payload(for: rep)
+                  .first(where: { $0.uti == WellKnownUTI.png })
             else { return }
-            self.thumbnail = Self.thumbnail(from: data, maxPixel: 480)
+            // Downsample straight off the blob file when possible so a large
+            // image never fully inflates in memory just to draw a small card.
+            if let url = await store.blobURL(for: rep),
+               let cgImage = ImageDownsampler.downsampledImage(fromURL: url, maxPixel: 480)
+            {
+                self.thumbnail = NSImage(cgImage: cgImage, size: .zero)
+            } else if let data = try? await store.payload(for: rep) {
+                self.thumbnail = Self.thumbnail(from: data, maxPixel: 480)
+            }
 
         case .text:
             guard self.miniCode == nil, !self.item.isSecret,

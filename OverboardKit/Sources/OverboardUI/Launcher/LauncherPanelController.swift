@@ -242,6 +242,10 @@ public final class LauncherPanelController {
             case 125: // down
                 self.viewModel.moveSelection(1)
                 return nil
+            case 51 where event.modifierFlags.contains(.command): // ⌘⌫
+                // Delete the highlighted recent search; fall through to normal
+                // text editing when the selected row isn't a recent.
+                return self.viewModel.deleteSelectedRecent() ? nil : event
             case 36, 76: // return, keypad enter
                 let modifier: LauncherViewModel.CommitModifier = if event.modifierFlags.contains(.command) {
                     .command

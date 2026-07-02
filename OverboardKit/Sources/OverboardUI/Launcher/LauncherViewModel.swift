@@ -23,6 +23,9 @@ public final class LauncherViewModel {
     /// the result rows when the field is empty.
     public private(set) var history: [String] = Defaults[.launcherSearchHistory]
     private let maxHistory = 20
+    /// How many recents to actually show on an empty field — a short hint, not a
+    /// full history dump that fills the panel.
+    private let maxRecentRows = 3
 
     // Effects, executed by the app layer.
     public var onCopyText: (String) -> Void = { _ in }
@@ -78,7 +81,9 @@ public final class LauncherViewModel {
             // Empty field shows recent searches as the result list (most-recent
             // first); committing a row refills the bar and re-runs it.
             self.selectedIndex = 0
-            self.setResults(self.history.reversed().map { .recentSearch(query: $0) })
+            self.setResults(
+                self.history.reversed().prefix(self.maxRecentRows).map { .recentSearch(query: $0) }
+            )
             return
         }
         self.searchTask = Task {
@@ -136,6 +141,26 @@ public final class LauncherViewModel {
         }
         self.history = updated
         Defaults[.launcherSearchHistory] = updated
+    }
+
+    /// Removes the selected recent-search row from history (⌘⌫ on the empty
+    /// field). Returns true only when a recent was actually deleted, so the
+    /// caller can swallow the keystroke; any other row kind is left untouched.
+    @discardableResult
+    public func deleteSelectedRecent() -> Bool {
+        guard self.results.indices.contains(self.selectedIndex),
+              case let .recentSearch(query) = self.results[self.selectedIndex]
+        else { return false }
+        var updated = self.history
+        updated.removeAll { $0 == query }
+        self.history = updated
+        Defaults[.launcherSearchHistory] = updated
+        // Re-render the (still empty-field) recents list; setResults reclamps the
+        // selection so it lands on the next row down.
+        self.setResults(
+            updated.reversed().prefix(self.maxRecentRows).map { .recentSearch(query: $0) }
+        )
+        return true
     }
 
     public func commit(modifier: CommitModifier = .none) {

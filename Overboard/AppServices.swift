@@ -26,6 +26,7 @@ final class AppServices {
     nonisolated static let isDemo = ProcessInfo.processInfo.environment["OVERBOARD_DEMO"] == "1"
 
     let signal = CaptureSignal()
+    let updates = UpdateChecker()
 
     let store: ClipStore
     let monitor: ClipboardMonitor
@@ -37,6 +38,7 @@ final class AppServices {
     private var ingestTask: Task<Void, Never>?
     private var purgeTask: Task<Void, Never>?
     private var secretSweepTask: Task<Void, Never>?
+    private var maintenanceTask: Task<Void, Never>?
     private let logger = Logger(subsystem: "com.nickysemenza.overboard", category: "app")
 
     private init() {
@@ -97,6 +99,7 @@ final class AppServices {
         } else {
             self.startCapturePipeline()
             self.registerHotkeys()
+            self.updates.start()
         }
 
         self.installOverlayCallbacks()
@@ -114,6 +117,7 @@ final class AppServices {
         self.ingestTask = Task(priority: .utility) { [logger] in
             for await snapshot in snapshots {
                 do {
+                    let snapshot = Self.applyingAutoTransforms(to: snapshot)
                     if let item = try await store.ingest(snapshot) {
                         self.signal.bump()
                         // Fire-and-forget so a slow OCR/LLM pass never delays
@@ -138,6 +142,26 @@ final class AppServices {
                     logger.error("purge failed: \(String(describing: error), privacy: .public)")
                 }
                 try? await Task.sleep(for: .seconds(3600))
+            }
+        }
+
+        // Reclaim orphaned blob files and compact the DB on launch, then daily.
+        self.maintenanceTask = Task(priority: .background) { [logger] in
+            // Let launch settle before the first (VACUUM-heavy) pass.
+            try? await Task.sleep(for: .seconds(30))
+            while !Task.isCancelled {
+                do {
+                    let result = try await store.maintenanceSweep()
+                    if result.orphanedBlobsDeleted > 0 || result.missingBlobs > 0 {
+                        logger.info("""
+                        maintenance sweep: reclaimed \(result.orphanedBlobsDeleted, privacy: .public) \
+                        orphaned blobs, \(result.missingBlobs, privacy: .public) missing
+                        """)
+                    }
+                } catch {
+                    logger.error("maintenance sweep failed: \(String(describing: error), privacy: .public)")
+                }
+                try? await Task.sleep(for: .seconds(24 * 3600))
             }
         }
 
@@ -320,6 +344,25 @@ final class AppServices {
                 }
             }
         }
+    }
+
+    /// Applies the user's auto-transform-on-copy rules to a snapshot's
+    /// plain-text representation before it's stored, so e.g. tracking params are
+    /// stripped from browser URLs at capture. Rich (RTF/HTML) reps are left
+    /// alone; only the plain-text flavor — which is what the transforms target
+    /// and what these rules exist to normalize — is rewritten. No matching rule
+    /// (the common case) returns the snapshot untouched.
+    nonisolated static func applyingAutoTransforms(to snapshot: PasteboardSnapshot) -> PasteboardSnapshot {
+        let rules = Preferences.currentAutoTransformRules()
+        guard !rules.isEmpty,
+              let index = snapshot.reps.firstIndex(where: { $0.uti == WellKnownUTI.plainText }),
+              let text = String(data: snapshot.reps[index].data, encoding: .utf8),
+              let transformed = AutoTransform.apply(to: text, bundleID: snapshot.sourceBundleID, rules: rules)
+        else { return snapshot }
+
+        var adjusted = snapshot
+        adjusted.reps[index].data = Data(transformed.utf8)
+        return adjusted
     }
 
     /// Post-ingest enrichment: OCR for images (always), then LLM title +

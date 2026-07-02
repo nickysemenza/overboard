@@ -48,6 +48,28 @@ public struct BlobStore: Sendable {
             .appendingPathComponent(hash)
     }
 
+    public func exists(hash: String) -> Bool {
+        FileManager.default.fileExists(atPath: self.url(for: hash).path)
+    }
+
+    /// Every blob hash currently on disk (filenames under the `ab/` shards).
+    /// Used by the maintenance sweep to find files no representation references.
+    public func allHashes() -> Set<String> {
+        let fm = FileManager.default
+        guard let shards = try? fm.contentsOfDirectory(
+            at: self.directory, includingPropertiesForKeys: nil
+        ) else { return [] }
+        var hashes: Set<String> = []
+        for shard in shards where (try? shard.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true {
+            guard let files = try? fm.contentsOfDirectory(at: shard, includingPropertiesForKeys: nil)
+            else { continue }
+            for file in files {
+                hashes.insert(file.lastPathComponent)
+            }
+        }
+        return hashes
+    }
+
     public static func hash(_ data: Data) -> String {
         SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
