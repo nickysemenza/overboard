@@ -30,6 +30,7 @@ struct ItemCardView: View {
             Divider().opacity(0.4)
             self.content
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            self.footer
         }
         .frame(width: 190, height: 180)
         .background(.background.opacity(0.6))
@@ -261,14 +262,28 @@ struct ItemCardView: View {
                     }
                     .clipped()
                     .overlay(alignment: .bottom) {
-                        if let title = item.aiTitle {
-                            Text(title)
-                                .font(.caption2.weight(.medium))
-                                .lineLimit(1)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .frame(maxWidth: .infinity)
-                                .background(.ultraThinMaterial)
+                        let dims = self.item.metadataFooter
+                        if self.item.aiTitle != nil || dims != nil {
+                            HStack(spacing: 6) {
+                                if let title = item.aiTitle {
+                                    Text(title)
+                                        .font(.caption2.weight(.medium))
+                                        .lineLimit(1)
+                                }
+                                if self.item.aiTitle != nil, dims != nil {
+                                    Spacer(minLength: 0)
+                                }
+                                if let dims {
+                                    Text(dims)
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                }
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .frame(maxWidth: .infinity)
+                            .background(.ultraThinMaterial)
                         }
                     }
             } else {
@@ -304,6 +319,22 @@ struct ItemCardView: View {
         }
     }
 
+    /// Metadata line under the card content (char/line counts, file size…).
+    /// Images carry their dimensions in the image overlay instead, so they get
+    /// no footer row here. Nil metadata renders nothing — no placeholder.
+    @ViewBuilder
+    private var footer: some View {
+        if self.item.kind != .image, let text = item.metadataFooter {
+            Divider().opacity(0.25)
+            Text(text)
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .lineLimit(1)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+        }
+    }
+
     private var linkHost: String? {
         guard let text = item.previewText,
               let host = URL(string: text.trimmingCharacters(in: .whitespacesAndNewlines))?.host
@@ -322,12 +353,13 @@ struct ItemCardView: View {
     }
 
     /// Raw text yields lines to the title and summary when they're present.
+    /// One line is reserved for the metadata footer row (see `footer`).
     private var textPreviewLineLimit: Int {
         switch (self.item.aiTitle != nil, self.item.aiSummary != nil) {
-        case (false, false): 7
-        case (true, false): 6
-        case (false, true): 4
-        case (true, true): 3
+        case (false, false): 6
+        case (true, false): 5
+        case (false, true): 3
+        case (true, true): 2
         }
     }
 

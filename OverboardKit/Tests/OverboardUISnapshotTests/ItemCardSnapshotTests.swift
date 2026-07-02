@@ -65,6 +65,39 @@ struct ItemCardSnapshotTests {
         assertSnapshot(of: self.host(item, index: 3), as: snapshotImageStrategy)
     }
 
+    // MARK: - Metadata footers (v2)
+
+    @Test func textWithFooter() {
+        let item = Fixtures.item(
+            preview: "Pick up the package before 6pm — front desk closes early on Fridays.",
+            charCount: 1240,
+            lineCount: 32
+        )
+        assertSnapshot(of: self.host(item), as: snapshotImageStrategy)
+    }
+
+    @Test func imageWithDimensions() {
+        let item = Fixtures.item(
+            kind: .image,
+            preview: "Image 1920×1080",
+            appName: "Preview",
+            pixelWidth: 1920,
+            pixelHeight: 1080
+        )
+        assertSnapshot(of: self.host(item, index: 5), as: snapshotImageStrategy)
+    }
+
+    @Test func fileWithFooter() {
+        var item = Fixtures.item(
+            kind: .file,
+            preview: "overboard-icon.sketch, release-notes.md",
+            appName: "Finder",
+            fileCount: 2
+        )
+        item.byteSize = 2_100_000
+        assertSnapshot(of: self.host(item, index: 3), as: snapshotImageStrategy)
+    }
+
     @Test func secret() {
         let item = Fixtures.item(preview: "AWS access key", isSecret: true)
         assertSnapshot(of: self.host(item, index: 4), as: snapshotImageStrategy)

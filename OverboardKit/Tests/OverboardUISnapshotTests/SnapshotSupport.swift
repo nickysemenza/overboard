@@ -27,7 +27,12 @@ enum Fixtures {
         isSecret: Bool = false,
         aiTitle: String? = nil,
         category: String? = nil,
-        aiSummary: String? = nil
+        aiSummary: String? = nil,
+        charCount: Int? = nil,
+        lineCount: Int? = nil,
+        pixelWidth: Int? = nil,
+        pixelHeight: Int? = nil,
+        fileCount: Int? = nil
     ) -> ClipItem {
         ClipItem(
             id: "fixture-\(preview.prefix(24))",
@@ -44,7 +49,12 @@ enum Fixtures {
             aiSummary: aiSummary,
             createdAt: self.date,
             lastUsedAt: self.date,
-            updatedAt: self.date
+            updatedAt: self.date,
+            charCount: charCount,
+            lineCount: lineCount,
+            pixelWidth: pixelWidth,
+            pixelHeight: pixelHeight,
+            fileCount: fileCount
         )
     }
 
