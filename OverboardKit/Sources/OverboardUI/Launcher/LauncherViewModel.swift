@@ -62,9 +62,13 @@ public final class LauncherViewModel {
     /// Instant providers (apps) answer from memory and render on every
     /// keystroke alongside the calculator; secondary providers (files) run
     /// in the debounced pass and splice in above the web row.
-    public init(instantProviders: [any LauncherProvider] = [], secondaryProviders: [any LauncherProvider]) {
+    public init(
+        instantProviders: [any LauncherProvider] = [],
+        secondaryProviders: [any LauncherProvider],
+        commandProvider: CommandProvider = CommandProvider()
+    ) {
         self.instantRouter = QueryRouter(
-            providers: [CommandProvider(), CalculatorProvider()] + instantProviders + [WebSearchProvider()]
+            providers: [commandProvider, CalculatorProvider()] + instantProviders + [WebSearchProvider()]
         )
         self.secondaryProviders = secondaryProviders
     }
@@ -198,7 +202,7 @@ public final class LauncherViewModel {
             self.onOpenWebSearch(url)
         case let .systemSetting(_, url):
             self.onOpenSystemSetting(url)
-        case let .command(command):
+        case let .command(command, _):
             self.onRunCommand(command)
         case let .nowPlaying(track):
             modifier == .command ? self.onOpenSpotify(track) : self.onCopyNowPlayingLink(track)

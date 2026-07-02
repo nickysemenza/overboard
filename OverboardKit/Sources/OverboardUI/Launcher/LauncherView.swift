@@ -184,8 +184,8 @@ struct LauncherRow: View {
             Image(systemName: "gearshape.fill")
                 .font(.title2)
                 .foregroundStyle(.gray)
-        case .command:
-            Image(systemName: "info.circle.fill")
+        case let .command(command, _):
+            Image(systemName: Self.commandSymbol(for: command))
                 .font(.title2)
                 .foregroundStyle(.teal)
         case .recentSearch:
@@ -223,7 +223,7 @@ struct LauncherRow: View {
         case let .file(name, _): name
         case let .webSearch(query, _): "Search Google for “\(query)”"
         case let .systemSetting(name, _): name
-        case let .command(command): command.title
+        case let .command(command, _): command.title
         case let .recentSearch(query): query
         case let .nowPlaying(track): track.title
         }
@@ -242,12 +242,38 @@ struct LauncherRow: View {
         case let .file(_, url): (url.path as NSString).abbreviatingWithTildeInPath
         case .webSearch: "Open in browser"
         case .systemSetting: "System Settings"
-        case let .command(command): command.subtitle
+        // The provider's resolved subtitle wins (the live :stats count);
+        // otherwise the command's static one.
+        case let .command(command, subtitle): subtitle ?? command.subtitle
         case .recentSearch: "Recent search"
         case let .nowPlaying(track):
             track.artist.isEmpty
                 ? (track.state == .playing ? "Now playing" : "Paused")
                 : "\(track.artist) · \(track.state == .playing ? "Now playing" : "Paused")"
+        }
+    }
+
+    /// SF Symbol per launcher command — matched to what the command does so the
+    /// row reads at a glance.
+    private static func commandSymbol(for command: LauncherCommand) -> String {
+        switch command {
+        case .version: "info.circle.fill"
+        case .stats: "chart.bar.fill"
+        case .pause: "pause.circle.fill"
+        case .resume: "play.circle.fill"
+        case .clear: "trash.fill"
+        case .settings: "gearshape.fill"
+        }
+    }
+
+    /// Return-key hint per command — `.stats` opens Settings; the rest run in
+    /// place.
+    private static func commandHint(for command: LauncherCommand) -> String {
+        switch command {
+        case .version, .stats, .settings: "↩ open settings"
+        case .pause: "↩ pause capture"
+        case .resume: "↩ resume capture"
+        case .clear: "↩ clear history"
         }
     }
 
@@ -270,7 +296,7 @@ struct LauncherRow: View {
         case .file: "↩ open   ⌘↩ reveal   ⌥↩ copy path"
         case .webSearch: "↩ search"
         case .systemSetting: "↩ open"
-        case .command: "↩ open settings"
+        case let .command(command, _): Self.commandHint(for: command)
         case .recentSearch: "↩ search   ⌘⌫ remove"
         case .nowPlaying: "↩ copy link   ⌘↩ open Spotify"
         }
