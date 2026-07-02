@@ -177,6 +177,17 @@ enum Migrations {
             }
         }
 
+        // v3: rich link cards. Columns for a fetched page title/description and
+        // pre-downscaled favicon + preview-image PNGs. No in-migration backfill —
+        // the data comes from network fetches that run at runtime (post-ingest
+        // enrichment + a startup backfill pass over links still missing it).
+        migrator.registerMigration("v3") { db in
+            try db.execute(sql: "ALTER TABLE item ADD COLUMN linkTitle TEXT")
+            try db.execute(sql: "ALTER TABLE item ADD COLUMN linkDescription TEXT")
+            try db.execute(sql: "ALTER TABLE item ADD COLUMN faviconData BLOB")
+            try db.execute(sql: "ALTER TABLE item ADD COLUMN previewImageData BLOB")
+        }
+
         return migrator
     }
 }

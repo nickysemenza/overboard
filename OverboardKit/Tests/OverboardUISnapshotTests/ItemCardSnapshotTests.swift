@@ -56,6 +56,18 @@ struct ItemCardSnapshotTests {
         assertSnapshot(of: self.host(item, index: 2), as: snapshotImageStrategy)
     }
 
+    @Test func richLink() {
+        let item = Fixtures.item(
+            kind: .link,
+            preview: "https://developer.apple.com/documentation/swiftui/imagerenderer",
+            linkTitle: "ImageRenderer | Apple Developer Documentation",
+            linkDescription: "An object that creates images from SwiftUI views.",
+            faviconData: Fixtures.solidPNG(width: 32, height: 32, red: 0.2, green: 0.5, blue: 0.9),
+            previewImageData: Fixtures.solidPNG(width: 240, height: 120, red: 0.85, green: 0.9, blue: 0.95)
+        )
+        assertSnapshot(of: self.host(item, index: 2), as: snapshotImageStrategy)
+    }
+
     @Test func file() {
         let item = Fixtures.item(
             kind: .file,

@@ -63,6 +63,7 @@ final class AppServices {
     private var purgeTask: Task<Void, Never>?
     private var secretSweepTask: Task<Void, Never>?
     private var maintenanceTask: Task<Void, Never>?
+    private var linkBackfillTask: Task<Void, Never>?
     private let logger = Logger(subsystem: "com.nickysemenza.overboard", category: "app")
 
     private init() {
@@ -215,6 +216,30 @@ final class AppServices {
                     logger.error("maintenance sweep failed: \(String(describing: error), privacy: .public)")
                 }
                 try? await Task.sleep(for: .seconds(24 * 3600))
+            }
+        }
+
+        // Backfill rich-link metadata for existing links, once per launch.
+        // Runs 60s after launch (let capture/OCR settle first), then drains the
+        // queue in small batches with a pause between fetches to stay a polite
+        // network citizen. Stops when no links remain; picks up again next launch.
+        self.linkBackfillTask = Task(priority: .background) { [logger] in
+            try? await Task.sleep(for: .seconds(60))
+            guard Defaults[.richLinkPreviews] else { return }
+            while !Task.isCancelled {
+                let links: [ClipItem]
+                do {
+                    links = try await store.linksNeedingMetadata(limit: 25)
+                } catch {
+                    logger.error("link backfill query failed: \(String(describing: error), privacy: .public)")
+                    return
+                }
+                guard !links.isEmpty else { return }
+                for link in links {
+                    if Task.isCancelled { return }
+                    await Self.fetchLinkMetadata(for: link, store: store)
+                    try? await Task.sleep(for: .seconds(1))
+                }
             }
         }
 
@@ -544,6 +569,8 @@ final class AppServices {
             textForLabeling = snapshot.reps
                 .first { $0.uti == WellKnownUTI.plainText }
                 .flatMap { String(data: $0.data, encoding: .utf8) }
+        } else if item.kind == .link, Defaults[.richLinkPreviews] {
+            await Self.fetchLinkMetadata(for: item, store: store)
         }
 
         guard Defaults[.aiFeatures],
@@ -565,6 +592,31 @@ final class AppServices {
                 summary: summary
             )
         }
+    }
+
+    /// Fetches rich-link metadata for one `.link` item and attaches it (or the
+    /// empty-title sentinel on failure, so it's marked attempted and won't be
+    /// retried by backfill). Guards on fetchability; nil-URL / unfetchable links
+    /// still get the sentinel. Shared by post-ingest enrichment and backfill.
+    private nonisolated static func fetchLinkMetadata(for item: ClipItem, store: ClipStore) async {
+        guard let preview = item.previewText,
+              let url = URL(string: preview.trimmingCharacters(in: .whitespacesAndNewlines)),
+              LinkMetadataFetcher.isFetchable(url)
+        else {
+            // Not fetchable → record the sentinel so we don't re-check every pass.
+            try? await store.attachLinkMetadata(
+                itemID: item.id, title: "", description: nil, faviconPNG: nil, previewImagePNG: nil
+            )
+            return
+        }
+        let metadata = await LinkMetadataFetcher().fetch(url)
+        try? await store.attachLinkMetadata(
+            itemID: item.id,
+            title: metadata?.title ?? "",
+            description: metadata?.description,
+            faviconPNG: metadata?.faviconPNG,
+            previewImagePNG: metadata?.previewImagePNG
+        )
     }
 
     /// Prefetches payloads, runs the pure action, then executes its effect.

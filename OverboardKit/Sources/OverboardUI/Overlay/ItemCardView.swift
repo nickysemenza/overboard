@@ -222,33 +222,7 @@ struct ItemCardView: View {
                 .padding(10)
             }
         case .link:
-            VStack(alignment: .leading, spacing: 5) {
-                HStack(spacing: 5) {
-                    Image(systemName: "link")
-                        .font(.caption)
-                        .foregroundStyle(Color.accentColor)
-                    Text(self.linkHost ?? "link")
-                        .font(.callout.weight(.semibold))
-                        .lineLimit(1)
-                }
-                Text(self.item.previewText ?? "")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(4)
-                if let title = item.aiTitle {
-                    Spacer(minLength: 0)
-                    Text(title)
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(Color.accentColor)
-                        .lineLimit(2)
-                }
-            }
-            .padding(10)
-            .overlay(alignment: .leading) {
-                Rectangle()
-                    .fill(Color.accentColor.opacity(0.7))
-                    .frame(width: 3)
-            }
+            self.linkContent
         case .image:
             if let thumbnail {
                 // Color.clear.overlay + clipped is the canonical
@@ -319,6 +293,89 @@ struct ItemCardView: View {
         }
     }
 
+    /// Rich link card, iMessage-preview style: favicon + fetched title headline,
+    /// an optional og:image thumbnail, then the URL. Falls back gracefully when
+    /// metadata hasn't landed (or the fetch found nothing): the host becomes the
+    /// headline and the link SF symbol stands in for a missing favicon. The
+    /// host also renders in the footer via `metadataFooter`.
+    private var linkContent: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 5) {
+                self.linkFavicon
+                Text(self.resolvedLinkTitle)
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(self.hasLinkTitle ? Color.accentColor : .primary)
+                    .lineLimit(2)
+            }
+            if let preview = self.linkPreviewImage {
+                Color.clear
+                    .overlay {
+                        Image(nsImage: preview)
+                            .resizable()
+                            .scaledToFill()
+                    }
+                    .frame(height: 74)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
+            if let description = item.linkDescription, !description.isEmpty {
+                Text(description)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(self.linkPreviewImage != nil ? 1 : 3)
+            }
+            Spacer(minLength: 0)
+            Text(self.item.previewText ?? "")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .overlay(alignment: .leading) {
+            Rectangle()
+                .fill(Color.accentColor.opacity(0.7))
+                .frame(width: 3)
+        }
+    }
+
+    /// 16×16 favicon from fetched bytes, falling back to the link SF symbol.
+    @ViewBuilder
+    private var linkFavicon: some View {
+        if let favicon = self.faviconImage {
+            Image(nsImage: favicon)
+                .resizable()
+                .interpolation(.high)
+                .frame(width: 16, height: 16)
+        } else {
+            Image(systemName: "link")
+                .font(.caption)
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 16, height: 16)
+        }
+    }
+
+    /// Non-empty fetched title (empty string is the failed-fetch sentinel).
+    private var hasLinkTitle: Bool {
+        (self.item.linkTitle?.isEmpty == false)
+    }
+
+    /// The headline text: the fetched title when present, else the host.
+    private var resolvedLinkTitle: String {
+        if let title = item.linkTitle, !title.isEmpty { return title }
+        return self.linkHost ?? "Link"
+    }
+
+    private var faviconImage: NSImage? {
+        guard let data = item.faviconData, !data.isEmpty else { return nil }
+        return NSImage(data: data)
+    }
+
+    private var linkPreviewImage: NSImage? {
+        guard let data = item.previewImageData, !data.isEmpty else { return nil }
+        return NSImage(data: data)
+    }
+
     /// Metadata line under the card content (char/line counts, file size…).
     /// Images carry their dimensions in the image overlay instead, so they get
     /// no footer row here. Nil metadata renders nothing — no placeholder.
@@ -336,10 +393,7 @@ struct ItemCardView: View {
     }
 
     private var linkHost: String? {
-        guard let text = item.previewText,
-              let host = URL(string: text.trimmingCharacters(in: .whitespacesAndNewlines))?.host
-        else { return nil }
-        return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
+        ClipItem.linkHost(fromPreview: self.item.previewText)
     }
 
     static func hexString(for color: NSColor) -> String {

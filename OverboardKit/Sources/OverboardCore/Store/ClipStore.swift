@@ -656,6 +656,79 @@ public actor ClipStore {
         }
     }
 
+    // MARK: - Rich link metadata
+
+    /// Attaches fetched rich-link metadata to a `.link` item that has none yet,
+    /// and folds the title + description into the FTS index so links are findable
+    /// by their page title, not just their URL. Never overwrites existing
+    /// metadata (`linkTitle IS NULL` guard).
+    ///
+    /// Failed-fetch sentinel: pass `title == ""` to mark the link as "attempted"
+    /// so backfill won't retry it. The empty title still populates `linkTitle`
+    /// (the UI treats "" as absent) but contributes nothing to FTS.
+    public func attachLinkMetadata(
+        itemID: String,
+        title: String,
+        description: String?,
+        faviconPNG: Data?,
+        previewImagePNG: Data?
+    ) throws {
+        try self.dbWriter.write { db in
+            guard let row = try Row.fetchOne(
+                db,
+                sql: "SELECT rowid, searchText FROM item WHERE id = ? AND linkTitle IS NULL AND deletedAt IS NULL",
+                arguments: [itemID]
+            ) else { return }
+            let rowid: Int64 = row["rowid"]
+            let oldSearchText: String? = row["searchText"]
+
+            // Fold the fetched text into searchText so the link is findable by
+            // its title/description. An empty (sentinel) title adds nothing.
+            let additions = [title, description].compactMap(\.self).filter { !$0.isEmpty }
+            let parts = [oldSearchText].compactMap(\.self).filter { !$0.isEmpty } + additions
+            let newSearchText = parts.isEmpty
+                ? nil
+                : String(parts.joined(separator: "\n").prefix(CaptureClassifier.searchTextLimit))
+
+            if let oldSearchText {
+                try db.execute(
+                    sql: "INSERT INTO item_fts (item_fts, rowid, searchText) VALUES ('delete', ?, ?)",
+                    arguments: [rowid, oldSearchText]
+                )
+            }
+            try db.execute(
+                sql: """
+                UPDATE item SET linkTitle = ?, linkDescription = ?, faviconData = ?,
+                                previewImageData = ?, searchText = ?,
+                                updatedAt = ?, lamport = lamport + 1
+                WHERE id = ?
+                """,
+                arguments: [
+                    title, description, faviconPNG, previewImagePNG, newSearchText, Date(), itemID,
+                ]
+            )
+            if let newSearchText, !newSearchText.isEmpty {
+                try db.execute(
+                    sql: "INSERT INTO item_fts (rowid, searchText) VALUES (?, ?)",
+                    arguments: [rowid, newSearchText]
+                )
+            }
+        }
+    }
+
+    /// Live `.link` items that haven't had a metadata fetch attempted yet
+    /// (`linkTitle IS NULL`), newest first, for the startup backfill pass.
+    /// Secrets are excluded — their URLs never leave the machine.
+    public func linksNeedingMetadata(limit: Int) throws -> [ClipItem] {
+        try self.dbWriter.read { db in
+            try ClipItem
+                .filter(sql: "kind = 'link' AND linkTitle IS NULL AND isSecret = 0 AND deletedAt IS NULL")
+                .order(sql: "createdAt DESC")
+                .limit(limit)
+                .fetchAll(db)
+        }
+    }
+
     // MARK: - Secret expiry
 
     /// Hard-deletes secret items captured before the cutoff. Secrets are never

@@ -30,6 +30,13 @@ public struct ClipItem: Codable, Sendable, Equatable, Identifiable {
     public var pixelWidth: Int?
     public var pixelHeight: Int?
     public var fileCount: Int?
+    /// Rich link cards (migration v3); nil for non-link kinds and for links
+    /// captured before backfill. `linkTitle == ""` is the failed-fetch sentinel:
+    /// a fetch was attempted and yielded no usable title, so backfill won't retry.
+    public var linkTitle: String?
+    public var linkDescription: String?
+    public var faviconData: Data?
+    public var previewImageData: Data?
 
     public init(
         id: String = UUID().uuidString,
@@ -54,7 +61,11 @@ public struct ClipItem: Codable, Sendable, Equatable, Identifiable {
         lineCount: Int? = nil,
         pixelWidth: Int? = nil,
         pixelHeight: Int? = nil,
-        fileCount: Int? = nil
+        fileCount: Int? = nil,
+        linkTitle: String? = nil,
+        linkDescription: String? = nil,
+        faviconData: Data? = nil,
+        previewImageData: Data? = nil
     ) {
         self.id = id
         self.contentHash = contentHash
@@ -79,6 +90,10 @@ public struct ClipItem: Codable, Sendable, Equatable, Identifiable {
         self.pixelWidth = pixelWidth
         self.pixelHeight = pixelHeight
         self.fileCount = fileCount
+        self.linkTitle = linkTitle
+        self.linkDescription = linkDescription
+        self.faviconData = faviconData
+        self.previewImageData = previewImageData
     }
 }
 
@@ -94,12 +109,14 @@ extension ClipItem {
     public var metadataFooter: String? {
         guard !self.isSecret else { return nil }
         switch self.kind {
-        case .text, .link:
-            // link footers are a later feature; text needs a char count.
-            guard self.kind == .text, let chars = charCount else { return nil }
+        case .text:
+            guard let chars = charCount else { return nil }
             let charsPart = "\(Self.decimal(chars)) \(chars == 1 ? "char" : "chars")"
             guard let lines = lineCount, lines > 1 else { return charsPart }
             return "\(charsPart) · \(lines) lines"
+        case .link:
+            // The link's host, parsed from the URL preview text.
+            return Self.linkHost(fromPreview: self.previewText)
         case .image:
             // Prefer backfilled columns; fall back to the render-time preview
             // parse for rows the migration couldn't reach.
@@ -130,6 +147,16 @@ extension ClipItem {
               let height = scanner.scanInt()
         else { return nil }
         return (width, height)
+    }
+
+    /// The display host of a `.link` clip: the URL's host with a leading
+    /// "www." stripped. Nil if the preview isn't a parseable URL with a host.
+    /// Shared by the footer and the card headline's host line.
+    public static func linkHost(fromPreview preview: String?) -> String? {
+        guard let preview,
+              let host = URL(string: preview.trimmingCharacters(in: .whitespacesAndNewlines))?.host
+        else { return nil }
+        return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
     }
 
     private static func decimal(_ value: Int) -> String {
