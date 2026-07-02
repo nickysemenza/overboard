@@ -57,6 +57,8 @@ final class AppServices {
     let overlay: OverlayController
     let launcher: LauncherPanelController
     let spotify: SpotifyNowPlayingMonitor
+    let launcherViewModel: LauncherViewModel
+    let runningApps = RunningApps()
     let stack = PasteStack()
 
     private var ingestTask: Task<Void, Never>?
@@ -145,6 +147,7 @@ final class AppServices {
             guard Defaults[.launcherNowPlaying], let track = spotify.current else { return [] }
             return [.nowPlaying(track)]
         }
+        self.launcherViewModel = launcherViewModel
         self.launcher = LauncherPanelController(store: self.store, viewModel: launcherViewModel)
     }
 
@@ -268,9 +271,6 @@ final class AppServices {
             guard let self, self.launcher.isVisible else { return }
             self.launcher.refreshRows()
         }
-        self.launcher.onWillShow = { [weak self] in
-            self?.spotify.refreshSnapshot()
-        }
         self.spotify.start()
     }
 
@@ -325,6 +325,23 @@ final class AppServices {
     }
 
     private func installLauncherCallbacks() {
+        // Summon-time refresh: reconcile the Spotify now-playing snapshot (its
+        // onChange only refreshes an open panel, so a missed track change is
+        // caught here) and snapshot running apps for the row indicator dots.
+        // Observation runs only while the panel is visible.
+        self.launcher.onWillShow = { [weak self] in
+            guard let self else { return }
+            if !Self.isDemo { self.spotify.refreshSnapshot() }
+            self.launcherViewModel.runningAppPaths = self.runningApps.snapshot()
+            self.runningApps.startObserving()
+        }
+        self.launcher.onWillHide = { [weak self] in
+            self?.runningApps.stopObserving()
+        }
+        self.runningApps.onChange = { [weak self] in
+            guard let self, self.launcher.isVisible else { return }
+            self.launcherViewModel.runningAppPaths = self.runningApps.snapshot()
+        }
         self.launcher.onCopyText = { [weak self] text in
             self?.copyString(text, hud: "Result copied — ⌘V to paste")
         }

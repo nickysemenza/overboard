@@ -40,6 +40,27 @@ struct LauncherSectionSnapshotTests {
         assertSnapshot(of: snapshotHost(view, width: 640, height: 370), as: snapshotImageStrategy)
     }
 
+    /// An app row whose bundle path is in `runningAppPaths` shows the small
+    /// running-indicator dot on its icon.
+    @Test func runningAppDot() async throws {
+        let store = try Fixtures.store()
+        let appURL = URL(fileURLWithPath: "/Applications/OverboardDemo.app")
+        let viewModel = LauncherViewModel(
+            instantProviders: [StubProvider(rows: [.app(name: "Demo App", url: appURL)])],
+            secondaryProviders: []
+        )
+        viewModel.runningAppPaths = [appURL.path]
+        viewModel.query = "zzz"
+        viewModel.scheduleSearch()
+        while viewModel.results.isEmpty {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+
+        let view = LauncherView(viewModel: viewModel, store: store)
+        // 82 bar + 17 divider + 2 rows × 45 + 2 headers × 18 + 37 footer = 262.
+        assertSnapshot(of: snapshotHost(view, width: 640, height: 262), as: snapshotImageStrategy)
+    }
+
     /// The persistent footer bar renders even with zero result rows: brand on
     /// the left, ⌘K affordance on the right (no primary-action segment, since
     /// nothing is selected).

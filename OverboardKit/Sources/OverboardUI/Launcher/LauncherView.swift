@@ -28,12 +28,17 @@ public struct LauncherView: View {
                         if let header = row.header {
                             LauncherSectionHeader(title: header)
                         }
-                        LauncherRow(result: row.result, store: self.store, isSelected: index == self.viewModel.selectedIndex)
-                            .contentShape(RoundedRectangle(cornerRadius: 8))
-                            .onTapGesture {
-                                self.viewModel.selectedIndex = index
-                                self.viewModel.commit()
-                            }
+                        LauncherRow(
+                            result: row.result,
+                            store: self.store,
+                            isSelected: index == self.viewModel.selectedIndex,
+                            runningAppPaths: self.viewModel.runningAppPaths
+                        )
+                        .contentShape(RoundedRectangle(cornerRadius: 8))
+                        .onTapGesture {
+                            self.viewModel.selectedIndex = index
+                            self.viewModel.commit()
+                        }
                     }
                 }
                 // Rows stream in (instant, then debounced) while the panel
@@ -148,12 +153,21 @@ struct LauncherRow: View {
     let result: LauncherResult
     let store: ClipStore
     let isSelected: Bool
+    let runningAppPaths: Set<String>
     @State private var thumbnail: NSImage?
 
     var body: some View {
         HStack(spacing: 10) {
             self.icon
                 .frame(width: 28, height: 28)
+                .overlay(alignment: .bottomTrailing) {
+                    if case let .app(_, url) = self.result, self.runningAppPaths.contains(url.path) {
+                        Circle()
+                            .fill(.secondary)
+                            .frame(width: 6, height: 6)
+                            .overlay(Circle().strokeBorder(.background, lineWidth: 1))
+                    }
+                }
             VStack(alignment: .leading, spacing: 1) {
                 Text(self.title)
                     .font(.body.weight(self.titleWeight))

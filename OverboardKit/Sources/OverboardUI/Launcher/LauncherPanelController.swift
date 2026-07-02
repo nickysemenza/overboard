@@ -47,8 +47,11 @@ public final class LauncherPanelController {
     public var onOpenClipLink: (URL) -> Void = { _ in }
     /// Called as the launcher is summoned, before rows render — the hook that
     /// reconciles the Spotify now-playing snapshot so a missed notification is
-    /// caught exactly when the stale row would otherwise be visible.
+    /// caught exactly when the stale row would otherwise be visible. Also
+    /// refreshes the running-app snapshot behind the row indicator dots.
     public var onWillShow: () -> Void = {}
+    /// Called as the launcher is dismissed (stops running-app observation).
+    public var onWillHide: () -> Void = {}
 
     private enum Metrics {
         static let panelWidth: CGFloat = 640
@@ -242,6 +245,7 @@ public final class LauncherPanelController {
         // Escape, and click-outside alike.
         self.viewModel.closePalette()
         self.viewModel.recordCurrentQuery()
+        self.onWillHide()
         self.removeMonitors()
         self.panel?.orderOut(nil)
         self.targetApp = nil
