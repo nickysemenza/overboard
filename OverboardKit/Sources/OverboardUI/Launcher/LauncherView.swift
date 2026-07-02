@@ -66,9 +66,10 @@ public struct LauncherView: View {
 
     /// The empty field surfaces recent searches; label that section so the rows
     /// read as an intentional "Recent" list rather than live search results.
+    /// Keyed on the actual rows, not just an empty query, so a lone pinned
+    /// now-playing row on the empty field isn't mislabeled "Recent".
     private var isShowingRecents: Bool {
-        self.viewModel.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && !self.viewModel.results.isEmpty
+        self.viewModel.results.contains { if case .recentSearch = $0 { true } else { false } }
     }
 
     private var searchBar: some View {
@@ -183,6 +184,10 @@ struct LauncherRow: View {
             Image(systemName: "clock.arrow.circlepath")
                 .font(.title2)
                 .foregroundStyle(.secondary)
+        case let .nowPlaying(track):
+            Image(systemName: track.state == .playing ? "music.note" : "pause.fill")
+                .font(.title2)
+                .foregroundStyle(.green)
         }
     }
 
@@ -212,6 +217,7 @@ struct LauncherRow: View {
         case let .systemSetting(name, _): name
         case let .command(command): command.title
         case let .recentSearch(query): query
+        case let .nowPlaying(track): track.title
         }
     }
 
@@ -230,6 +236,10 @@ struct LauncherRow: View {
         case .systemSetting: "System Settings"
         case let .command(command): command.subtitle
         case .recentSearch: "Recent search"
+        case let .nowPlaying(track):
+            track.artist.isEmpty
+                ? (track.state == .playing ? "Now playing" : "Paused")
+                : "\(track.artist) · \(track.state == .playing ? "Now playing" : "Paused")"
         }
     }
 
@@ -254,6 +264,7 @@ struct LauncherRow: View {
         case .systemSetting: "↩ open"
         case .command: "↩ open settings"
         case .recentSearch: "↩ search   ⌘⌫ remove"
+        case .nowPlaying: "↩ copy link   ⌘↩ open Spotify"
         }
     }
 
@@ -263,6 +274,7 @@ struct LauncherRow: View {
         switch self.result {
         case .snippet: (symbol: "text.badge.star", label: "Snippet")
         case .clip: (symbol: "doc.on.clipboard", label: "Clipboard")
+        case .nowPlaying: (symbol: "music.note", label: "Spotify")
         default: nil
         }
     }

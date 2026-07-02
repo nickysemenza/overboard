@@ -33,6 +33,7 @@ final class AppServices {
     let pasteback: PastebackService
     let overlay: OverlayController
     let launcher: LauncherPanelController
+    let spotify: SpotifyNowPlayingMonitor
     let stack = PasteStack()
 
     private var ingestTask: Task<Void, Never>?
@@ -61,33 +62,40 @@ final class AppServices {
         self.monitor = ClipboardMonitor()
         self.pasteback = PastebackService(store: self.store)
         self.overlay = OverlayController(store: self.store, stack: self.stack)
-        self.launcher = LauncherPanelController(
-            store: self.store,
-            viewModel: LauncherViewModel(
-                instantProviders: [
-                    AppSearchProvider(index: AppIndex(), limit: 5) {
-                        AppMatcher.parseAliases(Defaults[.launcherAppAliases])
+        let spotify = SpotifyNowPlayingMonitor()
+        self.spotify = spotify
+        let launcherViewModel = LauncherViewModel(
+            instantProviders: [
+                AppSearchProvider(index: AppIndex(), limit: 5) {
+                    AppMatcher.parseAliases(Defaults[.launcherAppAliases])
+                },
+                ConditionalProvider(SettingsPaneSearchProvider(index: SettingsPaneIndex())) {
+                    Defaults[.launcherSettingsResults]
+                },
+            ],
+            secondaryProviders: [
+                ConditionalProvider(SnippetSearchProvider(store: self.store)) {
+                    Defaults[.launcherSnippetResults]
+                },
+                ConditionalProvider(ClipSearchProvider(store: self.store)) {
+                    Defaults[.launcherClipResults]
+                },
+                // Demo screenshots must not leak real home-folder files.
+                Self.isDemo
+                    ? DemoSeed.LauncherFiles()
+                    : ConditionalProvider(FileSearchProvider(search: SpotlightFileSearch(), limit: 8)) {
+                        Defaults[.launcherFileResults]
                     },
-                    ConditionalProvider(SettingsPaneSearchProvider(index: SettingsPaneIndex())) {
-                        Defaults[.launcherSettingsResults]
-                    },
-                ],
-                secondaryProviders: [
-                    ConditionalProvider(SnippetSearchProvider(store: self.store)) {
-                        Defaults[.launcherSnippetResults]
-                    },
-                    ConditionalProvider(ClipSearchProvider(store: self.store)) {
-                        Defaults[.launcherClipResults]
-                    },
-                    // Demo screenshots must not leak real home-folder files.
-                    Self.isDemo
-                        ? DemoSeed.LauncherFiles()
-                        : ConditionalProvider(FileSearchProvider(search: SpotlightFileSearch(), limit: 8)) {
-                            Defaults[.launcherFileResults]
-                        },
-                ]
-            )
+            ]
         )
+        // Pin the Spotify now-playing row under every result list when enabled
+        // and a track is present. The monitor stays nil in demo mode (never
+        // started), so screenshots never leak listening.
+        launcherViewModel.pinnedResults = { [spotify] in
+            guard Defaults[.launcherNowPlaying], let track = spotify.current else { return [] }
+            return [.nowPlaying(track)]
+        }
+        self.launcher = LauncherPanelController(store: self.store, viewModel: launcherViewModel)
     }
 
     func start() {
@@ -100,6 +108,7 @@ final class AppServices {
             self.startCapturePipeline()
             self.registerHotkeys()
             self.updates.start()
+            self.startSpotifyMonitor()
         }
 
         self.installOverlayCallbacks()
@@ -176,6 +185,19 @@ final class AppServices {
                 try? await Task.sleep(for: .seconds(60))
             }
         }
+    }
+
+    /// Spotify now-playing: observe playback broadcasts, refresh an open panel
+    /// on change, and reconcile a fresh snapshot each time the launcher opens.
+    private func startSpotifyMonitor() {
+        self.spotify.onChange = { [weak self] in
+            guard let self, self.launcher.isVisible else { return }
+            self.launcher.refreshRows()
+        }
+        self.launcher.onWillShow = { [weak self] in
+            self?.spotify.refreshSnapshot()
+        }
+        self.spotify.start()
     }
 
     private func installOverlayCallbacks() {
@@ -280,6 +302,18 @@ final class AppServices {
         self.launcher.onRunCommand = { command in
             switch command {
             case .version: Self.openSettings()
+            }
+        }
+        self.launcher.onCopyNowPlayingLink = { [weak self] track in
+            let text = track.shareURL?.absoluteString ?? "\(track.title) — \(track.artist)"
+            self?.copyString(text, hud: "Spotify link copied — ⌘V to paste")
+        }
+        self.launcher.onOpenSpotify = { _ in
+            let id = SpotifyNowPlayingMonitor.spotifyBundleID
+            if let app = NSRunningApplication.runningApplications(withBundleIdentifier: id).first {
+                app.activate()
+            } else if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: id) {
+                NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
             }
         }
     }

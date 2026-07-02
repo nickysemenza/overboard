@@ -285,9 +285,11 @@
 		0B4200000000000000001003 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Overboard/Overboard.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
+				INFOPLIST_KEY_NSAppleEventsUsageDescription = "Overboard asks Spotify for the currently playing track.";
 				DEVELOPMENT_TEAM = HDPU3NY6TJ;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
@@ -308,9 +310,11 @@
 		0B4200000000000000001004 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Overboard/Overboard.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
+				INFOPLIST_KEY_NSAppleEventsUsageDescription = "Overboard asks Spotify for the currently playing track.";
 				DEVELOPMENT_TEAM = HDPU3NY6TJ;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;

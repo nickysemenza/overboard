@@ -35,6 +35,12 @@ public final class LauncherPanelController {
     public var onPasteSnippet: (Snippet, NSRunningApplication?) -> Void = { _, _ in }
     public var onCopySnippet: (Snippet) -> Void = { _ in }
     public var onRunCommand: (LauncherCommand) -> Void = { _ in }
+    public var onCopyNowPlayingLink: (NowPlayingTrack) -> Void = { _ in }
+    public var onOpenSpotify: (NowPlayingTrack) -> Void = { _ in }
+    /// Called as the launcher is summoned, before rows render — the hook that
+    /// reconciles the Spotify now-playing snapshot so a missed notification is
+    /// caught exactly when the stale row would otherwise be visible.
+    public var onWillShow: () -> Void = {}
 
     private enum Metrics {
         static let panelWidth: CGFloat = 640
@@ -114,6 +120,16 @@ public final class LauncherPanelController {
             self.hide()
             self.onRunCommand(command)
         }
+        viewModel.onCopyNowPlayingLink = { [weak self] track in
+            guard let self else { return }
+            self.hide()
+            self.onCopyNowPlayingLink(track)
+        }
+        viewModel.onOpenSpotify = { [weak self] track in
+            guard let self else { return }
+            self.hide()
+            self.onOpenSpotify(track)
+        }
         viewModel.onResultCountChanged = { [weak self] count in
             self?.resizePanel(rows: count)
         }
@@ -138,6 +154,12 @@ public final class LauncherPanelController {
         self.viewModel.scheduleSearch()
     }
 
+    /// Re-runs the current query in place — lets a background source (the
+    /// Spotify monitor) refresh an already-open panel's rows.
+    public func refreshRows() {
+        self.viewModel.scheduleSearch()
+    }
+
     /// Same path as ↑/↓ — used by the debug hooks.
     public func moveSelection(_ delta: Int) {
         self.viewModel.moveSelection(delta)
@@ -146,6 +168,9 @@ public final class LauncherPanelController {
     public func show() {
         guard !self.isVisible else { return }
         self.targetApp = NSWorkspace.shared.frontmostApplication
+        // Reconcile the now-playing snapshot before rows render; if a track
+        // change was missed, its onChange fires and refreshes the open panel.
+        self.onWillShow()
 
         let panel = self.panel ?? self.makePanel()
         self.panel = panel

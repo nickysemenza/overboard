@@ -40,8 +40,16 @@ public final class LauncherViewModel {
     public var onPasteSnippet: (Snippet) -> Void = { _ in }
     public var onCopySnippet: (Snippet) -> Void = { _ in }
     public var onRunCommand: (LauncherCommand) -> Void = { _ in }
+    public var onCopyNowPlayingLink: (NowPlayingTrack) -> Void = { _ in }
+    public var onOpenSpotify: (NowPlayingTrack) -> Void = { _ in }
     /// Lets the panel controller resize as rows come and go.
     public var onResultCountChanged: (Int) -> Void = { _ in }
+
+    /// Rows pinned under every result list (the Spotify now-playing footer).
+    /// Evaluated on each `setResults` pass, so it covers the empty-query recents
+    /// branch, the instant pass, and the debounced splice with one seam — the
+    /// row lands last (after the web row) in every query state.
+    public var pinnedResults: () -> [LauncherResult] = { [] }
 
     private let instantRouter: QueryRouter
     private let secondaryProviders: [any LauncherProvider]
@@ -188,6 +196,8 @@ public final class LauncherViewModel {
             self.onOpenSystemSetting(url)
         case let .command(command):
             self.onRunCommand(command)
+        case let .nowPlaying(track):
+            modifier == .command ? self.onOpenSpotify(track) : self.onCopyNowPlayingLink(track)
         case let .recentSearch(query):
             // Re-run the past search in place — refill the bar, stay open.
             self.query = query
@@ -197,14 +207,18 @@ public final class LauncherViewModel {
     }
 
     private func setResults(_ newResults: [LauncherResult]) {
-        obTrace("launcher results: \(newResults.map(\.id))")
-        let countChanged = newResults.count != self.results.count
-        self.results = newResults
-        if self.selectedIndex >= newResults.count {
-            self.selectedIndex = max(newResults.count - 1, 0)
+        // Pinned rows (Spotify now-playing) trail every list. Routing all
+        // mutations through here means the footer appears on the empty-query
+        // recents, the instant pass, and the debounced splice alike.
+        let combined = newResults + self.pinnedResults()
+        obTrace("launcher results: \(combined.map(\.id))")
+        let countChanged = combined.count != self.results.count
+        self.results = combined
+        if self.selectedIndex >= combined.count {
+            self.selectedIndex = max(combined.count - 1, 0)
         }
         if countChanged {
-            self.onResultCountChanged(newResults.count)
+            self.onResultCountChanged(combined.count)
         }
     }
 }

@@ -119,6 +119,77 @@ struct LauncherCommitRoutingTests {
         #expect(copied == [snippet.id])
     }
 
+    // MARK: - Spotify now-playing (pinned footer)
+
+    private static let track = NowPlayingTrack(
+        title: "Imagine", artist: "John Lennon", trackID: "spotify:track:abc123", state: .playing
+    )
+
+    /// The pinned row trails the list on a non-empty query, landing after the
+    /// standing web row even once the debounced secondary providers splice in.
+    @Test func nowPlayingPinsAfterWebRow() async {
+        let clip = Fixtures.item(preview: "deploy checklist")
+        let viewModel = LauncherViewModel(
+            instantProviders: [],
+            secondaryProviders: [StubProvider(rows: [.clip(clip)])]
+        )
+        viewModel.pinnedResults = { [.nowPlaying(Self.track)] }
+        viewModel.query = "zzz"
+        viewModel.scheduleSearch()
+        // Wait for the debounced splice: clip + web + pinned now-playing.
+        while viewModel.results.count < 3 {
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+
+        #expect(viewModel.results.last == .nowPlaying(Self.track))
+        guard case .webSearch = viewModel.results[viewModel.results.count - 2] else {
+            Issue.record("expected the web row directly before the pinned row, got \(viewModel.results)")
+            return
+        }
+    }
+
+    /// With recents, the pinned row is appended after them; with no history it
+    /// stands alone and is selected by default so plain ↩ copies its link.
+    @Test func nowPlayingShowsOnEmptyQuery() {
+        let viewModel = self.freshViewModel()
+        viewModel.pinnedResults = { [.nowPlaying(Self.track)] }
+
+        for query in ["one", "two"] {
+            viewModel.query = query
+            viewModel.recordCurrentQuery()
+        }
+        viewModel.query = ""
+        viewModel.scheduleSearch()
+        #expect(viewModel.results == [
+            .recentSearch(query: "two"),
+            .recentSearch(query: "one"),
+            .nowPlaying(Self.track),
+        ])
+
+        // With no history, the lone pinned row is the whole list and is
+        // selected by default so plain ↩ copies the link.
+        Defaults[.launcherSearchHistory] = []
+        viewModel.prepareForShow(clearQuery: true) // reloads history from Defaults, re-runs empty
+        #expect(viewModel.results == [.nowPlaying(Self.track)])
+        #expect(viewModel.selectedIndex == 0)
+    }
+
+    @Test func nowPlayingRowRoutesPerModifier() async {
+        let viewModel = await makeViewModel(rows: [.nowPlaying(Self.track)])
+
+        var copied: [String] = []
+        var opened: [String] = []
+        viewModel.onCopyNowPlayingLink = { copied.append($0.trackID) }
+        viewModel.onOpenSpotify = { opened.append($0.trackID) }
+
+        viewModel.commit() // ↩ copies the link
+        viewModel.commit(modifier: .option) // ⌥↩ same as ↩
+        viewModel.commit(modifier: .command) // ⌘↩ opens Spotify
+
+        #expect(copied == [Self.track.trackID, Self.track.trackID])
+        #expect(opened == [Self.track.trackID])
+    }
+
     @Test func systemSettingRowRoutesToOpen() async throws {
         let url = try #require(URL(string: "x-apple.systempreferences:com.apple.Displays-Settings.extension"))
         let viewModel = await makeViewModel(rows: [.systemSetting(name: "Displays", url: url)])

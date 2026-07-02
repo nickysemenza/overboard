@@ -34,6 +34,8 @@ public extension Defaults.Keys {
     static let launcherSnippetResults = Key<Bool>("launcherSnippetResults", default: true)
     /// System Settings pane results in the launcher bar.
     static let launcherSettingsResults = Key<Bool>("launcherSettingsResults", default: true)
+    /// Spotify now-playing row pinned to the bottom of the launcher.
+    static let launcherNowPlaying = Key<Bool>("launcherNowPlaying", default: true)
     /// Launcher app-search aliases, one "alias = App Name" per line.
     static let launcherAppAliases = Key<String>("launcherAppAliases", default: "")
     /// Recent launcher search queries, most-recent last; de-duped and capped.

@@ -14,6 +14,9 @@ public enum LauncherResult: Sendable, Equatable, Identifiable {
     /// A past search shown on the empty-field "recents" list; committing it
     /// refills the bar with `query` and re-runs the search.
     case recentSearch(query: String)
+    /// Spotify's currently-playing track, pinned as a footer under every
+    /// result list while music is playing (or paused).
+    case nowPlaying(NowPlayingTrack)
 
     public var id: String {
         switch self {
@@ -26,6 +29,8 @@ public enum LauncherResult: Sendable, Equatable, Identifiable {
         case let .systemSetting(_, url): "setting:\(url.absoluteString)"
         case let .command(command): "command:\(command.rawValue)"
         case let .recentSearch(query): "recent:\(query)"
+        // State in the id re-renders the row on play↔pause.
+        case let .nowPlaying(track): "nowplaying:\(track.trackID):\(track.state.rawValue)"
         }
     }
 }
