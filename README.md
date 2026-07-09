@@ -37,7 +37,10 @@ signing note below for the TCC consequences).
 Overboard lives in the menu bar (no Dock icon). On first run, grant
 **Accessibility** when prompted (System Settings → Privacy & Security) —
 paste-back synthesizes ⌘V into the target app and falls back to copy-only
-without it. No analytics, no account. Network is used only for two
+without it. The first time you copy from a browser, macOS also prompts for
+**Automation** permission for that browser — this powers Back-to-source
+(capturing the page URL/title); declining just skips provenance for that
+browser. No analytics, no account. Network is used only for two
 opt-outable features: fetching link-preview metadata (page title, favicon,
 description, og:image — toggle in Settings → General), and checking for app
 updates. All clipboard data stays on your machine.

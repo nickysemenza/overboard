@@ -10,15 +10,38 @@ jobs:
   lint:
     name: Lint
     runs-on: macos-26
+    # Pin both linters: an unpinned `brew install` / preinstalled runner binary
+    # can silently upgrade and fail --strict on a new/changed rule with no code
+    # change. Bump these deliberately (keep in sync with local dev versions).
+    env:
+      SWIFTLINT_VERSION: 0.65.0
+      SWIFTFORMAT_VERSION: 0.61.1
     steps:
       - uses: actions/checkout@v5
 
+      - name: Install SwiftFormat (pinned)
+        run: |
+          curl -fLo swiftformat.zip \
+            "https://github.com/nicklockwood/SwiftFormat/releases/download/${SWIFTFORMAT_VERSION}/swiftformat.zip"
+          unzip -o swiftformat.zip -d swiftformat-bin
+          chmod +x swiftformat-bin/swiftformat
+          echo "$PWD/swiftformat-bin" >> "$GITHUB_PATH"
+
+      - name: Install SwiftLint (pinned)
+        run: |
+          curl -fLo swiftlint.zip \
+            "https://github.com/realm/SwiftLint/releases/download/${SWIFTLINT_VERSION}/portable_swiftlint.zip"
+          unzip -o swiftlint.zip -d swiftlint-bin
+          chmod +x swiftlint-bin/swiftlint
+          echo "$PWD/swiftlint-bin" >> "$GITHUB_PATH"
+
+      - name: Verify pinned versions
+        run: |
+          swiftformat --version
+          swiftlint version
+
       - name: SwiftFormat (lint mode)
         run: swiftformat --lint .
-
-      # Not preinstalled on the macos-26 runner image (SwiftFormat is).
-      - name: Install SwiftLint
-        run: brew install swiftlint
 
       - name: SwiftLint
         run: swiftlint --strict

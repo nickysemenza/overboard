@@ -16,7 +16,6 @@ disabled_rules:
   - cyclomatic_complexity
   - trailing_comma           # codebase uses trailing commas (SwiftFormat default style)
   - opening_brace            # SwiftFormat owns brace placement (newline after multiline conditions)
-  - force_cast               # Highlightr attributed-string copies are known-typed
   - force_try                # test fixtures only
   - void_function_in_ternary
   - large_tuple
