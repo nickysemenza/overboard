@@ -18,7 +18,15 @@ public struct SourceProvenance: Sendable, Equatable {
 /// link back to where it came from. Mirrors `SpotifyNowPlayingMonitor`'s house
 /// pattern: NSAppleScript on a private serial queue, silent nil on any error.
 public enum BrowserProvenanceService {
-    private static let scriptQueue = DispatchQueue(label: "com.nickysemenza.overboard.browser-provenance")
+    // Concurrent: a synchronous Apple Event can wedge indefinitely (a hung
+    // target app or stuck TCC) and task cancellation can't interrupt it. On a
+    // serial queue that stuck job would block every later provenance fetch for
+    // the process lifetime; concurrent isolates the wedge to one thread. Each
+    // job builds its own NSAppleScript and touches only lock-guarded state.
+    private static let scriptQueue = DispatchQueue(
+        label: "com.nickysemenza.overboard.browser-provenance",
+        attributes: .concurrent
+    )
 
     /// Bundle IDs whose Automation permission the user has denied (TCC -1743).
     /// Cached for the process lifetime so we stop round-tripping to a browser

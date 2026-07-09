@@ -373,7 +373,7 @@ public actor ClipStore {
                 WHERE deletedAt IS NULL AND isPinned = 0 AND id NOT IN (
                     SELECT id FROM item
                     WHERE deletedAt IS NULL AND isPinned = 0
-                    ORDER BY lastUsedAt DESC
+                    ORDER BY \(Self.frecencyOrderSQL)
                     LIMIT ?
                 )
                 """,

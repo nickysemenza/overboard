@@ -66,6 +66,11 @@ public final class ClipboardMonitor {
     private func tick() {
         let pasteboard = NSPasteboard.general
         let changeCount = pasteboard.changeCount
+        // Polling reads only the pasteboard's *current* contents. If several
+        // copies land within one interval, changeCount jumps by more than one
+        // and the intermediate clips are never seen — an accepted tradeoff of a
+        // changeCount poll (macOS has no general pasteboard-change callback);
+        // shorten the timer interval if the gap matters more than idle CPU.
         guard changeCount != self.lastChangeCount else { return }
         self.lastChangeCount = changeCount
 

@@ -3,12 +3,35 @@ import OverboardUI
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_: Notification) {
+        // Single-instance guard (release only — DEBUG/demo builds intentionally
+        // run alongside a daily driver). Two copies launched from different paths
+        // are distinct to Launch Services but share one bundle id; without this
+        // both would register the same global hotkeys and run a second capture
+        // pipeline against the same DB. Defer to the instance already running.
+        #if !DEBUG
+            if let existing = Self.otherRunningInstance() {
+                existing.activate()
+                NSApp.terminate(nil)
+                return
+            }
+        #endif
+
         AppServices.shared.start()
 
         #if DEBUG
             self.installDebugHooks()
         #endif
     }
+
+    #if !DEBUG
+        private static func otherRunningInstance() -> NSRunningApplication? {
+            guard let bundleID = Bundle.main.bundleIdentifier else { return nil }
+            let mine = NSRunningApplication.current.processIdentifier
+            return NSRunningApplication
+                .runningApplications(withBundleIdentifier: bundleID)
+                .first { $0.processIdentifier != mine }
+        }
+    #endif
 
     #if DEBUG
         /// Scriptable control surface for development:

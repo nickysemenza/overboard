@@ -24,7 +24,13 @@ public final class SpotifyNowPlayingMonitor {
     private var terminateObserver: NSObjectProtocol?
     /// Debounces snapshots so rapid launcher reopens don't stack Apple Events.
     private var lastSnapshotAt: Date?
-    private let snapshotQueue = DispatchQueue(label: "com.nickysemenza.overboard.spotify-snapshot")
+    /// Concurrent so a wedged Spotify Apple Event can't block later snapshots
+    /// for the process lifetime; each job runs an independent NSAppleScript and
+    /// hops back to the main actor to apply. See BrowserProvenanceService.
+    private let snapshotQueue = DispatchQueue(
+        label: "com.nickysemenza.overboard.spotify-snapshot",
+        attributes: .concurrent
+    )
     private let logger = Logger(subsystem: "com.nickysemenza.overboard", category: "spotify")
 
     public init() {}
