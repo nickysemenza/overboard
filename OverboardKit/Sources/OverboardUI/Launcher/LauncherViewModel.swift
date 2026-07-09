@@ -163,7 +163,7 @@ public final class LauncherViewModel {
                 for await (index, rows) in group {
                     guard !Task.isCancelled else { return }
                     buckets[index] = rows
-                    self.setResults(head + buckets.flatMap(\.self) + tail)
+                    self.setResults(head + buckets.flatMap(\.self) + tail, preserveSelection: true)
                 }
             }
         }
@@ -369,7 +369,16 @@ public final class LauncherViewModel {
         self.perform(actions[chosen])
     }
 
-    private func setResults(_ newResults: [LauncherResult]) {
+    /// - Parameter preserveSelection: when true, the currently highlighted row is
+    ///   re-located by identity in the new list and the selection follows it.
+    ///   Secondary providers splice their buckets into the *middle* of the list in
+    ///   provider order as each finishes, so a plain index would silently repoint
+    ///   to a different row — and a stray ↩ would commit the wrong action. Callers
+    ///   that intentionally reset (instant pass, empty field) leave this false.
+    private func setResults(_ newResults: [LauncherResult], preserveSelection: Bool = false) {
+        let anchorID = preserveSelection && self.results.indices.contains(self.selectedIndex)
+            ? self.results[self.selectedIndex].id
+            : nil
         // Pinned rows (Spotify now-playing) trail every list. Routing all
         // mutations through here means the footer appears on the empty-query
         // recents, the instant pass, and the debounced splice alike.
@@ -380,7 +389,9 @@ public final class LauncherViewModel {
         let layoutChanged = combined.count != self.results.count || headers != self.headerCount
         self.results = combined
         self.headerCount = headers
-        if self.selectedIndex >= combined.count {
+        if let anchorID, let index = combined.firstIndex(where: { $0.id == anchorID }) {
+            self.selectedIndex = index
+        } else if self.selectedIndex >= combined.count {
             self.selectedIndex = max(combined.count - 1, 0)
         }
         if layoutChanged {

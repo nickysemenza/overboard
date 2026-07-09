@@ -12,11 +12,18 @@ public enum AppMatcher {
         case alias
     }
 
+    /// Case- and diacritic-insensitive fold, matching FileNameMatcher and the
+    /// FTS index so "cafe" finds "Café" and the whole launcher session treats
+    /// accents the same way for apps, files, and clips.
+    static func fold(_ string: String) -> String {
+        string.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+    }
+
     /// How `query` matches an app `name`, ignoring user aliases.
     /// "sm" matches "Sublime Merge" via initials without any configuration.
     public static func score(query: String, name: String) -> Match? {
-        let q = query.lowercased()
-        let n = name.lowercased()
+        let q = self.fold(query)
+        let n = self.fold(name)
         guard !q.isEmpty, !n.isEmpty else { return nil }
         if n.hasPrefix(q) { return .namePrefix }
         let initials = String(
@@ -35,12 +42,12 @@ public enum AppMatcher {
         aliases: [String: String] = [:],
         limit: Int = 5
     ) -> [Int] {
-        let q = query.trimmingCharacters(in: .whitespaces).lowercased()
+        let q = self.fold(query.trimmingCharacters(in: .whitespaces))
         guard !q.isEmpty else { return [] }
-        let aliasTarget = aliases[q]?.lowercased()
+        let aliasTarget = aliases[q].map(self.fold)
 
         let scored: [(index: Int, match: Match)] = names.enumerated().compactMap { index, name in
-            if let target = aliasTarget, name.lowercased().hasPrefix(target) {
+            if let target = aliasTarget, self.fold(name).hasPrefix(target) {
                 return (index, .alias)
             }
             guard let match = score(query: q, name: name) else { return nil }
@@ -67,7 +74,7 @@ public enum AppMatcher {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             guard !trimmed.isEmpty, !trimmed.hasPrefix("#") else { continue }
             guard let separator = trimmed.firstIndex(of: "=") else { continue }
-            let alias = trimmed[..<separator].trimmingCharacters(in: .whitespaces).lowercased()
+            let alias = self.fold(trimmed[..<separator].trimmingCharacters(in: .whitespaces))
             let target = trimmed[trimmed.index(after: separator)...].trimmingCharacters(in: .whitespaces)
             guard !alias.isEmpty, !target.isEmpty else { continue }
             aliases[alias] = target

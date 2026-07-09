@@ -95,4 +95,22 @@ struct AppMatcherTests {
         #expect(AppMatcher.parseAliases("").isEmpty)
         #expect(AppMatcher.parseAliases("= name\nalias =\n#x").isEmpty)
     }
+
+    // MARK: - Diacritics (#19)
+
+    @Test func matchesAcrossDiacritics() {
+        // Unaccented query finds an accented app name and vice versa.
+        #expect(AppMatcher.score(query: "cafe", name: "Café") == .namePrefix)
+        #expect(AppMatcher.score(query: "café", name: "Cafe") == .namePrefix)
+        #expect(AppMatcher.score(query: "moto", name: "Motörhead") == .namePrefix)
+        // Substring across accents.
+        #expect(AppMatcher.score(query: "head", name: "Motörhead") == .substring)
+    }
+
+    @Test func rankingAndAliasesAreDiacriticInsensitive() {
+        let names = ["Café Noir", "Notes"]
+        #expect(AppMatcher.rank(query: "cafe", names: names) == [0])
+        let aliases = AppMatcher.parseAliases("café = Notes")
+        #expect(AppMatcher.rank(query: "cafe", names: names, aliases: aliases).first == 1)
+    }
 }

@@ -21,13 +21,13 @@ public enum CalculatorEngine {
     public static func evaluate(_ input: String) -> Evaluation? {
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard self.looksLikeMath(trimmed) else { return nil }
+        // Order matters: fold locale separators (removing any user commas) before
+        // rewriting `^` to `pow(a, b)`, whose own commas are argument separators.
+        let normalized = self.rewritePowers(self.normalizeSeparators(trimmed))
         let expression = Expression(
-            preprocess(trimmed),
+            preprocess(normalized),
             constants: ["pi": .pi, "e": M_E],
-            symbols: [
-                .infix("^"): { pow($0[0], $0[1]) },
-                .postfix("%"): { $0[0] / 100 },
-            ]
+            symbols: [.postfix("%"): { $0[0] / 100 }]
         )
         guard let value = try? expression.evaluate(), value.isFinite else { return nil }
         return Evaluation(value: value, display: self.format(value))
@@ -81,6 +81,130 @@ public enum CalculatorEngine {
         return rest.filter { !($0.isNumber || $0 == "." || $0 == "," || $0.isWhitespace) }
     }
 
+    // MARK: - Locale separators
+
+    /// In a comma-decimal locale, folds the user's `,` decimal to the ASCII `.`
+    /// the parser wants (and drops `.` grouping), so `2,5+1` computes instead of
+    /// silently failing. In a period-decimal locale, commas are left untouched —
+    /// there they're the parser's argument separator (`max(3, 7)`), and grouping
+    /// like `1,000` is too ambiguous with that to strip safely.
+    ///
+    /// Tradeoff: multi-argument functions written with comma separators don't
+    /// work in comma-decimal locales, where the decimal use of `,` wins — but a
+    /// bare decimal is by far the common launcher input.
+    static func normalizeSeparators(
+        _ s: String,
+        decimalSeparator: String? = Locale.current.decimalSeparator
+    ) -> String {
+        guard decimalSeparator == "," else { return s }
+        return s.replacingOccurrences(of: ".", with: "").replacingOccurrences(of: ",", with: ".")
+    }
+
+    // MARK: - Power operator
+
+    /// Rewrites `a ^ b` into `pow(a, b)` so exponentiation gets standard math
+    /// precedence and associativity from the parser. The Expression package binds
+    /// unary minus tighter than a custom `^` (so `-2^2` wrongly gave `4`) and
+    /// parses `^` left-associatively; `pow(...)` sidesteps both. Rewriting the
+    /// right-most `^` first yields right associativity: `2^3^2` → `pow(2, pow(3, 2))`.
+    /// A malformed `^` (no operand) is dropped so the parse fails cleanly (no row).
+    private static func rewritePowers(_ input: String) -> String {
+        var chars = Array(input)
+        while let caret = chars.lastIndex(of: "^") {
+            guard let left = self.leftOperand(chars, before: caret),
+                  let right = self.rightOperand(chars, after: caret)
+            else {
+                // Malformed `^` (missing operand). Leave it in place: with no `^`
+                // symbol registered, the parser rejects the whole input (no row),
+                // rather than a silent drop that could evaluate a partial result.
+                return String(chars)
+            }
+            let replacement = Array("pow(\(String(chars[left])),\(String(chars[right])))")
+            chars.replaceSubrange(left.lowerBound ... right.upperBound, with: replacement)
+        }
+        return String(chars)
+    }
+
+    private static func isOperand(_ c: Character) -> Bool {
+        c.isNumber || c == "." || c.isLetter || c == "_"
+    }
+
+    /// The primary immediately left of `caret`: a parenthesized group (with any
+    /// leading function name) or a number/identifier run. Excludes a leading
+    /// unary minus — that's the whole point of `-2^2` == `-(2^2)`.
+    private static func leftOperand(_ s: [Character], before caret: Int) -> ClosedRange<Int>? {
+        var i = caret - 1
+        while i >= 0, s[i] == " " {
+            i -= 1
+        }
+        guard i >= 0 else { return nil }
+        let end = i
+        if s[i] == ")" {
+            var depth = 0
+            while i >= 0 {
+                if s[i] == ")" { depth += 1 } else if s[i] == "(" {
+                    depth -= 1
+                    if depth == 0 { break }
+                }
+                i -= 1
+            }
+            guard depth == 0, i >= 0 else { return nil }
+            var j = i - 1 // absorb a preceding function name, e.g. sqrt(9)
+            while j >= 0, self.isOperand(s[j]) {
+                j -= 1
+            }
+            return (j + 1) ... end
+        }
+        guard self.isOperand(s[i]) else { return nil }
+        while i >= 0, self.isOperand(s[i]) {
+            i -= 1
+        }
+        return (i + 1) ... end
+    }
+
+    /// The primary immediately right of `caret`: an optional sign, then a
+    /// parenthesized group, a function call, a number, or an identifier.
+    private static func rightOperand(_ s: [Character], after caret: Int) -> ClosedRange<Int>? {
+        var i = caret + 1
+        while i < s.count, s[i] == " " {
+            i += 1
+        }
+        let start = i
+        while i < s.count, s[i] == "+" || s[i] == "-" {
+            i += 1
+        }
+        while i < s.count, s[i] == " " {
+            i += 1
+        }
+        guard i < s.count else { return nil }
+        if s[i] == "(" {
+            guard let close = self.matchParen(s, from: i) else { return nil }
+            return start ... close
+        }
+        guard self.isOperand(s[i]) else { return nil }
+        while i < s.count, self.isOperand(s[i]) {
+            i += 1
+        }
+        if i < s.count, s[i] == "(", let close = self.matchParen(s, from: i) {
+            return start ... close // function call
+        }
+        return start ... (i - 1)
+    }
+
+    /// Index of the `)` matching the `(` at `open`, or nil if unbalanced.
+    private static func matchParen(_ s: [Character], from open: Int) -> Int? {
+        var depth = 0
+        var i = open
+        while i < s.count {
+            if s[i] == "(" { depth += 1 } else if s[i] == ")" {
+                depth -= 1
+                if depth == 0 { return i }
+            }
+            i += 1
+        }
+        return nil
+    }
+
     // MARK: - Sugar
 
     /// "15% of 80" reads naturally; Expression just needs it spelled "*".
@@ -97,6 +221,8 @@ public enum CalculatorEngine {
     /// Deterministic, locale-independent: integral values render without
     /// decimals, everything else with up to 10 significant digits.
     private static func format(_ value: Double) -> String {
+        // Collapse negative zero (e.g. 0 * -5 == -0.0) so it never displays "-0".
+        let value = value == 0 ? 0 : value
         if value == value.rounded(), abs(value) < 1e15 {
             return String(format: "%.0f", value)
         }
