@@ -421,9 +421,14 @@ public actor ClipStore {
     /// and compacts the database. Safe to run repeatedly (idempotent). Meant for
     /// startup + a daily timer; complements `purge`, which only reclaims blobs
     /// of items it deletes and can't see files left by a failed write.
+    /// `async` so the compaction step below runs through GRDB's async writer
+    /// rather than a synchronous actor-blocking call: VACUUM rewrites the whole
+    /// file, and doing it synchronously would hold the ClipStore actor (and a
+    /// cooperative-pool thread) for its full duration, stalling ingest and UI
+    /// reads. The `await` releases the actor while GRDB runs it on its own writer.
     @discardableResult
-    public func maintenanceSweep() throws -> SweepResult {
-        let referenced: Set<String> = try self.dbWriter.read { db in
+    public func maintenanceSweep() async throws -> SweepResult {
+        let referenced: Set<String> = try await self.dbWriter.read { db in
             try String.fetchSet(
                 db,
                 sql: "SELECT DISTINCT blobHash FROM representation WHERE blobHash IS NOT NULL"
@@ -450,7 +455,7 @@ public actor ClipStore {
         // insurance: were a future SQLite to renumber the rowids, search would
         // otherwise silently join terms to the wrong clip. Bounded history keeps
         // the rebuild negligible next to the VACUUM it follows.
-        try? self.dbWriter.writeWithoutTransaction { db in
+        try? await self.dbWriter.writeWithoutTransaction { db in
             try db.execute(sql: "PRAGMA optimize")
             try db.execute(sql: "VACUUM")
             try db.execute(sql: "INSERT INTO item_fts(item_fts) VALUES('rebuild')")
