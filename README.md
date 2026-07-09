@@ -96,9 +96,16 @@ updates. All clipboard data stays on your machine.
   trim, change case).
 - **Privacy**: password managers and concealed/transient pasteboards are
   never captured; detected secrets (AWS keys, JWTs, API tokens, PEM keys,
-  card numbers) are masked, unsearchable, and auto-expire; per-app
-  plain-text paste rules for terminals. All data and search stay on-device
-  except the optional link-preview fetch.
+  card numbers, and credential-bearing links like presigned URLs or magic
+  logins) are masked, unsearchable, kept off the network, and auto-expire;
+  per-app plain-text paste rules for terminals. All data and search stay
+  on-device except the optional link-preview fetch.
+
+  Secret payloads are retained in cleartext in the on-device SQLite store
+  for their short TTL (paste needs the original bytes); the store lives in a
+  `0700` directory and secrets are swept on a ~10-minute leash, but they are
+  not separately encrypted at rest, so a full-disk backup taken inside that
+  window can include them.
 
 <p align="center">
   <img src="docs/screenshots/preview.png" width="900" alt="Quick Look preview pane showing a syntax-highlighted Swift snippet">

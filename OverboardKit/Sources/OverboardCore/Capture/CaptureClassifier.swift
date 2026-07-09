@@ -43,16 +43,22 @@ public enum CaptureClassifier {
         let totalBytes = snapshot.reps.reduce(0) { $0 + $1.data.count }
 
         // Secrets keep their payload (paste still works) but get a masked
-        // preview and are never indexed for search.
+        // preview and are never indexed for search. The retained payload is
+        // stored in cleartext for its TTL — bounded by the 0700 store directory
+        // and the short expiry sweep, not encrypted at rest.
+        //
+        // Two sources: a secret pattern anywhere in copied text, or a `.link`
+        // whose URL carries a credential/token (presigned S3, magic-login, OAuth
+        // fragment). Flagging the link secret also keeps it off the network — the
+        // fetch paths skip `isSecret` items — so a single-use link isn't consumed.
         if kind == .text, let text = plainText, let secret = SecretDetector.detect(in: text) {
-            return Classified(
-                kind: kind,
-                contentHash: self.hash(kind: kind, primary: primary),
-                previewText: "Secret — \(secret.label)",
-                searchText: nil,
-                byteSize: totalBytes,
-                isSecret: true
-            )
+            return self.secretClassified(kind: kind, primary: primary, label: secret.label, bytes: totalBytes)
+        }
+        if kind == .link, let text = plainText,
+           let url = URL(string: text.trimmingCharacters(in: .whitespacesAndNewlines)),
+           URLSensitivity.isSensitive(url)
+        {
+            return self.secretClassified(kind: kind, primary: primary, label: "Link with credentials", bytes: totalBytes)
         }
 
         // Compute the image size once and reuse it for both the preview string
@@ -80,6 +86,19 @@ public enum CaptureClassifier {
             pixelWidth: pixelSize?.width,
             pixelHeight: pixelSize?.height,
             fileCount: kind == .file ? self.fileNames(byUTI: byUTI)?.count : nil
+        )
+    }
+
+    private static func secretClassified(
+        kind: ItemKind, primary: Data, label: String, bytes: Int
+    ) -> Classified {
+        Classified(
+            kind: kind,
+            contentHash: self.hash(kind: kind, primary: primary),
+            previewText: "Secret — \(label)",
+            searchText: nil,
+            byteSize: bytes,
+            isSecret: true
         )
     }
 

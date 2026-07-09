@@ -69,4 +69,36 @@ struct LinkFetchGuardTests {
             #expect(!LinkMetadataFetcher.isFetchable(u))
         }
     }
+
+    @Test func rejectsIPv6LinkLocalAndUniqueLocal() {
+        // Link-local fe80::/10.
+        #expect(LinkMetadataFetcher.isPrivateHost("fe80::1"))
+        #expect(LinkMetadataFetcher.isPrivateHost("febf::abcd"))
+        // Unique-local fc00::/7.
+        #expect(LinkMetadataFetcher.isPrivateHost("fc00::1"))
+        #expect(LinkMetadataFetcher.isPrivateHost("fd12:3456::1"))
+        // A public IPv6 (Google DNS) is still allowed.
+        #expect(!LinkMetadataFetcher.isPrivateHost("2001:4860:4860::8888"))
+    }
+
+    // #3: the literal-string guard can't see a hostname that *resolves* to a
+    // private address (SSRF via DNS). hostResolvesToPrivate closes that by
+    // resolving and re-checking every address. These use names/IPs that resolve
+    // without external DNS so the test stays hermetic.
+    @Test func resolutionCatchesNamesPointingAtLoopback() {
+        // "localhost" resolves to 127.0.0.1 / ::1.
+        #expect(LinkMetadataFetcher.hostResolvesToPrivate("localhost"))
+        // A literal private IP "resolves" to itself.
+        #expect(LinkMetadataFetcher.hostResolvesToPrivate("127.0.0.1"))
+        #expect(LinkMetadataFetcher.hostResolvesToPrivate("169.254.169.254"))
+    }
+
+    @Test func connectGateCombinesStringAndResolutionChecks() {
+        // Public literal IP: string-fetchable and resolves to itself (public).
+        #expect(LinkMetadataFetcher.isConnectPermitted(self.url("http://8.8.8.8")))
+        // Loopback name: string check passes host presence, resolution rejects.
+        #expect(!LinkMetadataFetcher.isConnectPermitted(self.url("http://localhost")))
+        // Non-HTTP scheme rejected before resolution is attempted.
+        #expect(!LinkMetadataFetcher.isConnectPermitted(self.url("file:///etc/passwd")))
+    }
 }
