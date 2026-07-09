@@ -21,6 +21,42 @@ struct MaintenanceSweepTests {
         )
     }
 
+    private func textSnapshot(_ text: String) -> PasteboardSnapshot {
+        PasteboardSnapshot(
+            reps: [.init(uti: WellKnownUTI.plainText, data: Data(text.utf8))],
+            sourceBundleID: "com.apple.TextEdit",
+            sourceAppName: "TextEdit"
+        )
+    }
+
+    /// The maintenance sweep runs VACUUM (which can, per SQLite docs, renumber the
+    /// TEXT-PK `item`'s implicit rowids) followed by an item_fts `'rebuild'`. This
+    /// guards the whole delete → purge → sweep → search path: after a middle item
+    /// is removed and the DB compacted, every survivor must still resolve to its
+    /// own id via FTS, and the purged item must leave no phantom match.
+    @Test func searchStaysCorrectAfterSweepWithRowidGaps() async throws {
+        let (store, _) = try makeStore()
+        // Distinct terms so each clip is individually findable via FTS.
+        let alpha = try #require(try await store.ingest(self.textSnapshot("alpha apple")))
+        let bravo = try #require(try await store.ingest(self.textSnapshot("bravo banana")))
+        let charlie = try #require(try await store.ingest(self.textSnapshot("charlie cherry")))
+        let delta = try #require(try await store.ingest(self.textSnapshot("delta date")))
+
+        // Hard-delete a middle item: tombstone then purge so its row is actually
+        // removed, leaving a rowid gap for VACUUM to compact away.
+        try await store.delete(id: bravo.id)
+        try await store.purge(keepingLatest: 100) // only the tombstone is a victim
+
+        _ = try await store.maintenanceSweep() // VACUUM + FTS rebuild
+
+        // Each survivor must resolve to its own id, not a shifted neighbour.
+        #expect(try await store.search("charlie").map(\.id) == [charlie.id])
+        #expect(try await store.search("delta").map(\.id) == [delta.id])
+        #expect(try await store.search("alpha").map(\.id) == [alpha.id])
+        // The purged item leaves no phantom match.
+        #expect(try await store.search("bravo").isEmpty)
+    }
+
     @Test func deletesUnreferencedBlobButKeepsReferencedOnes() async throws {
         let (store, blobs) = try makeStore()
         // Referenced blob via a real ingested image (over the inline threshold).

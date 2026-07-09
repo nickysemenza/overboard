@@ -442,9 +442,18 @@ public actor ClipStore {
         let missing = referenced.subtracting(onDisk).count
 
         // Reclaim page space from purged rows; best-effort.
+        // `item` has a TEXT primary key, so its rowid is the implicit one with no
+        // stable INTEGER PRIMARY KEY alias. The current SQLite preserves those
+        // rowids across VACUUM (verified), keeping the external-content item_fts
+        // index consistent — but the docs only promise VACUUM *may* preserve them.
+        // The 'rebuild' re-derives item_fts from the table afterwards as cheap
+        // insurance: were a future SQLite to renumber the rowids, search would
+        // otherwise silently join terms to the wrong clip. Bounded history keeps
+        // the rebuild negligible next to the VACUUM it follows.
         try? self.dbWriter.writeWithoutTransaction { db in
             try db.execute(sql: "PRAGMA optimize")
             try db.execute(sql: "VACUUM")
+            try db.execute(sql: "INSERT INTO item_fts(item_fts) VALUES('rebuild')")
         }
 
         return SweepResult(orphanedBlobsDeleted: deleted, missingBlobs: missing)
