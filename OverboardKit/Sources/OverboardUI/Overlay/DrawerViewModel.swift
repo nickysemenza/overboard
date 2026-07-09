@@ -1,6 +1,7 @@
 import AsyncAlgorithms
 import Foundation
 import Observation
+import os
 import OverboardCore
 
 public enum DrawerMode: Sendable {
@@ -25,6 +26,8 @@ public final class DrawerViewModel {
     /// Extra selected indices beyond the anchor (⇧arrows / ⌘-click).
     /// Empty means plain single selection.
     public private(set) var multiSelection: Set<Int> = []
+
+    private let logger = Logger(subsystem: "com.nickysemenza.overboard", category: "drawer")
 
     public let stack: PasteStack
 
@@ -308,6 +311,15 @@ public final class DrawerViewModel {
     }
 
     private func refresh(resetSelection: Bool = true, followItemID: String? = nil) async {
+        // Capture the multi-selected rows' identities before the list is
+        // replaced, so a live update that inserts/removes rows moves the
+        // selection with its items instead of leaving stale indices that would
+        // make a multi-item action operate on rows the user never picked.
+        let priorMultiIDs = Set(
+            self.multiSelection
+                .filter { self.items.indices.contains($0) }
+                .map { self.items[$0].id }
+        )
         do {
             let query = self.query
             switch self.mode {
@@ -336,12 +348,13 @@ public final class DrawerViewModel {
             }
             if let followItemID, let index = self.items.firstIndex(where: { $0.id == followItemID }) {
                 self.selectedIndex = index
+                self.multiSelection = self.remapSelection(to: priorMultiIDs)
             } else if resetSelection {
                 self.selectedIndex = 0
                 self.multiSelection = []
             } else {
                 self.selectedIndex = min(self.selectedIndex, max(self.entryCount - 1, 0))
-                self.multiSelection = self.multiSelection.filter { self.items.indices.contains($0) }
+                self.multiSelection = self.remapSelection(to: priorMultiIDs)
             }
             // A live update may have removed the item being previewed.
             if self.previewState != .hidden, self.selectedItem == nil {
@@ -398,12 +411,24 @@ public final class DrawerViewModel {
         }
     }
 
+    /// Re-derives multi-selection indices from the identities held before a
+    /// refresh, dropping ids that no longer exist — the same identity-follow
+    /// treatment `selectedIndex` gets via `followItemID`.
+    private func remapSelection(to ids: Set<String>) -> Set<Int> {
+        guard !ids.isEmpty else { return [] }
+        return Set(self.items.enumerated().compactMap { ids.contains($1.id) ? $0 : nil })
+    }
+
     /// Pin/unpin the selected item; selection follows it to its new position.
     public func togglePinSelected() {
         guard self.mode == .history, self.items.indices.contains(self.selectedIndex) else { return }
         let item = self.items[self.selectedIndex]
         Task {
-            try? await self.store.setPinned(id: item.id, !item.isPinned)
+            do {
+                try await self.store.setPinned(id: item.id, !item.isPinned)
+            } catch {
+                self.logger.error("pin toggle failed: \(String(describing: error), privacy: .public)")
+            }
             await self.refresh(resetSelection: false, followItemID: item.id)
         }
     }
@@ -412,8 +437,19 @@ public final class DrawerViewModel {
     public func deleteSelected() {
         guard self.mode == .history, self.items.indices.contains(self.selectedIndex) else { return }
         let item = self.items[self.selectedIndex]
+        let survivingMultiIDs = Set(self.selectedItems.map(\.id)).subtracting([item.id])
+        // Optimistically drop the row before the async delete so a rapid repeat
+        // (⌘⌫ key-repeat) doesn't re-read the same stale index and delete the
+        // same item twice; refresh() reconciles with the store afterwards.
+        self.items.remove(at: self.selectedIndex)
+        self.selectedIndex = min(self.selectedIndex, max(self.entryCount - 1, 0))
+        self.multiSelection = self.remapSelection(to: survivingMultiIDs)
         Task {
-            try? await self.store.delete(id: item.id)
+            do {
+                try await self.store.delete(id: item.id)
+            } catch {
+                self.logger.error("delete failed: \(String(describing: error), privacy: .public)")
+            }
             await self.refresh(resetSelection: false)
         }
     }

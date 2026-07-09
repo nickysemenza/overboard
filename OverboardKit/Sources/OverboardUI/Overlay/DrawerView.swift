@@ -57,6 +57,14 @@ public struct DrawerView: View {
                 self.searchFocused = true
             }
         }
+        .onChange(of: self.viewModel.isPaletteOpen) {
+            // The ⌘K palette owns focus while open; when it closes, first
+            // responder isn't returned automatically, so typed characters would
+            // be dropped until the user clicks back into the field.
+            if !self.viewModel.isPaletteOpen {
+                self.searchFocused = true
+            }
+        }
     }
 
     private var searchBar: some View {

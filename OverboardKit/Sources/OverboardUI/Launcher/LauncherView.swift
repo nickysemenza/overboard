@@ -77,6 +77,13 @@ public struct LauncherView: View {
         .onChange(of: self.viewModel.showGeneration) {
             self.fieldFocused = true
         }
+        .onChange(of: self.viewModel.isPaletteOpen) {
+            // Return first responder to the field when the ⌘K palette closes,
+            // otherwise typed characters are dropped until the user clicks in.
+            if !self.viewModel.isPaletteOpen {
+                self.fieldFocused = true
+            }
+        }
         .onChange(of: self.viewModel.query) {
             self.viewModel.scheduleSearch()
         }
