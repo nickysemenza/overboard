@@ -205,6 +205,47 @@ struct ClipStoreTests {
         #expect(try await store.search("number").count == 4)
     }
 
+    /// #9: purge must delete the on-disk blobs of the items it removes, while
+    /// leaving blobs a surviving (pinned) item still references. Asserting only
+    /// row/FTS counts (above) misses a regression in the `stillReferenced`
+    /// subtraction that would leak orphans or nuke a kept clip's payload.
+    @Test func purgeDeletesVictimBlobsButKeepsSurvivorBlobs() async throws {
+        let queue = try OverboardDatabase.openInMemory()
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("overboard-purge-blobs-\(UUID().uuidString)", isDirectory: true)
+        let blobs = try BlobStore(directory: dir)
+        let store = ClipStore(dbWriter: queue, blobs: blobs)
+
+        func bigImage(_ byte: UInt8) -> PasteboardSnapshot {
+            PasteboardSnapshot(
+                reps: [.init(
+                    uti: WellKnownUTI.png,
+                    data: Data(repeating: byte, count: Representation.inlineThreshold + 1)
+                )],
+                sourceBundleID: "com.example.app",
+                sourceAppName: "Example"
+            )
+        }
+
+        // An old large image (purge victim) and a pinned large image (survivor).
+        let victim = try #require(try await store.ingest(bigImage(0x11)))
+        let victimHash = try #require(await store.representations(for: victim.id).first?.blobHash)
+        let survivor = try #require(try await store.ingest(bigImage(0x22)))
+        try await store.setPinned(id: survivor.id, true)
+        let survivorHash = try #require(await store.representations(for: survivor.id).first?.blobHash)
+
+        // Push the victim past the keep window with small (inline) text clips.
+        for i in 0 ..< 5 {
+            _ = try await store.ingest(textSnapshot("filler \(i)"))
+        }
+        #expect(blobs.exists(hash: victimHash))
+
+        try await store.purge(keepingLatest: 3)
+
+        #expect(!blobs.exists(hash: victimHash)) // victim removed → blob gone
+        #expect(blobs.exists(hash: survivorHash)) // pinned survivor → blob kept
+    }
+
     @Test func markUsedBumpsOrdering() async throws {
         let store = try makeStore()
         let first = try await store.ingest(textSnapshot("older"))

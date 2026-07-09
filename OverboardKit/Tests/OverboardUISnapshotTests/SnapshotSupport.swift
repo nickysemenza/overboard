@@ -9,9 +9,16 @@ import UniformTypeIdentifiers
 extension Trait where Self == ConditionTrait {
     /// Snapshots are recorded on a local Retina Mac; the CI VM renders at a
     /// different backing scale (no scaler driver), so images can never match.
-    /// Asserted locally only.
+    /// Asserted locally only. Uses `.disabled` (not `.enabled(if:)`) so the CI
+    /// run reports each suite as *skipped with a reason* rather than silently
+    /// executing zero tests — a green with no snapshot coverage should be
+    /// visibly labelled, not mistaken for a pass. The RenderSmokeTests suite
+    /// still exercises these view bodies headlessly on CI.
     static var localOnly: ConditionTrait {
-        .enabled(if: ProcessInfo.processInfo.environment["CI"] == nil)
+        .disabled(
+            if: ProcessInfo.processInfo.environment["CI"] != nil,
+            "Snapshot image comparisons are local-only: the CI VM's backing scale differs from the recorded Retina images, so they can never match. Run `swift test` locally to assert them; RenderSmokeTests covers the render paths on CI."
+        )
     }
 }
 

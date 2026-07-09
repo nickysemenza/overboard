@@ -139,7 +139,10 @@ public final class PastebackService {
         keyUp.post(tap: .cghidEventTap)
     }
 
-    private func buildPasteboardItems(
+    /// Internal (not private) so tests can inspect the produced items — the UTI
+    /// mapping, file-URL fan-out, and marker tagging — without writing to the
+    /// shared system pasteboard.
+    func buildPasteboardItems(
         for item: ClipItem,
         mode: PasteMode
     ) async throws -> [NSPasteboardItem] {
