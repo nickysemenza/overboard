@@ -55,9 +55,15 @@ struct CalculatorEngineTests {
 
     // #18: comma-decimal locales; normalization is separator-driven and pure.
     @Test func localeSeparatorNormalization() {
-        // Comma-decimal locale: "," is the decimal point, "." is grouping.
+        // Comma-decimal locale: "," is the decimal point.
         #expect(CalculatorEngine.normalizeSeparators("2,5+1", decimalSeparator: ",") == "2.5+1")
+        // "." in true grouping position (before 3 digits) is dropped.
         #expect(CalculatorEngine.normalizeSeparators("1.000,5", decimalSeparator: ",") == "1000.5")
+        #expect(CalculatorEngine.normalizeSeparators("1.234.567", decimalSeparator: ",") == "1234567")
+        // But a "." used as a cross-locale decimal (not grouping) is KEPT, so a
+        // user typing "2.5+1" out of habit doesn't get "25+1".
+        #expect(CalculatorEngine.normalizeSeparators("2.5+1", decimalSeparator: ",") == "2.5+1")
+        #expect(CalculatorEngine.evaluate("2.5+1")?.value == 3.5) // end-to-end in this locale-agnostic run
         // Period-decimal locale: commas are left for the parser (arg separators
         // like max(3,7)), so they're untouched here.
         #expect(CalculatorEngine.normalizeSeparators("max(3,7)", decimalSeparator: ".") == "max(3,7)")

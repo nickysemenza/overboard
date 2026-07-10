@@ -28,6 +28,19 @@ public enum BrowserProvenanceService {
         attributes: .concurrent
     )
 
+    /// Caps concurrent in-flight scripts so wedged Apple Events can't accumulate
+    /// unbounded worker threads. A permanently stuck script holds its slot for
+    /// the process lifetime; once all slots are stuck, new requests skip (return
+    /// nil) rather than pile up — bounded degradation instead of a thread leak.
+    private static let scriptSlots = DispatchSemaphore(value: 3)
+
+    /// Non-blocking slot acquire. Wrapped in a sync function because
+    /// `DispatchSemaphore.wait` is unavailable directly from an async context —
+    /// with a `.now()` timeout it never actually blocks, it just probes.
+    private static func tryAcquireScriptSlot() -> Bool {
+        self.scriptSlots.wait(timeout: .now()) == .success
+    }
+
     /// Bundle IDs whose Automation permission the user has denied (TCC -1743).
     /// Cached for the process lifetime so we stop round-tripping to a browser
     /// that will only deny us again. Behind a lock — `fetch` runs off any actor.
@@ -70,8 +83,12 @@ public enum BrowserProvenanceService {
     /// "URL\ttitle" line, "" when the browser has no windows, or nil on error
     /// (Automation denied, script failure). Caches TCC denials per bundle id.
     private static func runScript(_ source: String, bundleID: String) async -> String? {
-        await withCheckedContinuation { continuation in
+        // Non-blocking acquire: never wait behind (or spawn a new thread for) a
+        // wedged script beyond the slot cap. No free slot → skip this fetch.
+        guard self.tryAcquireScriptSlot() else { return nil }
+        return await withCheckedContinuation { continuation in
             self.scriptQueue.async {
+                defer { self.scriptSlots.signal() }
                 guard let script = NSAppleScript(source: source) else {
                     continuation.resume(returning: nil)
                     return

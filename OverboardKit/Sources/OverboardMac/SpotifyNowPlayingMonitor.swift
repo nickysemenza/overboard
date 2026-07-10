@@ -31,6 +31,10 @@ public final class SpotifyNowPlayingMonitor {
         label: "com.nickysemenza.overboard.spotify-snapshot",
         attributes: .concurrent
     )
+    /// Caps concurrent snapshots so wedged Apple Events can't accumulate worker
+    /// threads; a stuck script holds its slot and further snapshots skip. Static
+    /// so the queue block can signal it without capturing the main-actor self.
+    private static let snapshotSlots = DispatchSemaphore(value: 2)
     private let logger = Logger(subsystem: "com.nickysemenza.overboard", category: "spotify")
 
     public init() {}
@@ -95,8 +99,11 @@ public final class SpotifyNowPlayingMonitor {
         self.lastSnapshotAt = Date()
 
         // Off the main thread so a slow Apple Event (or the one-time Automation
-        // TCC prompt) never freezes the launcher summon.
+        // TCC prompt) never freezes the launcher summon. Non-blocking slot
+        // acquire caps in-flight scripts so wedges can't leak threads.
+        guard Self.snapshotSlots.wait(timeout: .now()) == .success else { return }
         self.snapshotQueue.async { [weak self] in
+            defer { Self.snapshotSlots.signal() }
             let line = Self.runSnapshotScript()
             let track = line.flatMap(NowPlayingTrack.parse(snapshotLine:))
             Task { @MainActor [weak self] in

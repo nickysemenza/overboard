@@ -83,11 +83,14 @@ public enum CalculatorEngine {
 
     // MARK: - Locale separators
 
-    /// In a comma-decimal locale, folds the user's `,` decimal to the ASCII `.`
-    /// the parser wants (and drops `.` grouping), so `2,5+1` computes instead of
-    /// silently failing. In a period-decimal locale, commas are left untouched —
-    /// there they're the parser's argument separator (`max(3, 7)`), and grouping
-    /// like `1,000` is too ambiguous with that to strip safely.
+    /// In a comma-decimal locale, folds separators to the ASCII `.` decimal the
+    /// parser wants, so `2,5+1` computes instead of silently failing. Only a `.`
+    /// in true grouping position — immediately before exactly three digits that
+    /// aren't themselves followed by a digit (`1.000`, `1.234.567`) — is dropped;
+    /// any other `.` is treated as a cross-locale decimal point and kept, so a
+    /// user who types `2.5+1` out of habit still gets `2.5+1`, not `25+1`. The
+    /// decimal `,` then becomes `.`. In a period-decimal locale, commas are left
+    /// untouched — there they're the parser's argument separator (`max(3, 7)`).
     ///
     /// Tradeoff: multi-argument functions written with comma separators don't
     /// work in comma-decimal locales, where the decimal use of `,` wins — but a
@@ -97,7 +100,10 @@ public enum CalculatorEngine {
         decimalSeparator: String? = Locale.current.decimalSeparator
     ) -> String {
         guard decimalSeparator == "," else { return s }
-        return s.replacingOccurrences(of: ".", with: "").replacingOccurrences(of: ",", with: ".")
+        let degrouped = s.replacingOccurrences(
+            of: #"\.(?=\d{3}(\D|$))"#, with: "", options: .regularExpression
+        )
+        return degrouped.replacingOccurrences(of: ",", with: ".")
     }
 
     // MARK: - Power operator
