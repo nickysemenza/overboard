@@ -28,13 +28,46 @@ struct CalculatorEngineTests {
         #expect(self.value("(2^3)^2") == 64)
         #expect(self.value("2*3^2") == 18) // ^ binds tighter than *
         #expect(self.value("2^3+1") == 9) // ...and tighter than +
-        // Expression's ^ is left-associative; 2^3^2 is (2^3)^2, not 2^(3^2).
-        #expect(self.value("2^3^2") == 64)
+        // ^ is right-associative: 2^3^2 is 2^(3^2) = 512, not (2^3)^2.
+        #expect(self.value("2^3^2") == 512)
+        #expect(self.value("2^(3-1)") == 4)
+        #expect(self.value("pow(2,3)") == 8)
+    }
+
+    // #6: unary minus binds looser than ^, so -2^2 is -(2^2), not (-2)^2.
+    @Test func unaryMinusBindsLooserThanPower() {
+        #expect(self.value("-2^2") == -4)
+        #expect(self.value("3*-2^2") == -12)
+        #expect(self.value("-2^2+10") == 6)
+    }
+
+    // #17: an unspaced negative exponent must evaluate, not silently vanish.
+    @Test func negativeExponents() {
+        #expect(self.value("2^-2") == 0.25)
+        #expect(self.value("10^-3") == 0.001)
+        #expect(self.value("2 ^ -2") == 0.25) // spaced form still works
     }
 
     @Test func unaryMinus() {
         #expect(self.value("3*-2") == -6)
         #expect(self.value("-(2+3)") == -5)
+    }
+
+    // #18: comma-decimal locales; normalization is separator-driven and pure.
+    @Test func localeSeparatorNormalization() {
+        // Comma-decimal locale: "," is the decimal point.
+        #expect(CalculatorEngine.normalizeSeparators("2,5+1", decimalSeparator: ",") == "2.5+1")
+        // "." in true grouping position (before 3 digits) is dropped.
+        #expect(CalculatorEngine.normalizeSeparators("1.000,5", decimalSeparator: ",") == "1000.5")
+        #expect(CalculatorEngine.normalizeSeparators("1.234.567", decimalSeparator: ",") == "1234567")
+        // But a "." used as a cross-locale decimal (not grouping) is KEPT, so a
+        // user typing "2.5+1" out of habit doesn't get "25+1".
+        #expect(CalculatorEngine.normalizeSeparators("2.5+1", decimalSeparator: ",") == "2.5+1")
+        #expect(CalculatorEngine.evaluate("2.5+1")?.value == 3.5) // end-to-end in this locale-agnostic run
+        // Period-decimal locale: commas are left for the parser (arg separators
+        // like max(3,7)), so they're untouched here.
+        #expect(CalculatorEngine.normalizeSeparators("max(3,7)", decimalSeparator: ".") == "max(3,7)")
+        #expect(CalculatorEngine.normalizeSeparators("2.5+1", decimalSeparator: ".") == "2.5+1")
     }
 
     @Test func functionsAndConstants() throws {
@@ -73,7 +106,9 @@ struct CalculatorEngineTests {
     }
 
     @Test func malformedInputNeverTraps() {
-        for junk in ["", "2+", "(2", "++", "2 2", "()", "%", "of of", "1..2+1", "🦀+1"] {
+        for junk in ["", "2+", "(2", "++", "2 2", "()", "%", "of of", "1..2+1", "🦀+1",
+                     "^2", "2^", "^", "2^^3", "^^"]
+        {
             #expect(CalculatorEngine.evaluate(junk) == nil, "expected nil for \(junk)")
         }
     }
@@ -101,5 +136,11 @@ struct CalculatorEngineTests {
 
     @Test func negativeResults() {
         #expect(self.display("2-10") == "-8")
+    }
+
+    // #30: negative zero must display as "0", never "-0".
+    @Test func negativeZeroDisplaysAsZero() {
+        #expect(self.display("0*-5") == "0")
+        #expect(self.display("-0") == nil) // bare number, no row (unchanged)
     }
 }

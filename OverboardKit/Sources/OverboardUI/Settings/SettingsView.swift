@@ -1,10 +1,13 @@
 import AppKit
 import Defaults
 import KeyboardShortcuts
+import os
 import OverboardCore
 import OverboardMac
 import ServiceManagement
 import SwiftUI
+
+private let settingsLogger = Logger(subsystem: "com.nickysemenza.overboard", category: "settings")
 
 extension ItemKind {
     /// Capitalized display name for Settings UI.
@@ -260,7 +263,13 @@ private struct HistorySettingsTab: View {
         ) {
             Button("Clear History", role: .destructive) {
                 Task {
-                    try? await self.store.purge(keepingLatest: 0)
+                    do {
+                        try await self.store.purge(keepingLatest: 0)
+                    } catch {
+                        settingsLogger.error(
+                            "clear history failed: \(String(describing: error), privacy: .public)"
+                        )
+                    }
                     await self.refresh()
                 }
             }

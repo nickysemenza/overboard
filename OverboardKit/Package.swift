@@ -57,6 +57,10 @@ let package = Package(
             dependencies: ["OverboardCore"]
         ),
         .testTarget(
+            name: "OverboardMacTests",
+            dependencies: ["OverboardMac", "OverboardCore"]
+        ),
+        .testTarget(
             name: "OverboardCLITests",
             dependencies: ["OverboardCLI"]
         ),

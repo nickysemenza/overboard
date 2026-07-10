@@ -373,7 +373,7 @@ public actor ClipStore {
                 WHERE deletedAt IS NULL AND isPinned = 0 AND id NOT IN (
                     SELECT id FROM item
                     WHERE deletedAt IS NULL AND isPinned = 0
-                    ORDER BY lastUsedAt DESC
+                    ORDER BY \(Self.frecencyOrderSQL)
                     LIMIT ?
                 )
                 """,
@@ -421,8 +421,43 @@ public actor ClipStore {
     /// and compacts the database. Safe to run repeatedly (idempotent). Meant for
     /// startup + a daily timer; complements `purge`, which only reclaims blobs
     /// of items it deletes and can't see files left by a failed write.
+    /// `async` only so the VACUUM below runs through GRDB's async writer instead
+    /// of a synchronous actor-blocking call (VACUUM rewrites the whole file and
+    /// would otherwise hold the ClipStore actor and a cooperative-pool thread for
+    /// its full duration). The blob reconciliation stays synchronous — see
+    /// `reconcileOrphanBlobs`.
     @discardableResult
-    public func maintenanceSweep() throws -> SweepResult {
+    public func maintenanceSweep() async throws -> SweepResult {
+        // Reconcile blobs synchronously so this stays atomic on the actor. If it
+        // suspended between reading the referenced set and deleting orphans, a
+        // concurrent `ingest` (also actor-isolated and synchronous) could write a
+        // new blob + representation in the gap — and that fresh blob, present on
+        // disk but absent from the now-stale referenced set, would be deleted as
+        // an orphan, corrupting the just-captured clip.
+        let result = try self.reconcileOrphanBlobs()
+
+        // Reclaim page space from purged rows; best-effort. The VACUUM touches no
+        // blob files, so releasing the actor here is safe.
+        // `item` has a TEXT primary key, so its rowid is the implicit one with no
+        // stable INTEGER PRIMARY KEY alias. The current SQLite preserves those
+        // rowids across VACUUM (verified), keeping the external-content item_fts
+        // index consistent — but the docs only promise VACUUM *may* preserve them.
+        // The 'rebuild' re-derives item_fts from the table afterwards as cheap
+        // insurance: were a future SQLite to renumber the rowids, search would
+        // otherwise silently join terms to the wrong clip. Bounded history keeps
+        // the rebuild negligible next to the VACUUM it follows.
+        try? await self.dbWriter.writeWithoutTransaction { db in
+            try db.execute(sql: "PRAGMA optimize")
+            try db.execute(sql: "VACUUM")
+            try db.execute(sql: "INSERT INTO item_fts(item_fts) VALUES('rebuild')")
+        }
+        return result
+    }
+
+    /// Deletes on-disk blobs no live representation references, and counts
+    /// references whose file is missing. Synchronous on purpose: it must not
+    /// interleave with `ingest` (see `maintenanceSweep`).
+    private func reconcileOrphanBlobs() throws -> SweepResult {
         let referenced: Set<String> = try self.dbWriter.read { db in
             try String.fetchSet(
                 db,
@@ -440,12 +475,6 @@ public actor ClipStore {
 
         // References pointing at a file that isn't there → unrecoverable gap.
         let missing = referenced.subtracting(onDisk).count
-
-        // Reclaim page space from purged rows; best-effort.
-        try? self.dbWriter.writeWithoutTransaction { db in
-            try db.execute(sql: "PRAGMA optimize")
-            try db.execute(sql: "VACUUM")
-        }
 
         return SweepResult(orphanedBlobsDeleted: deleted, missingBlobs: missing)
     }

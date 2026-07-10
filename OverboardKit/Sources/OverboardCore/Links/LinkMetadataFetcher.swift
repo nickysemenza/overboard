@@ -70,10 +70,62 @@ public struct LinkMetadataFetcher: Sendable {
         if host == "::1" || host == "::" { return true }
         // IPv4-mapped IPv6 loopback, e.g. ::ffff:127.0.0.1.
         if host.hasPrefix("::ffff:"), self.isPrivateIPv4(String(host.dropFirst(7))) { return true }
+        // IPv6 link-local (fe80::/10) and unique-local (fc00::/7).
+        if host.hasPrefix("fe8") || host.hasPrefix("fe9") || host.hasPrefix("fea") || host.hasPrefix("feb") {
+            return true
+        }
+        if host.hasPrefix("fc") || host.hasPrefix("fd") { return true }
 
         if self.isPrivateIPv4(host) { return true }
 
         return false
+    }
+
+    /// Resolves `host` via DNS and returns true if *any* resolved address is
+    /// loopback/private/link-local. `isPrivateHost` only inspects the literal
+    /// host string, but URLSession resolves the name itself when it connects —
+    /// so a public-looking hostname whose A/AAAA record points at 127.0.0.1 or
+    /// 169.254.169.254 (SSRF via DNS) would otherwise slip through. A resolution
+    /// failure returns false and lets the request fail on its own.
+    ///
+    /// Best-effort: URLSession re-resolves at connect time, so a resolver that
+    /// flips its answer between this check and the connection (DNS rebinding with
+    /// a near-zero TTL) could still bypass it. Closing that fully needs pinning
+    /// the connection to the vetted address, which URLSession doesn't expose.
+    static func hostResolvesToPrivate(_ host: String) -> Bool {
+        var hints = addrinfo()
+        hints.ai_family = AF_UNSPEC
+        hints.ai_socktype = SOCK_STREAM
+        var info: UnsafeMutablePointer<addrinfo>?
+        guard getaddrinfo(host, nil, &hints, &info) == 0, let head = info else { return false }
+        defer { freeaddrinfo(head) }
+
+        var node: UnsafeMutablePointer<addrinfo>? = head
+        while let current = node {
+            var buffer = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+            if let addr = current.pointee.ai_addr,
+               getnameinfo(
+                   addr, current.pointee.ai_addrlen,
+                   &buffer, socklen_t(buffer.count),
+                   nil, 0, NI_NUMERICHOST
+               ) == 0
+            {
+                // getnameinfo can append a scope id to link-local addrs (fe80::1%en0).
+                let numeric = String(cString: buffer)
+                let bare = numeric.split(separator: "%").first.map(String.init) ?? numeric
+                if self.isPrivateHost(bare) { return true }
+            }
+            node = current.pointee.ai_next
+        }
+        return false
+    }
+
+    /// The full connect-time gate: cheap string checks (`isFetchable`) plus a DNS
+    /// resolution check. Applied at every outbound-connection boundary, including
+    /// redirects, so a name that resolves to an internal address is never dialed.
+    static func isConnectPermitted(_ url: URL) -> Bool {
+        guard self.isFetchable(url), let host = url.host else { return false }
+        return !self.hostResolvesToPrivate(host)
     }
 
     /// True if `host` is a dotted-quad IPv4 in a loopback/private/link-local
@@ -131,6 +183,7 @@ public struct LinkMetadataFetcher: Sendable {
     /// at `</head>` or the byte cap — whichever comes first. Returns the HTML
     /// and the final (post-redirect) URL to resolve relative links against.
     private func fetchHTML(_ url: URL) async -> (html: String, finalURL: URL)? {
+        guard Self.isConnectPermitted(url) else { return nil }
         var request = URLRequest(url: url)
         request.timeoutInterval = self.timeout
         request.setValue(
@@ -210,7 +263,7 @@ public struct LinkMetadataFetcher: Sendable {
     /// its longest side, and re-encodes as PNG via ImageIO — no AppKit. Nil on
     /// any failure, so a broken image URL never blocks the rest of the card.
     private func fetchImagePNG(_ url: URL?, byteCap: Int, maxPixel: Int) async -> Data? {
-        guard let url, Self.isFetchable(url) else { return nil }
+        guard let url, Self.isConnectPermitted(url) else { return nil }
         var request = URLRequest(url: url)
         request.timeoutInterval = self.timeout
         request.setValue("image/*", forHTTPHeaderField: "Accept")
@@ -268,7 +321,7 @@ private final class RedirectGuard: NSObject, URLSessionTaskDelegate, @unchecked 
         newRequest request: URLRequest,
         completionHandler: @escaping (URLRequest?) -> Void
     ) {
-        if let url = request.url, LinkMetadataFetcher.isFetchable(url) {
+        if let url = request.url, LinkMetadataFetcher.isConnectPermitted(url) {
             completionHandler(request)
         } else {
             completionHandler(nil)

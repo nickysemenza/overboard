@@ -235,6 +235,53 @@ enum Migrations {
             try db.execute(sql: "ALTER TABLE item ADD COLUMN sourceTitle TEXT")
         }
 
+        // Retroactively mask link clips captured before credential-bearing links
+        // were detected at capture time. Without this, an existing presigned /
+        // magic-login / token URL stays searchable, CLI-visible, and (until its
+        // metadata is fetched) network-reachable. Re-evaluate each live, non-secret
+        // link against URLSensitivity using its full URL (the plainText payload;
+        // previewText may be truncated), and for matches: drop it from FTS, null
+        // searchText, and mask the preview — exactly as capture now does. The URL
+        // payload is retained so paste still works, like other secrets.
+        migrator.registerMigration("v5-reclassify-link-secrets") { db in
+            try self.reclassifyLinkSecrets(db)
+        }
+
         return migrator
+    }
+
+    /// Re-evaluates live, non-secret link items against `URLSensitivity` and
+    /// masks / de-indexes any credential-bearing ones. Extracted from the v5
+    /// migration so it's directly testable against hand-seeded legacy rows.
+    static func reclassifyLinkSecrets(_ db: GRDB.Database) throws {
+        let rows = try Row.fetchAll(
+            db,
+            sql: """
+            SELECT i.id AS id, i.rowid AS rid, i.searchText AS searchText, r.data AS urlData
+            FROM item i
+            JOIN representation r ON r.itemID = i.id AND r.uti = ?
+            WHERE i.kind = 'link' AND i.isSecret = 0 AND i.deletedAt IS NULL
+              AND r.data IS NOT NULL
+            """,
+            arguments: [WellKnownUTI.plainText]
+        )
+        for row in rows {
+            guard let data = row["urlData"] as Data?,
+                  let urlString = String(data: data, encoding: .utf8),
+                  let url = URL(string: urlString.trimmingCharacters(in: .whitespacesAndNewlines)),
+                  URLSensitivity.isSensitive(url)
+            else { continue }
+
+            if let searchText = row["searchText"] as String? {
+                try db.execute(
+                    sql: "INSERT INTO item_fts (item_fts, rowid, searchText) VALUES ('delete', ?, ?)",
+                    arguments: [row["rid"] as Int64, searchText]
+                )
+            }
+            try db.execute(
+                sql: "UPDATE item SET isSecret = 1, previewText = ?, searchText = NULL WHERE id = ?",
+                arguments: ["Secret — Link with credentials", row["id"] as String]
+            )
+        }
     }
 }

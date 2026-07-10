@@ -51,6 +51,13 @@ final class AppServices {
     let captureState = CaptureState()
     let updates = UpdateChecker()
 
+    /// One long-lived link fetcher, reused for every preview. A per-fetch
+    /// `LinkMetadataFetcher()` builds a delegate-backed `URLSession` that retains
+    /// itself (and its `RedirectGuard`) until invalidated — which a value type
+    /// can't do in `deinit` — so constructing one per link leaked a session each
+    /// time. Sharing one session (safe for concurrent tasks) removes the leak.
+    private nonisolated static let linkFetcher = LinkMetadataFetcher()
+
     let store: ClipStore
     let monitor: ClipboardMonitor
     let pasteback: PastebackService
@@ -674,7 +681,7 @@ final class AppServices {
             )
             return
         }
-        let metadata = await LinkMetadataFetcher().fetch(url)
+        let metadata = await Self.linkFetcher.fetch(url)
         try? await store.attachLinkMetadata(
             itemID: item.id,
             title: metadata?.title ?? "",

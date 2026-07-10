@@ -246,14 +246,8 @@ struct PreviewPane: View {
                 }
             }
         case .file:
-            if let rep = try? await store.representations(for: item.id)
-                .first(where: { $0.uti == WellKnownUTI.fileURLs }),
-                let data = try? await store.payload(for: rep),
-                let urlStrings = try? JSONDecoder().decode([String].self, from: data)
-            {
-                self.fullText = urlStrings
-                    .compactMap { URL(string: $0)?.path }
-                    .joined(separator: "\n")
+            if let paths = try? await store.filePaths(for: item.id), !paths.isEmpty {
+                self.fullText = paths.joined(separator: "\n")
             }
         case .image:
             if let rep = try? await store.representations(for: item.id)

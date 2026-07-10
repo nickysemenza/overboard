@@ -21,11 +21,16 @@ struct OverboardApp: App {
                 AppServices.shared.overlay.show()
             }
 
-            Button("History…") {
-                self.openWindow(id: "history")
-                NSApp.activate(ignoringOtherApps: true)
-            }
-            .keyboardShortcut("h")
+            // HistoryDebugView is a debug affordance superseded by the drawer;
+            // keep it (and its ⌘H) out of release builds so a stray shortcut
+            // can't open a second, unpolished full-history surface.
+            #if DEBUG
+                Button("History…") {
+                    self.openWindow(id: "history")
+                    NSApp.activate(ignoringOtherApps: true)
+                }
+                .keyboardShortcut("h")
+            #endif
 
             Button("Snippets…") {
                 self.openWindow(id: "snippets")
@@ -60,11 +65,13 @@ struct OverboardApp: App {
             )
         }
 
-        Window("Overboard History", id: "history") {
-            HistoryDebugView(store: AppServices.shared.store)
-                .frame(minWidth: 420, minHeight: 320)
-        }
-        .defaultSize(width: 520, height: 600)
+        #if DEBUG
+            Window("Overboard History", id: "history") {
+                HistoryDebugView(store: AppServices.shared.store)
+                    .frame(minWidth: 420, minHeight: 320)
+            }
+            .defaultSize(width: 520, height: 600)
+        #endif
 
         Window("Snippets", id: "snippets") {
             SnippetsManagerView(store: AppServices.shared.store)
