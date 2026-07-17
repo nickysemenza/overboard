@@ -236,6 +236,15 @@ public final class LauncherPanelController {
         DispatchQueue.main.async { [weak panel] in
             guard let editor = panel?.fieldEditor(false, for: nil) as? NSTextView else { return }
             editor.selectedRange = NSRange(location: editor.string.count, length: 0)
+            // Overboard never activates (nonactivating panel + accessory app),
+            // so AppKit draws text selection "unemphasized" — a faint gray
+            // that's invisible on the dark glass. Pinning the emphasized
+            // attributes keeps ⌘A visibly highlighted; they persist on the
+            // shared field editor across refocus (e.g. ⌘K palette roundtrip).
+            editor.selectedTextAttributes = [
+                .backgroundColor: NSColor.selectedTextBackgroundColor,
+                .foregroundColor: NSColor.selectedTextColor,
+            ]
         }
         self.installMonitors()
     }
