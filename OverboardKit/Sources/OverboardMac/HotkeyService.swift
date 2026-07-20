@@ -10,6 +10,11 @@ public extension KeyboardShortcuts.Name {
 
     /// Summons/dismisses the launcher bar. ⌥Space — ⌘Space belongs to Spotlight.
     static let toggleLauncher = Self("toggleLauncher", default: .init(.space, modifiers: [.option]))
+
+    /// Summons/dismisses the emoji picker. ⌃⌘Space deliberately shadows the
+    /// system Character Viewer (Raycast's convention) — the Carbon hotkey wins
+    /// while Overboard is running, and the binding is re-recordable in Settings.
+    static let toggleEmojiPicker = Self("toggleEmojiPicker", default: .init(.space, modifiers: [.control, .command]))
 }
 
 /// Thin wrapper so only OverboardMac imports KeyboardShortcuts.
@@ -25,5 +30,9 @@ public enum HotkeyService {
 
     public static func onToggleLauncher(_ handler: @escaping @MainActor () -> Void) {
         KeyboardShortcuts.onKeyDown(for: .toggleLauncher, action: handler)
+    }
+
+    public static func onToggleEmojiPicker(_ handler: @escaping @MainActor () -> Void) {
+        KeyboardShortcuts.onKeyDown(for: .toggleEmojiPicker, action: handler)
     }
 }

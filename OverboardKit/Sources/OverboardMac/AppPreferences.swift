@@ -45,6 +45,9 @@ public extension Defaults.Keys {
     static let launcherSearchHistory = Key<[String]>("launcherSearchHistory", default: [])
     /// Pinned drawer searches (raw query strings), shown as chips above history.
     static let savedSearches = Key<[String]>("savedSearches", default: [])
+    /// Emoji picked in the emoji picker, most-recent first, capped by
+    /// EmojiRecents.cap — drives the picker's "Recently Used" section.
+    static let emojiRecents = Key<[String]>("emojiRecents", default: [])
 }
 
 /// Parsed views over the newline-list preference keys.

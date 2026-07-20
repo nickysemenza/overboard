@@ -56,10 +56,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 MainActor.assumeIsolated {
                     let overlay = AppServices.shared.overlay
                     let launcher = AppServices.shared.launcher
+                    let emoji = AppServices.shared.emojiPicker
 
                     // "launcher-query:21*2" — payload after the first colon.
                     if let command, command.hasPrefix("launcher-query:") {
                         launcher.setQuery(String(command.dropFirst("launcher-query:".count)))
+                        return
+                    }
+                    if let command, command.hasPrefix("emoji-query:") {
+                        emoji.setQuery(String(command.dropFirst("emoji-query:".count)))
                         return
                     }
 
@@ -85,6 +90,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     case "launcher-commit-opt": launcher.commitSelection(modifier: .option)
                     case "launcher-next": launcher.moveSelection(1)
                     case "launcher-prev": launcher.moveSelection(-1)
+                    case "emoji-toggle": emoji.toggle()
+                    case "emoji-show": emoji.show()
+                    case "emoji-hide": emoji.hide()
+                    case "emoji-commit": emoji.commitSelection()
+                    case "emoji-commit-cmd": emoji.commitSelection(copyOnly: true)
+                    case "emoji-next": emoji.moveSelection(.right)
+                    case "emoji-prev": emoji.moveSelection(.left)
+                    case "emoji-down": emoji.moveSelection(.down)
+                    case "emoji-up": emoji.moveSelection(.up)
                     default: break
                     }
                 }

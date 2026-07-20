@@ -68,6 +68,11 @@ updates. All clipboard data stays on your machine.
   Footer action bar shows the primary action; **⌘K** opens per-row actions
   (reveal in Finder, copy path, quit app, open link…). Running apps have
   indicator dots; Switch to / Quit App actions.
+- **Emoji picker** (⌃⌘Space): a Raycast-style searchable emoji grid with
+  category sections and a Recently Used row. Type to filter by name or keyword
+  ("fire", "shrug"), arrows to move, ↩ pastes into the app you were in, ⌘↩
+  copies. The default shortcut takes over the system emoji viewer's binding
+  while Overboard runs — re-record it in Settings to get the system one back.
 - **Launcher commands**: `:stats` (word/char/line stats), `:pause` / `:resume`
   (toggles clipboard capture; menu-bar indicator), `:clear` (clears history,
   keeps pins), `:settings`, `:version`. Plus `:` to open the commands palette.
@@ -198,7 +203,9 @@ Commands: `show`, `hide`, `toggle`, `commit`, `commit-plain`, `pin`, `delete`,
 `preview`, `next`, `prev`, `extend`, `palette`, `stack`, plus the launcher's
 `launcher-show`, `launcher-hide`, `launcher-toggle`, `launcher-query:<text>`,
 `launcher-next`, `launcher-prev`, `launcher-commit`, `launcher-commit-cmd`,
-`launcher-commit-opt`.
+`launcher-commit-opt`, and the emoji picker's `emoji-show`, `emoji-hide`,
+`emoji-toggle`, `emoji-query:<text>`, `emoji-next`, `emoji-prev`, `emoji-up`,
+`emoji-down`, `emoji-commit`, `emoji-commit-cmd`.
 Traces append to `/tmp/overboard-trace.log` via `obTrace(_:)`.
 
 ### Regenerating the README screenshots

@@ -26,6 +26,9 @@ let package = Package(
             dependencies: [
                 .product(name: "GRDB", package: "GRDB.swift"),
                 .product(name: "Expression", package: "Expression"),
+            ],
+            resources: [
+                .copy("Emoji/Resources/emoji.json"),
             ]
         ),
         .target(

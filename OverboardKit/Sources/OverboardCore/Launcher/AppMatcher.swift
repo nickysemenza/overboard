@@ -14,8 +14,9 @@ public enum AppMatcher {
 
     /// Case- and diacritic-insensitive fold, matching FileNameMatcher and the
     /// FTS index so "cafe" finds "Café" and the whole launcher session treats
-    /// accents the same way for apps, files, and clips.
-    static func fold(_ string: String) -> String {
+    /// accents the same way for apps, files, clips, and emoji (EmojiMatcher
+    /// reuses this — public for that).
+    public static func fold(_ string: String) -> String {
         string.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
     }
 

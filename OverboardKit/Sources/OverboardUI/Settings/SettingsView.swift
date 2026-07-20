@@ -81,6 +81,9 @@ private struct GeneralSettingsTab: View {
                 KeyboardShortcuts.Recorder("Summon drawer", name: .toggleDrawer)
                 KeyboardShortcuts.Recorder("Paste next from stack", name: .pasteNextFromStack)
                 KeyboardShortcuts.Recorder("Summon launcher", name: .toggleLauncher)
+                KeyboardShortcuts.Recorder("Summon emoji picker", name: .toggleEmojiPicker)
+            } footer: {
+                Text("The emoji picker's default shortcut (⌃⌘Space) takes over the system emoji viewer's binding while Overboard is running — record a different one here to get the system viewer back.")
             }
 
             Section {

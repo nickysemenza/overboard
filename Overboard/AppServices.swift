@@ -65,6 +65,8 @@ final class AppServices {
     let launcher: LauncherPanelController
     let spotify: SpotifyNowPlayingMonitor
     let launcherViewModel: LauncherViewModel
+    let emojiPicker: EmojiPanelController
+    let emojiViewModel: EmojiPickerViewModel
     let runningApps = RunningApps()
     let stack = PasteStack()
 
@@ -156,6 +158,14 @@ final class AppServices {
         }
         self.launcherViewModel = launcherViewModel
         self.launcher = LauncherPanelController(store: self.store, viewModel: launcherViewModel)
+
+        // The render check drops emoji newer than the installed system font,
+        // so the grid never shows tofu on older macOS.
+        let emojiViewModel = EmojiPickerViewModel(
+            catalog: { EmojiCatalog.load(isRenderable: EmojiRenderCheck.canRender) }
+        )
+        self.emojiViewModel = emojiViewModel
+        self.emojiPicker = EmojiPanelController(viewModel: emojiViewModel)
     }
 
     func start() {
@@ -173,6 +183,9 @@ final class AppServices {
 
         self.installOverlayCallbacks()
         self.installLauncherCallbacks()
+        self.installEmojiCallbacks()
+        // Decode the emoji dataset off-main now so the first ⌃⌘Space is instant.
+        self.emojiViewModel.warm()
     }
 
     /// Clipboard monitoring, ingest, and background maintenance — everything
@@ -467,6 +480,18 @@ final class AppServices {
         }
     }
 
+    private func installEmojiCallbacks() {
+        // Both paths reuse the shared clipboard plumbing: marker tagging keeps
+        // the emoji out of history, and paste falls back to copy-only + HUD
+        // without Accessibility.
+        self.emojiPicker.onPaste = { [weak self] emoji, target in
+            self?.pasteString(emoji, into: target)
+        }
+        self.emojiPicker.onCopy = { [weak self] emoji in
+            self?.copyString(emoji, hud: "Copied — ⌘V to paste")
+        }
+    }
+
     /// SwiftUI's stable identifier for the `Settings` scene's window.
     private static let settingsWindowID = "com_apple_SwiftUI_Settings_window"
 
@@ -583,6 +608,10 @@ final class AppServices {
 
         HotkeyService.onToggleLauncher { [weak self] in
             self?.launcher.toggle()
+        }
+
+        HotkeyService.onToggleEmojiPicker { [weak self] in
+            self?.emojiPicker.toggle()
         }
 
         HotkeyService.onPasteNextFromStack { [weak self] in
