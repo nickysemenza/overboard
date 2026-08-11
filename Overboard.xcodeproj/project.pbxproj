@@ -149,7 +149,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "# Bake the git state into the built Info.plist, read back at runtime by\n# AppVersion (OverboardCore). MARKETING_VERSION only moves on tagged\n# releases, so a dogfood build a few commits past the last tag would\n# otherwise call itself by the tag and lie about the bits. Best-effort:\n# never fails the build over version metadata.\nset -e\nplist=\"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}\"\nif [ ! -f \"$plist\" ]; then echo \"warning: Embed git version: Info.plist not found at $plist\"; exit 0; fi\ncd \"${SRCROOT}\"\ndescribe=$(git describe --tags --always --dirty 2>/dev/null || true)\nsha=$(git rev-parse --short HEAD 2>/dev/null || true)\nset_key() {\n  /usr/libexec/PlistBuddy -c \"Add :$1 string $2\" \"$plist\" 2>/dev/null || /usr/libexec/PlistBuddy -c \"Set :$1 $2\" \"$plist\"\n}\nset_key GitDescribe \"$describe\"\nset_key GitSHA \"$sha\"\n";
+			shellScript = "\"${SRCROOT}/scripts/embed-git-version.sh\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -300,7 +300,9 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.3.0;
+				/* Floor only — scripts/embed-git-version.sh raises this to the
+				   nearest git tag at build time, so it never needs bumping. */
+				MARKETING_VERSION = 0.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.nickysemenza.overboard;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -325,7 +327,9 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.3.0;
+				/* Floor only — scripts/embed-git-version.sh raises this to the
+				   nearest git tag at build time, so it never needs bumping. */
+				MARKETING_VERSION = 0.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.nickysemenza.overboard;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
