@@ -35,6 +35,21 @@ struct SecretDetectorTests {
         #expect(SecretDetector.detect(in: "4532015112830367") == nil)
     }
 
+    /// Regression: `creditCard` strips whitespace before the Luhn check, so
+    /// without a newline guard a copied column of figures concatenates into one
+    /// 13–19 digit candidate — and ~10% of those pass Luhn. Flagged items are
+    /// masked, unsearchable, and hard-deleted by the secret sweep, so this false
+    /// positive silently destroyed ordinary data.
+    @Test func multiLineDigitsAreNotACard() {
+        // Concatenates to 1234567890123452, which passes Luhn.
+        #expect(SecretDetector.detect(in: "1234\n5678\n9012\n3452") == nil)
+        // The same digits on one line stay a card — the guard is about line
+        // breaks, not about loosening detection.
+        #expect(SecretDetector.detect(in: "1234 5678 9012 3452") == .creditCard)
+        // Snowflake IDs and nanosecond timestamps, one per line.
+        #expect(SecretDetector.detect(in: "1102063340053299200\n1102063340053299201") == nil)
+    }
+
     @Test func ignoresOrdinaryContent() {
         #expect(SecretDetector.detect(in: "just some ordinary text") == nil)
         #expect(SecretDetector.detect(in: "https://example.com/page?q=1") == nil)
@@ -136,5 +151,37 @@ struct SecretStoreTests {
         #expect(remaining.count == 2)
         #expect(remaining.contains { $0.previewText == "ordinary old text" })
         #expect(remaining.filter(\.isSecret).count == 1)
+    }
+
+    /// The sweep hard-deletes rows and blobs with no tombstone, so a
+    /// false-positive match is unrecoverable. Pinning is an explicit "keep
+    /// this" and outranks the TTL.
+    @Test func pinnedSecretsSurviveTheSweep() async throws {
+        let store = try makeStore()
+        let old = Date().addingTimeInterval(-3600)
+        let pinned = try #require(await store.ingest(self.snapshot("AKIAIOSFODNN7EXAMPLE", at: old)))
+        try await store.ingest(self.snapshot("AKIAIOSFODNN7EXAMPL2", at: old))
+        try await store.setPinned(id: pinned.id, true)
+
+        try await store.purgeExpiredSecrets(olderThan: Date().addingTimeInterval(-600))
+
+        let remaining = try await store.recent(limit: 10)
+        #expect(remaining.map(\.id) == [pinned.id])
+    }
+
+    /// The TTL is a leash on *idle* secrets. Keying it to `createdAt` alone
+    /// deleted items out from under active use — an item you were still pasting
+    /// vanished on schedule regardless.
+    @Test func recentlyUsedSecretsSurviveTheSweep() async throws {
+        let store = try makeStore()
+        let old = Date().addingTimeInterval(-3600)
+        let used = try #require(await store.ingest(self.snapshot("AKIAIOSFODNN7EXAMPLE", at: old)))
+        try await store.ingest(self.snapshot("AKIAIOSFODNN7EXAMPL2", at: old))
+        try await store.markUsed(id: used.id)
+
+        try await store.purgeExpiredSecrets(olderThan: Date().addingTimeInterval(-600))
+
+        let remaining = try await store.recent(limit: 10)
+        #expect(remaining.map(\.id) == [used.id])
     }
 }

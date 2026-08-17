@@ -768,13 +768,25 @@ public actor ClipStore {
 
     // MARK: - Secret expiry
 
-    /// Hard-deletes secret items captured before the cutoff. Secrets are never
-    /// in FTS or the embedding index, so only rows and blobs need cleanup.
+    /// Hard-deletes expired secret items. Secrets are never in FTS or the
+    /// embedding index, so only rows and blobs need cleanup. The delete is real
+    /// rather than a tombstone on purpose — the point of the sweep is to get
+    /// secret cleartext off disk, and a tombstoned row would keep its blobs.
+    ///
+    /// Two carve-outs keep the sweep from destroying data the user asked to
+    /// keep. Pinned items are spared outright: pinning is an explicit "keep
+    /// this", and honouring it costs less than silently deleting a
+    /// false-positive match. And the cutoff runs from the later of capture and
+    /// last use, so the TTL is a leash on *idle* secrets — an item you keep
+    /// pasting stays until ten minutes after you stop.
     public func purgeExpiredSecrets(olderThan cutoff: Date) throws {
         let candidateHashes: Set<String> = try dbWriter.write { db in
             let victims = try String.fetchAll(
                 db,
-                sql: "SELECT id FROM item WHERE isSecret = 1 AND createdAt < ?",
+                sql: """
+                SELECT id FROM item
+                WHERE isSecret = 1 AND isPinned = 0 AND max(createdAt, lastUsedAt) < ?
+                """,
                 arguments: [cutoff]
             )
             guard !victims.isEmpty else { return [] }

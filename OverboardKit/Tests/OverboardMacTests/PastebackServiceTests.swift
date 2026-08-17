@@ -118,4 +118,54 @@ struct PastebackServiceTests {
             .buildPasteboardItems(for: item, mode: .full)
         #expect(self.types(pbItems[0]).contains(ClipboardMonitor.markerType))
     }
+
+    // MARK: - Consumption probe
+
+    /// The probe rebuilds items with a lazy data provider so a read by the
+    /// target app is observable. It must preserve exactly what the eager build
+    /// produced — same flavors, same bytes, marker still eager (the monitor
+    /// checks `types`, and a provider call for the marker would read as a paste
+    /// that never happened).
+    @Test func probedItemsPreserveFlavorsAndBytes() async throws {
+        let store = try self.makeStore()
+        let snapshot = PasteboardSnapshot(
+            reps: [
+                .init(uti: WellKnownUTI.plainText, data: Data("hello".utf8)),
+                .init(uti: WellKnownUTI.rtf, data: Data("{\\rtf1 hello}".utf8)),
+            ],
+            sourceBundleID: "com.apple.TextEdit",
+            sourceAppName: "TextEdit"
+        )
+        let item = try #require(await store.ingest(snapshot))
+        let service = PastebackService(store: store)
+        let eager = try await service.buildPasteboardItems(for: item, mode: .full)
+
+        let (probed, probe) = PastebackService.probed(eager)
+
+        #expect(probed.count == eager.count)
+        #expect(self.types(probed[0]) == self.types(eager[0]))
+        #expect(self.types(probed[0]).contains(ClipboardMonitor.markerType))
+        // Nothing has asked for the payload yet.
+        #expect(!probe.wasRead)
+        // Reading a content flavor vends the original bytes and trips the probe.
+        #expect(probed[0].data(forType: .string) == Data("hello".utf8))
+        #expect(probe.wasRead)
+    }
+
+    /// The marker must not be what trips the probe, or every paste would look
+    /// consumed the instant the monitor glanced at the pasteboard.
+    @Test func markerReadDoesNotCountAsConsumption() async throws {
+        let store = try self.makeStore()
+        let item = try #require(await store.ingest(PasteboardSnapshot(
+            reps: [.init(uti: WellKnownUTI.plainText, data: Data("x".utf8))],
+            sourceBundleID: nil,
+            sourceAppName: nil
+        )))
+        let service = PastebackService(store: store)
+        let eager = try await service.buildPasteboardItems(for: item, mode: .full)
+        let (probed, probe) = PastebackService.probed(eager)
+
+        #expect(probed[0].data(forType: ClipboardMonitor.markerType) == Data())
+        #expect(!probe.wasRead)
+    }
 }

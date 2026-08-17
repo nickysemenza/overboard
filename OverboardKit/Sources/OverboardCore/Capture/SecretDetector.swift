@@ -81,6 +81,12 @@ public enum SecretDetector {
 
     /// 13–19 digits (spaces/dashes allowed) passing Luhn.
     private static func creditCard(in text: String) -> SecretKind? {
+        // A card number is never multi-line, and stripping newlines would
+        // concatenate unrelated rows into one candidate: a copied column of
+        // figures becomes a 13–19 digit string that passes Luhn ~10% of the
+        // time. Flagged items are masked, unsearchable, and swept on the
+        // secret TTL, so that false positive silently destroys ordinary data.
+        guard !text.contains(where: \.isNewline) else { return nil }
         let stripped = text.filter { !$0.isWhitespace && $0 != "-" }
         guard stripped.count >= 13, stripped.count <= 19,
               stripped.allSatisfy(\.isNumber)
