@@ -2,7 +2,7 @@
 # Builds the version you actually use and swaps it into /Applications.
 #
 # Unlike release.sh (unsigned zip for distribution), this signs with your
-# Apple Development identity (team HDPU3NY6TJ, automatic signing) so the
+# Apple Development identity (team Y9A97FXT63, automatic signing) so the
 # Accessibility TCC grant survives the rebuild — paste-back stays working
 # instead of looking "flaky" after every install. See the signing note in
 # README.md for why the stable signature matters.

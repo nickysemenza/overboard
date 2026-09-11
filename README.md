@@ -176,7 +176,7 @@ SwiftFormat, and SwiftLint.
 
 macOS TCC keys the Accessibility grant to the app's code signature. The project
 signs with a stable Apple Development identity (automatic signing, team
-`HDPU3NY6TJ`). If you build with a different identity or ad-hoc signing, you'll
+`Y9A97FXT63`). If you build with a different identity or ad-hoc signing, you'll
 have to re-grant Accessibility after every build and paste-back will look
 "flaky" — it isn't; it's TCC. Released builds carry a stable Developer ID
 signature too, so the Accessibility grant also survives release-to-release
