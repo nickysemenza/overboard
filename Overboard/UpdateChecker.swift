@@ -6,7 +6,7 @@ import OverboardMac
 
 /// Polls the GitHub Releases API and, when a newer tag than this build exists,
 /// exposes it so the menu bar can offer a one-click download. Install stays
-/// manual (unsigned zips, no Sparkle) — this only closes the "I never knew a
+/// manual (no Sparkle) — this only closes the "I never knew a
 /// release shipped" gap.
 @Observable
 final class UpdateChecker {

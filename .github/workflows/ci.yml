@@ -56,9 +56,11 @@ jobs:
           sudo xcode-select -s "$(ls -d /Applications/Xcode_26*.app | sort -V | tail -n 1)/Contents/Developer"
           xcodebuild -version
 
-      # Unsigned: no signing identity on CI. Downloaded artifacts carry the
-      # quarantine attribute, so Gatekeeper requires right-click → Open (or
-      # build locally with the real identity for daily use).
+      # Unsigned by choice, not by limitation: fork PRs can't read repo
+      # secrets, so this build has no Developer ID identity to sign with
+      # even after the release pipeline gained one. This artifact is a smoke
+      # check that the app builds, not something meant for distribution —
+      # tagged pushes are signed and notarized separately by release.yml.
       - name: Build (Release, unsigned)
         run: |
           xcodebuild -project Overboard.xcodeproj \

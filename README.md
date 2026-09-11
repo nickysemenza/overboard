@@ -19,9 +19,10 @@ person's workflow and taste.
 ## Install
 
 Grab the zip from
-[Releases](https://github.com/nickysemenza/overboard/releases) — it's
-unsigned (no paid Developer Program behind this project), so the first launch
-needs **right-click → Open**. Or build from source (macOS 26+, Xcode 26+):
+[Releases](https://github.com/nickysemenza/overboard/releases) — releases are
+signed with a Developer ID certificate and notarized by Apple, so a plain
+double-click works, no right-click → Open dance needed. Or build from source
+(macOS 26+, Xcode 26+):
 
 ```sh
 git clone https://github.com/nickysemenza/overboard && cd overboard
@@ -177,7 +178,9 @@ macOS TCC keys the Accessibility grant to the app's code signature. The project
 signs with a stable Apple Development identity (automatic signing, team
 `HDPU3NY6TJ`). If you build with a different identity or ad-hoc signing, you'll
 have to re-grant Accessibility after every build and paste-back will look
-"flaky" — it isn't; it's TCC.
+"flaky" — it isn't; it's TCC. Released builds carry a stable Developer ID
+signature too, so the Accessibility grant also survives release-to-release
+upgrades, not just local rebuilds.
 
 ### Building
 
@@ -250,9 +253,50 @@ Screen Recording permission.
 git tag v1.0.0 && git push --tags
 ```
 
-The Release workflow builds the unsigned zip and attaches it to a GitHub
-Release. `./scripts/release.sh 1.0.0` produces the same zip locally into
-`dist/`.
+The Release workflow builds a Developer-ID-signed, notarized zip and attaches
+it to a GitHub Release. `./scripts/release.sh 1.0.0` produces the same zip
+locally into `dist/` (see below for what it needs to sign and notarize).
+
+#### Release signing
+
+One-time setup, then CI handles every tagged release on its own. Five repo
+secrets carry the credentials:
+
+1. **Developer ID Application certificate.** Xcode → Settings → Accounts →
+   select your team → Manage Certificates → **+** → Developer ID Application.
+   Right-click the new cert in that same sheet → **Export Certificate** (a
+   `.p12` containing the cert and its private key; the password you're asked
+   for is a new one you choose, not your Mac login). Then:
+   ```sh
+   base64 -i cert.p12 | pbcopy
+   ```
+   Paste that into the `DEVELOPER_ID_P12_BASE64` secret; the export password
+   you set goes in `DEVELOPER_ID_P12_PASSWORD`.
+2. **App Store Connect API key** (used for notarization only — no Apple ID,
+   password, or 2FA ever touches CI). At
+   [appstoreconnect.apple.com](https://appstoreconnect.apple.com) → Users and
+   Access → Integrations → App Store Connect API → Team Keys → **+**, role
+   Developer. Download the `.p8` — Apple only lets you do this once, so keep
+   it somewhere safe. Its file contents go in
+   `APP_STORE_CONNECT_API_KEY_P8`; the Key ID and Issuer ID shown alongside it
+   go in `APP_STORE_CONNECT_KEY_ID` and `APP_STORE_CONNECT_ISSUER_ID`.
+3. Push each secret to the repo:
+   ```sh
+   gh secret set DEVELOPER_ID_P12_BASE64 < p12-base64.txt
+   gh secret set DEVELOPER_ID_P12_PASSWORD
+   gh secret set APP_STORE_CONNECT_API_KEY_P8 < AuthKey.p8
+   gh secret set APP_STORE_CONNECT_KEY_ID
+   gh secret set APP_STORE_CONNECT_ISSUER_ID
+   ```
+   Sanity-check the API key locally before relying on it in CI:
+   ```sh
+   xcrun notarytool history --key AuthKey.p8 --key-id <key-id> --issuer <issuer-id>
+   ```
+
+`scripts/release.sh` does the same signing-and-notarizing locally when a
+Developer ID Application certificate is in your keychain and
+`NOTARY_KEY_PATH`, `NOTARY_KEY_ID`, and `NOTARY_ISSUER_ID` are set in your
+environment.
 
 ## License
 

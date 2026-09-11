@@ -1,8 +1,13 @@
 name: Release
 
-# Tag pushes (v1.0.0) build the same unsigned zip as CI and attach it to a
-# GitHub Release. Unsigned because there's no paid Developer Program
-# membership — downloaders clear Gatekeeper with right-click → Open.
+# Tag pushes (v1.0.0) build a Developer-ID-signed, notarized zip and attach
+# it to a GitHub Release. Requires five repo secrets (see README.md § Release
+# signing for how to generate each):
+#   DEVELOPER_ID_P12_BASE64      base64 of the exported .p12 (cert + key)
+#   DEVELOPER_ID_P12_PASSWORD    that .p12's export password
+#   APP_STORE_CONNECT_API_KEY_P8 contents of the notary API key's .p8
+#   APP_STORE_CONNECT_KEY_ID     that key's ID
+#   APP_STORE_CONNECT_ISSUER_ID  the API key's issuer ID
 on:
   push:
     tags: ["v*"]
@@ -27,26 +32,52 @@ jobs:
           sudo xcode-select -s "$(ls -d /Applications/Xcode_26*.app | sort -V | tail -n 1)/Contents/Developer"
           xcodebuild -version
 
+      # Imports the Developer ID Application cert+key into a temporary
+      # keychain for this run; the action deletes that keychain in its
+      # post-step regardless of how the job ends.
+      - uses: apple-actions/import-codesign-certs@v7
+        with:
+          p12-file-base64: ${{ secrets.DEVELOPER_ID_P12_BASE64 }}
+          p12-password: ${{ secrets.DEVELOPER_ID_P12_PASSWORD }}
+
       # embed-git-version.sh derives the same number from the tag, so this is
       # belt-and-braces: if git is ever unavailable in the runner, the release
       # still ships labelled with its tag rather than the 0.0.0 floor. The
       # script only ever raises the version, so the two cannot disagree.
-      - name: Build (Release, unsigned)
+      - name: Build (Release, signed)
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           xcodebuild -project Overboard.xcodeproj \
             -scheme Overboard \
             -configuration Release \
             -derivedDataPath build \
-            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="Developer ID Application" \
+            DEVELOPMENT_TEAM=HDPU3NY6TJ \
+            OTHER_CODE_SIGN_FLAGS="--timestamp" \
             MARKETING_VERSION="$VERSION" \
             build
 
-      - name: Zip app bundle
+      # Written from an `env:` var, never inlined in the script, so the key
+      # material never appears in the run log even under debug logging.
+      - name: Write notary API key
+        run: printf '%s' "$APP_STORE_CONNECT_API_KEY_P8" > "$RUNNER_TEMP/AuthKey.p8"
+        env:
+          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+
+      - name: Notarize and staple
         run: |
-          ditto -c -k --keepParent \
+          scripts/sign-and-notarize.sh \
             build/Build/Products/Release/Overboard.app \
             "Overboard-${GITHUB_REF_NAME#v}.zip"
+        env:
+          NOTARY_KEY_PATH: ${{ runner.temp }}/AuthKey.p8
+          NOTARY_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+
+      - name: Remove notary API key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/AuthKey.p8"
 
       - name: Create GitHub Release
         run: |
