@@ -32,12 +32,10 @@ mkdir -p "$DIST"
 
 if security find-identity -v -p codesigning | grep -q "Developer ID Application"; then
     echo "Building Release $VERSION (Developer ID signed)…"
-    # DEVELOPMENT_TEAM=Y9A97FXT63: the paid Developer ID team, distinct from
-    # the project file's DEVELOPMENT_TEAM (HDPU3NY6TJ), which is the free
-    # personal team used for local Apple Development builds and dogfood.sh.
-    # The Developer ID Application cert lives under Y9A97FXT63; signing here
-    # with HDPU3NY6TJ fails with "No 'Developer ID Application' signing
-    # certificate matching team ID".
+    # DEVELOPMENT_TEAM=Y9A97FXT63: the paid Developer Program team (same as
+    # the project file), stated explicitly because the identity lookup is
+    # keyed on it — any other team fails with "No 'Developer ID Application'
+    # signing certificate matching team ID".
     #
     # CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO: `xcodebuild build` (unlike
     # `archive`) injects com.apple.security.get-task-allow into the

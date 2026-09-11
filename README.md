@@ -274,11 +274,11 @@ secrets carry the credentials:
 1. **Developer ID Application certificate.** Xcode → Settings → Accounts →
    select your team → Manage Certificates → **+** → Developer ID Application.
 
-   Note the paid Developer Program membership creates a *separate* team —
-   Overboard signs Developer ID builds with team `Y9A97FXT63`, not the free
-   personal team `HDPU3NY6TJ` the project file's `DEVELOPMENT_TEAM` uses for
-   local Apple Development builds and `dogfood.sh` (see the signing note
-   above). Make sure you're creating the certificate under the paid team.
+   Note the paid Developer Program membership creates a *separate* team
+   from the free personal one — Overboard signs everything (dev builds,
+   `dogfood.sh`, and Developer ID releases) with the paid team `Y9A97FXT63`,
+   which is the project file's `DEVELOPMENT_TEAM`. Make sure you're creating
+   the certificate under that team.
 
    Right-click the new cert in that same sheet → **Export Certificate** (a
    `.p12` containing the cert and its private key; the password you're asked
