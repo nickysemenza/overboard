@@ -661,7 +661,7 @@ final class AppServices {
         {
             // Attach even empty results so textless images are marked as
             // OCR-attempted (searchText '' vs NULL).
-            let recognized = ImageTextRecognizer.recognizeText(in: png) ?? ""
+            let recognized = await ImageTextRecognizer.recognizeText(in: png) ?? ""
             try? await store.attachRecognizedText(itemID: item.id, text: recognized)
             textForLabeling = recognized.isEmpty ? nil : recognized
         } else if item.kind == .text {

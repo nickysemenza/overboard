@@ -8,6 +8,7 @@ final class SnippetsManagerViewModel {
     var selectedID: String?
     var draftTitle: String = ""
     var draftBody: String = ""
+    var filter: String = ""
 
     private let store: ClipStore
 
@@ -17,6 +18,14 @@ final class SnippetsManagerViewModel {
 
     var selected: Snippet? {
         self.snippets.first { $0.id == self.selectedID }
+    }
+
+    /// Snippets matching `filter` by title, case-insensitively. Selection is
+    /// untouched here — a still-visible selected snippet stays selected as
+    /// the filter changes.
+    var filteredSnippets: [Snippet] {
+        guard !self.filter.isEmpty else { return self.snippets }
+        return self.snippets.filter { $0.title.localizedCaseInsensitiveContains(self.filter) }
     }
 
     func load() async {
@@ -74,6 +83,27 @@ public struct SnippetsManagerView: View {
             self.editor
                 .frame(minWidth: 320, maxWidth: .infinity)
         }
+        .searchable(text: Binding(
+            get: { self.viewModel.filter },
+            set: { self.viewModel.filter = $0 }
+        ))
+        .toolbar {
+            ToolbarItemGroup {
+                Button {
+                    self.viewModel.addSnippet()
+                } label: {
+                    Image(systemName: "plus")
+                }
+                .help("Add Snippet")
+                Button {
+                    self.viewModel.deleteSelected()
+                } label: {
+                    Image(systemName: "minus")
+                }
+                .help("Remove Snippet")
+                .disabled(self.viewModel.selectedID == nil)
+            }
+        }
         .task {
             NSApp.activate(ignoringOtherApps: true)
             await self.viewModel.load()
@@ -81,32 +111,13 @@ public struct SnippetsManagerView: View {
     }
 
     private var snippetList: some View {
-        VStack(spacing: 0) {
-            List(self.viewModel.snippets, selection: Binding(
-                get: { self.viewModel.selectedID },
-                set: { self.viewModel.selectSnippet($0) }
-            )) { snippet in
-                Text(snippet.title)
-                    .lineLimit(1)
-                    .tag(snippet.id)
-            }
-            Divider()
-            HStack {
-                Button {
-                    self.viewModel.addSnippet()
-                } label: {
-                    Image(systemName: "plus")
-                }
-                Button {
-                    self.viewModel.deleteSelected()
-                } label: {
-                    Image(systemName: "minus")
-                }
-                .disabled(self.viewModel.selectedID == nil)
-                Spacer()
-            }
-            .buttonStyle(.borderless)
-            .padding(8)
+        List(self.viewModel.filteredSnippets, selection: Binding(
+            get: { self.viewModel.selectedID },
+            set: { self.viewModel.selectSnippet($0) }
+        )) { snippet in
+            Text(snippet.title)
+                .lineLimit(1)
+                .tag(snippet.id)
         }
     }
 

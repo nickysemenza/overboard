@@ -11,27 +11,27 @@ public enum ImageTextRecognizer {
     static let maxOCRPixel = 4096
 
     /// Returns recognized text lines joined by newlines, or nil if the image
-    /// contains no legible text. Synchronous Vision work — call from a
-    /// background task.
-    public static func recognizeText(in imageData: Data) -> String? {
-        let request = VNRecognizeTextRequest()
+    /// contains no legible text. Runs on the Swift-native Vision API, which is
+    /// non-blocking-friendly — call from a background task.
+    public static func recognizeText(in imageData: Data) async -> String? {
+        var request = RecognizeTextRequest()
         request.recognitionLevel = .accurate
         request.usesLanguageCorrection = true
 
         // Cap input size so a huge image doesn't make OCR the slow part of the
         // enrich task. Falls back to the raw data if downsampling can't decode it.
-        let handler = if let downsampled = ImageDownsampler.downsampledImage(from: imageData, maxPixel: Self.maxOCRPixel) {
-            VNImageRequestHandler(cgImage: downsampled)
-        } else {
-            VNImageRequestHandler(data: imageData)
-        }
+        let observations: [RecognizedTextObservation]
         do {
-            try handler.perform([request])
+            if let downsampled = ImageDownsampler.downsampledImage(from: imageData, maxPixel: Self.maxOCRPixel) {
+                observations = try await request.perform(on: downsampled)
+            } else {
+                observations = try await request.perform(on: imageData)
+            }
         } catch {
             return nil
         }
 
-        let lines = (request.results ?? []).compactMap { observation -> String? in
+        let lines = observations.compactMap { observation -> String? in
             guard let candidate = observation.topCandidates(1).first,
                   candidate.confidence > 0.4
             else { return nil }

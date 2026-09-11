@@ -71,6 +71,7 @@ struct OverboardApp: App {
                     .frame(minWidth: 420, minHeight: 320)
             }
             .defaultSize(width: 520, height: 600)
+            .restorationBehavior(.disabled)
         #endif
 
         Window("Snippets", id: "snippets") {
@@ -78,6 +79,7 @@ struct OverboardApp: App {
                 .frame(minWidth: 540, minHeight: 360)
         }
         .defaultSize(width: 640, height: 420)
+        .restorationBehavior(.disabled)
 
         Settings {
             SettingsView(store: AppServices.shared.store)

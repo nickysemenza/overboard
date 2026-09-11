@@ -42,16 +42,21 @@ public struct SettingsView: View {
 
     public var body: some View {
         TabView {
-            GeneralSettingsTab()
-                .tabItem { Label("General", systemImage: "gearshape") }
-            HistorySettingsTab(store: self.store)
-                .tabItem { Label("History", systemImage: "clock.arrow.circlepath") }
-            AppsSettingsTab()
-                .tabItem { Label("Apps", systemImage: "app.badge.checkmark") }
-            ActionsSettingsTab()
-                .tabItem { Label("Actions", systemImage: "wand.and.stars") }
-            AISettingsTab()
-                .tabItem { Label("AI", systemImage: "sparkles") }
+            Tab("General", systemImage: "gearshape") {
+                GeneralSettingsTab()
+            }
+            Tab("History", systemImage: "clock.arrow.circlepath") {
+                HistorySettingsTab(store: self.store)
+            }
+            Tab("Apps", systemImage: "app.badge.checkmark") {
+                AppsSettingsTab()
+            }
+            Tab("Actions", systemImage: "wand.and.stars") {
+                ActionsSettingsTab()
+            }
+            Tab("AI", systemImage: "sparkles") {
+                AISettingsTab()
+            }
         }
         .frame(width: 600)
         .onAppear {
