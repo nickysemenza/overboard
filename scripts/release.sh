@@ -32,12 +32,23 @@ mkdir -p "$DIST"
 
 if security find-identity -v -p codesigning | grep -q "Developer ID Application"; then
     echo "Building Release $VERSION (Developer ID signed)…"
+    # DEVELOPMENT_TEAM=Y9A97FXT63: the paid Developer ID team, distinct from
+    # the project file's DEVELOPMENT_TEAM (HDPU3NY6TJ), which is the free
+    # personal team used for local Apple Development builds and dogfood.sh.
+    # The Developer ID Application cert lives under Y9A97FXT63; signing here
+    # with HDPU3NY6TJ fails with "No 'Developer ID Application' signing
+    # certificate matching team ID".
+    #
+    # CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO: `xcodebuild build` (unlike
+    # `archive`) injects com.apple.security.get-task-allow into the
+    # signature by default, which the notary service rejects outright.
     xcodebuild -project Overboard.xcodeproj -scheme Overboard \
         -configuration Release -derivedDataPath "$DERIVED" \
         CODE_SIGN_STYLE=Manual \
         CODE_SIGN_IDENTITY="Developer ID Application" \
-        DEVELOPMENT_TEAM=HDPU3NY6TJ \
+        DEVELOPMENT_TEAM=Y9A97FXT63 \
         OTHER_CODE_SIGN_FLAGS="--timestamp" \
+        CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO \
         MARKETING_VERSION="$VERSION" \
         build | tail -2
 

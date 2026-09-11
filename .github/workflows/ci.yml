@@ -49,19 +49,56 @@ jobs:
     name: Build app artifact
     runs-on: macos-26
     steps:
+      # Full history + tags: shared with release.yml — the signed path below
+      # goes through the same "Embed git version" build phase, which needs
+      # `git describe` to resolve, and the default shallow checkout has
+      # neither the tag objects nor the history for that.
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
-      - name: Select newest Xcode 26
+      # Secrets are unavailable to workflow runs triggered from a fork PR,
+      # and a job-level `if:` can't reference `secrets` directly — so probe
+      # for one via an `env:` var and test it in the shell instead.
+      - name: Check signing secrets
+        id: secrets
+        run: |
+          if [ -n "$P12_BASE64" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          P12_BASE64: ${{ secrets.DEVELOPER_ID_P12_BASE64 }}
+
+      # Signed + notarized path: every push/PR/workflow_dispatch run gets a
+      # real Developer-ID-signed, notarized artifact when the secrets are
+      # available (same-repo pushes and PRs from branches, not forks).
+      # Notarization is free and only takes a few minutes. No MARKETING_VERSION
+      # override — embed-git-version.sh's git-describe fallback stamps it.
+      - name: Build, sign, and notarize
+        if: steps.secrets.outputs.available == 'true'
+        uses: ./.github/actions/build-signed
+        with:
+          p12-base64: ${{ secrets.DEVELOPER_ID_P12_BASE64 }}
+          p12-password: ${{ secrets.DEVELOPER_ID_P12_PASSWORD }}
+          api-key-p8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+          api-key-id: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          api-issuer-id: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          output-zip: Overboard.zip
+
+      # Fork-PR fallback: no repo secrets means no Developer ID identity to
+      # sign with, so this is unsigned by necessity here (not by choice —
+      # same-repo runs take the signed path above). Still a useful smoke
+      # check that the app builds; not meant for distribution.
+      - name: Select newest Xcode 26 (unsigned fallback)
+        if: steps.secrets.outputs.available != 'true'
         run: |
           sudo xcode-select -s "$(ls -d /Applications/Xcode_26*.app | sort -V | tail -n 1)/Contents/Developer"
           xcodebuild -version
 
-      # Unsigned by choice, not by limitation: fork PRs can't read repo
-      # secrets, so this build has no Developer ID identity to sign with
-      # even after the release pipeline gained one. This artifact is a smoke
-      # check that the app builds, not something meant for distribution —
-      # tagged pushes are signed and notarized separately by release.yml.
-      - name: Build (Release, unsigned)
+      - name: Build (Release, unsigned fallback)
+        if: steps.secrets.outputs.available != 'true'
         run: |
           xcodebuild -project Overboard.xcodeproj \
             -scheme Overboard \
@@ -70,7 +107,8 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             build
 
-      - name: Zip app bundle
+      - name: Zip app bundle (unsigned fallback)
+        if: steps.secrets.outputs.available != 'true'
         run: ditto -c -k --keepParent build/Build/Products/Release/Overboard.app Overboard.zip
 
       - uses: actions/upload-artifact@v5

@@ -257,13 +257,29 @@ The Release workflow builds a Developer-ID-signed, notarized zip and attaches
 it to a GitHub Release. `./scripts/release.sh 1.0.0` produces the same zip
 locally into `dist/` (see below for what it needs to sign and notarize).
 
+CI also signs and notarizes on every push, pull request, and
+`workflow_dispatch` run (not just tags) — `ci.yml`'s `build` job and
+`release.yml` both call the same
+[`./.github/actions/build-signed`](.github/actions/build-signed/action.yml)
+composite action, so ordinary CI runs get a real, installable artifact
+whenever the signing secrets are available (same-repo pushes and branches;
+fork PRs fall back to an unsigned smoke-check build, since they can't read
+repo secrets). Notarization is free and only adds a few minutes to the run.
+
 #### Release signing
 
-One-time setup, then CI handles every tagged release on its own. Five repo
+One-time setup, then CI handles every signed run on its own. Five repo
 secrets carry the credentials:
 
 1. **Developer ID Application certificate.** Xcode → Settings → Accounts →
    select your team → Manage Certificates → **+** → Developer ID Application.
+
+   Note the paid Developer Program membership creates a *separate* team —
+   Overboard signs Developer ID builds with team `Y9A97FXT63`, not the free
+   personal team `HDPU3NY6TJ` the project file's `DEVELOPMENT_TEAM` uses for
+   local Apple Development builds and `dogfood.sh` (see the signing note
+   above). Make sure you're creating the certificate under the paid team.
+
    Right-click the new cert in that same sheet → **Export Certificate** (a
    `.p12` containing the cert and its private key; the password you're asked
    for is a new one you choose, not your Mac login). Then:
