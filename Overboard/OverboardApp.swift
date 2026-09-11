@@ -97,6 +97,7 @@ private struct MenuBarLabel: View {
 
     var body: some View {
         Image(systemName: self.symbolName)
+            .contentTransition(.symbolEffect(.replace))
             .symbolEffect(.bounce, value: self.signal.count)
             // Dim the boat while paused so an off clipboard is obvious. Update
             // state still owns the circle-badge variant; pause owns the opacity.

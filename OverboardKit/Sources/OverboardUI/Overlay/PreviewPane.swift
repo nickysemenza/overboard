@@ -132,6 +132,7 @@ struct PreviewPane: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(10)
                     }
+                    .scrollEdgeEffectStyle(.soft, for: .top)
                     .background(.background.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
                 } else if let highlightedCode {
                     CodeTextView(attributed: highlightedCode)
@@ -144,6 +145,7 @@ struct PreviewPane: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(10)
                     }
+                    .scrollEdgeEffectStyle(.soft, for: .top)
                     .background(.background.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
                 }
             case .image:

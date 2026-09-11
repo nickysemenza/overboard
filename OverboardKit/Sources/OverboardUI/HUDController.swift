@@ -18,8 +18,7 @@ public final class HUDController {
                 .font(.callout.weight(.medium))
                 .padding(.horizontal, 16)
                 .padding(.vertical, 9)
-                .background(.regularMaterial, in: Capsule())
-                .overlay(Capsule().strokeBorder(.primary.opacity(0.15), lineWidth: 1))
+                .glassEffect(.regular, in: Capsule())
         )
         let size = content.fittingSize
 

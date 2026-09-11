@@ -27,8 +27,19 @@ extension View {
     }
 
     /// Liquid Glass panel chrome shared by every summonable surface.
-    func glassPanel(cornerRadius: CGFloat) -> some View {
-        self.glassEffect(.regular, in: RoundedRectangle(cornerRadius: cornerRadius))
+    ///
+    /// Pass `id` + `namespace` when this shape sits alongside a sibling glass
+    /// shape inside a `GlassEffectContainer` (e.g. a panel and the ⌘K palette that
+    /// pops out of it) so Liquid Glass morphs between them instead of just
+    /// cross-fading. Leave both nil for a standalone glass shape.
+    @ViewBuilder
+    func glassPanel(cornerRadius: CGFloat, id: String? = nil, in namespace: Namespace.ID? = nil) -> some View {
+        if let id, let namespace {
+            self.glassEffect(.regular, in: RoundedRectangle(cornerRadius: cornerRadius))
+                .glassEffectID(id, in: namespace)
+        } else {
+            self.glassEffect(.regular, in: RoundedRectangle(cornerRadius: cornerRadius))
+        }
     }
 }
 

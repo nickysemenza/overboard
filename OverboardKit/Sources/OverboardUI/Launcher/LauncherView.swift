@@ -7,6 +7,9 @@ public struct LauncherView: View {
     @Bindable var viewModel: LauncherViewModel
     let store: ClipStore
     @FocusState private var fieldFocused: Bool
+    /// Shared between the panel's glass shape and the ⌘K palette's so Liquid
+    /// Glass can morph the palette out of the panel instead of cross-fading.
+    @Namespace private var glassNamespace
 
     public init(viewModel: LauncherViewModel, store: ClipStore) {
         self.viewModel = viewModel
@@ -14,78 +17,76 @@ public struct LauncherView: View {
     }
 
     public var body: some View {
-        VStack(spacing: 8) {
-            self.searchBar
-            if !self.viewModel.results.isEmpty {
-                Divider()
-                VStack(spacing: 2) {
-                    // Per-run section headers from `annotate`; the flat index
-                    // stays the selection key, headers are purely decorative.
-                    ForEach(
-                        Array(LauncherSection.annotate(self.viewModel.results).enumerated()),
-                        id: \.element.result.id
-                    ) { index, row in
-                        if let header = row.header {
-                            LauncherSectionHeader(title: header)
-                        }
-                        LauncherRow(
-                            result: row.result,
-                            store: self.store,
-                            isSelected: index == self.viewModel.selectedIndex,
-                            runningAppPaths: self.viewModel.runningAppPaths
-                        )
-                        .contentShape(RoundedRectangle(cornerRadius: 8))
-                        .onTapGesture {
-                            self.viewModel.selectedIndex = index
-                            self.viewModel.commit()
+        GlassEffectContainer(spacing: 20) {
+            VStack(spacing: 8) {
+                self.searchBar
+                if !self.viewModel.results.isEmpty {
+                    Divider()
+                    VStack(spacing: 2) {
+                        // Per-run section headers from `annotate`; the flat index
+                        // stays the selection key, headers are purely decorative.
+                        ForEach(
+                            Array(LauncherSection.annotate(self.viewModel.results).enumerated()),
+                            id: \.element.result.id
+                        ) { index, row in
+                            if let header = row.header {
+                                LauncherSectionHeader(title: header)
+                            }
+                            LauncherRow(
+                                result: row.result,
+                                store: self.store,
+                                isSelected: index == self.viewModel.selectedIndex,
+                                runningAppPaths: self.viewModel.runningAppPaths
+                            )
+                            .contentShape(RoundedRectangle(cornerRadius: 8))
+                            .onTapGesture {
+                                self.viewModel.selectedIndex = index
+                                self.viewModel.commit()
+                            }
                         }
                     }
+                    // Rows stream in (instant, then debounced) while the panel
+                    // resizes; animating insertions left ghost frames of the rows
+                    // (and their image thumbnails) mid-reflow.
+                    .transaction { $0.disablesAnimations = true }
+                    // Hard-clip so nothing (a loading thumbnail, a row mid-reflow)
+                    // can paint outside the list bounds.
+                    .clipped()
                 }
-                // Rows stream in (instant, then debounced) while the panel
-                // resizes; animating insertions left ghost frames of the rows
-                // (and their image thumbnails) mid-reflow.
-                .transaction { $0.disablesAnimations = true }
-                // Hard-clip so nothing (a loading thumbnail, a row mid-reflow)
-                // can paint outside the list bounds.
-                .clipped()
+                // Persistent action bar — present even with zero rows, so the panel
+                // always advertises the ⌘K palette and the selected row's primary
+                // action. The row hints and source badges that used to live per-row
+                // now live here (plus in the section headers).
+                Divider()
+                LauncherFooterBar(primaryAction: self.viewModel.primaryAction)
             }
-            // Persistent action bar — present even with zero rows, so the panel
-            // always advertises the ⌘K palette and the selected row's primary
-            // action. The row hints and source badges that used to live per-row
-            // now live here (plus in the section headers).
-            Divider()
-            LauncherFooterBar(primaryAction: self.viewModel.primaryAction)
-        }
-        .padding(14)
-        .glassPanel(cornerRadius: 16)
-        .overlay {
-            RoundedRectangle(cornerRadius: 16)
-                .strokeBorder(.primary.opacity(0.12), lineWidth: 1)
-        }
-        .overlay(alignment: .bottom) {
-            if self.viewModel.isPaletteOpen {
-                LauncherActionPalette(viewModel: self.viewModel)
-                    .padding(.bottom, 18)
-                    .transition(.scale(scale: 0.95).combined(with: .opacity))
+            .padding(14)
+            .glassPanel(cornerRadius: 16, id: "panel", in: self.glassNamespace)
+            .overlay(alignment: .bottom) {
+                if self.viewModel.isPaletteOpen {
+                    LauncherActionPalette(viewModel: self.viewModel, glassNamespace: self.glassNamespace)
+                        .padding(.bottom, 18)
+                        .transition(.scale(scale: 0.95).combined(with: .opacity))
+                }
             }
-        }
-        .animation(.spring(response: 0.22, dampingFraction: 0.85), value: self.viewModel.isPaletteOpen)
-        .padding(12)
-        .onAppear {
-            self.fieldFocused = true
-        }
-        .onChange(of: self.viewModel.showGeneration) {
-            self.fieldFocused = true
-        }
-        .onChange(of: self.viewModel.isPaletteOpen) {
-            // Return first responder to the field when the ⌘K palette closes,
-            // otherwise typed characters are dropped until the user clicks in.
-            if !self.viewModel.isPaletteOpen {
+            .animation(.spring(response: 0.22, dampingFraction: 0.85), value: self.viewModel.isPaletteOpen)
+            .padding(12)
+            .onAppear {
                 self.fieldFocused = true
             }
-        }
-        .onChange(of: self.viewModel.query) {
-            self.viewModel.scheduleSearch()
+            .onChange(of: self.viewModel.showGeneration) {
+                self.fieldFocused = true
+            }
+            .onChange(of: self.viewModel.isPaletteOpen) {
+                // Return first responder to the field when the ⌘K palette closes,
+                // otherwise typed characters are dropped until the user clicks in.
+                if !self.viewModel.isPaletteOpen {
+                    self.fieldFocused = true
+                }
+            }
+            .onChange(of: self.viewModel.query) {
+                self.viewModel.scheduleSearch()
+            }
         }
     }
 
