@@ -1,4 +1,7 @@
 import Foundation
+#if DEBUG
+    import Playgrounds
+#endif
 
 /// What this build actually is. Both halves are stamped into the Info.plist at
 /// build time by scripts/embed-git-version.sh (the "Embed git version" phase).
@@ -58,3 +61,16 @@ public enum AppVersion {
         return value
     }
 }
+
+// isDirtyOrAhead itself reads Bundle.main rather than taking a testable input,
+// so the playground below exercises its pure building blocks instead:
+// SemanticVersion parsing/ordering and UpdateCheck's version-ahead decision.
+#if DEBUG
+    #Playground("Semantic version parsing") {
+        print("0.10.0 > 0.9.0 →", SemanticVersion("0.10.0")! > SemanticVersion("0.9.0")!)
+        print("v1.2.3-4-gabc1234 →", SemanticVersion("v1.2.3-4-gabc1234")?.description as Any)
+        print("not-a-version →", SemanticVersion("not-a-version") as Any)
+        print(UpdateCheck.newerRelease(current: "0.3.0", latestTag: "v0.4.0") as Any)
+        print(UpdateCheck.newerRelease(current: "0.4.0", latestTag: "v0.3.0") as Any)
+    }
+#endif

@@ -1,4 +1,7 @@
 import Foundation
+#if DEBUG
+    import Playgrounds
+#endif
 
 /// Deterministic markdown detection for the preview pane. Like SecretDetector,
 /// intentionally conservative: a false positive renders prose through a
@@ -64,3 +67,18 @@ public enum MarkdownDetector {
         return false
     }
 }
+
+#if DEBUG
+    #Playground("Markdown detection") {
+        let samples = [
+            "# Title\n- bullet item", // heading + bullet: two marker kinds → true
+            "- one\n- two\n- three", // bullet only: one marker kind → false
+            "```swift\nlet x = 1\n```", // fence only: one marker kind → false
+            "Just an ordinary\ntwo-line paragraph.", // prose: no markers → false
+            "https://example.com", // single line never qualifies → false
+        ]
+        for sample in samples {
+            print(sample, "→", MarkdownDetector.looksLikeMarkdown(sample))
+        }
+    }
+#endif

@@ -1,6 +1,9 @@
 import CryptoKit
 import Foundation
 import ImageIO
+#if DEBUG
+    import Playgrounds
+#endif
 
 /// Pure functions that turn a `PasteboardSnapshot` into the derived fields a
 /// `ClipItem` needs. No I/O — fully unit-testable.
@@ -202,3 +205,27 @@ public enum CaptureClassifier {
         return (width, height)
     }
 }
+
+#if DEBUG
+    #Playground("Capture classification") {
+        let text = PasteboardSnapshot(
+            reps: [.init(uti: WellKnownUTI.plainText, data: Data("Remember to buy milk".utf8))],
+            sourceBundleID: "com.apple.Notes",
+            sourceAppName: "Notes"
+        )
+        let link = PasteboardSnapshot(
+            reps: [.init(uti: WellKnownUTI.plainText, data: Data("https://example.com/pricing".utf8))],
+            sourceBundleID: "com.apple.Safari",
+            sourceAppName: "Safari"
+        )
+        let fileURLs = try! JSONEncoder().encode(["file:///Users/nicky/Desktop/notes.txt"])
+        let file = PasteboardSnapshot(
+            reps: [.init(uti: WellKnownUTI.fileURLs, data: fileURLs)],
+            sourceBundleID: "com.apple.finder",
+            sourceAppName: "Finder"
+        )
+        for snapshot in [text, link, file] {
+            print(CaptureClassifier.classify(snapshot) as Any)
+        }
+    }
+#endif
