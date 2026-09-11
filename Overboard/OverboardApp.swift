@@ -102,6 +102,8 @@ private struct MenuBarLabel: View {
             // Dim the boat while paused so an off clipboard is obvious. Update
             // state still owns the circle-badge variant; pause owns the opacity.
             .foregroundStyle(self.captureState.isPaused ? .secondary : .primary)
+            .accessibilityLabel("Overboard")
+            .accessibilityValue(self.captureState.isPaused ? "Capture paused" : "Capturing")
     }
 
     private var symbolName: String {

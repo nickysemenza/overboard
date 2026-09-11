@@ -819,8 +819,9 @@ final class AppServices {
     }
 
     /// Writes to the pasteboard with the monitor's marker type so the copy
-    /// doesn't re-enter history, then flashes the HUD.
-    private func copyString(_ text: String, hud: String) {
+    /// doesn't re-enter history, then flashes the HUD. Internal (not private)
+    /// so the App Intents in Intents/ can reuse the same copy path.
+    func copyString(_ text: String, hud: String) {
         let pbItem = NSPasteboardItem()
         pbItem.setString(text, forType: .string)
         pbItem.setData(Data(), forType: ClipboardMonitor.markerType)

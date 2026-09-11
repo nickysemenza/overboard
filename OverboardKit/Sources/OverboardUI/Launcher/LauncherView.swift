@@ -211,6 +211,9 @@ struct LauncherRow: View {
         .task(id: self.result.id) {
             await self.loadThumbnailIfNeeded()
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(self.title), \(self.subtitle)")
+        .accessibilityAddTraits(self.isSelected ? .isSelected : [])
     }
 
     @ViewBuilder private var icon: some View {

@@ -125,6 +125,8 @@ struct EmojiCell: View {
             )
             .contentShape(RoundedRectangle(cornerRadius: 8))
             .help(self.emoji.name)
+            .accessibilityLabel(self.emoji.name)
+            .accessibilityAddTraits(self.isSelected ? .isSelected : [])
     }
 }
 

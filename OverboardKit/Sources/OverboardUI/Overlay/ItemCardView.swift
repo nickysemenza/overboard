@@ -96,14 +96,34 @@ struct ItemCardView: View {
         .onDrag {
             Self.dragProvider(for: self.item, store: self.store)
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(self.accessibilityCardLabel)
+        .accessibilityAddTraits(self.isSelected ? .isSelected : [])
+    }
+
+    /// VoiceOver summary for the whole card: source app plus a short preview,
+    /// so the card reads as one item instead of its individual subviews.
+    private var accessibilityCardLabel: String {
+        let app = self.item.sourceAppName ?? self.kindLabel
+        if self.item.isSecret {
+            return "\(app), secret item"
+        }
+        let preview = self.item.previewText?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let preview, !preview.isEmpty {
+            return "\(app), \(preview)"
+        }
+        return app
     }
 
     /// Quick actions that fade in on hover so mouse users skip the context menu.
     private var hoverActions: some View {
         HStack(spacing: 4) {
-            self.hoverButton("eye") { self.onPreview() }
-            self.hoverButton(self.item.isPinned ? "pin.slash" : "pin") { self.onPinToggle() }
-            self.hoverButton("trash") { self.onDelete() }
+            self.hoverButton("eye", label: "Preview") { self.onPreview() }
+            self.hoverButton(
+                self.item.isPinned ? "pin.slash" : "pin",
+                label: self.item.isPinned ? "Unpin" : "Pin"
+            ) { self.onPinToggle() }
+            self.hoverButton("trash", label: "Delete") { self.onDelete() }
         }
         .padding(5)
         .background(.regularMaterial, in: Capsule())
@@ -112,13 +132,14 @@ struct ItemCardView: View {
         .transition(.opacity)
     }
 
-    private func hoverButton(_ systemImage: String, action: @escaping () -> Void) -> some View {
+    private func hoverButton(_ systemImage: String, label: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: systemImage)
                 .font(.caption)
                 .frame(width: 18, height: 18)
         }
         .buttonStyle(.borderless)
+        .accessibilityLabel(label)
     }
 
     private var header: some View {

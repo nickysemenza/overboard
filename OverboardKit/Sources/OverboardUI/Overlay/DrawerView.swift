@@ -89,6 +89,7 @@ public struct DrawerView: View {
                 .buttonStyle(.borderless)
                 .foregroundStyle(.secondary)
                 .help("Save this search")
+                .accessibilityLabel("Save search")
             }
 
             if self.viewModel.stack.count > 0 {

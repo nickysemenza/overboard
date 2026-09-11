@@ -37,6 +37,7 @@ struct AppListEditor: View {
                     Image(systemName: "plus")
                 }
                 .help("Add an application")
+                .accessibilityLabel("Add an application")
                 Spacer()
             }
             .buttonStyle(.borderless)
@@ -72,6 +73,7 @@ struct AppListEditor: View {
             }
             .buttonStyle(.borderless)
             .help("Remove")
+            .accessibilityLabel("Remove")
         }
         .padding(.vertical, 5)
     }

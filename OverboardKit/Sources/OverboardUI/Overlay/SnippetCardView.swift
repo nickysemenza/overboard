@@ -26,6 +26,17 @@ struct SnippetCardView: View {
                     lineWidth: self.isSelected ? 2.5 : 1
                 )
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(self.accessibilityCardLabel)
+        .accessibilityAddTraits(self.isSelected ? .isSelected : [])
+    }
+
+    /// VoiceOver summary for the whole card: title plus a short body preview,
+    /// so the card reads as one item instead of its individual subviews.
+    private var accessibilityCardLabel: String {
+        let preview = self.snippet.body.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !preview.isEmpty else { return self.snippet.title }
+        return "\(self.snippet.title), \(preview)"
     }
 
     private var header: some View {

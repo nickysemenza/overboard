@@ -95,12 +95,14 @@ public struct SnippetsManagerView: View {
                     Image(systemName: "plus")
                 }
                 .help("Add Snippet")
+                .accessibilityLabel("Add Snippet")
                 Button {
                     self.viewModel.deleteSelected()
                 } label: {
                     Image(systemName: "minus")
                 }
                 .help("Remove Snippet")
+                .accessibilityLabel("Remove Snippet")
                 .disabled(self.viewModel.selectedID == nil)
             }
         }

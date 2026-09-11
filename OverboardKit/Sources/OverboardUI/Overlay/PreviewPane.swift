@@ -75,6 +75,7 @@ struct PreviewPane: View {
                     .buttonStyle(.plain)
                     .foregroundStyle(.secondary)
                     .help(self.showRawMarkdown ? "Show rendered markdown" : "Show raw markdown")
+                    .accessibilityLabel(self.showRawMarkdown ? "Show rendered markdown" : "Show raw markdown")
                 }
                 if self.viewModel.previewState == .editing {
                     Text("Editing")
