@@ -96,6 +96,8 @@ let package = Package(
                 "OverboardCore",
                 .product(name: "SnapshotTesting", package: "swift-snapshot-testing"),
             ],
+            // Recorded PNGs are read by path by SnapshotTesting, not bundled.
+            exclude: ["__Snapshots__"],
             swiftSettings: approachableConcurrency
         ),
     ]
