@@ -21,6 +21,9 @@ let canvas: CGFloat = 1024
 let inset: CGFloat = 100
 let rect = NSRect(x: inset, y: inset, width: canvas - inset * 2, height: canvas - inset * 2)
 
+/// The water fills the whole canvas below each crest: the platform mask clips
+/// it to the squircle, so stopping at the content rect would leave a visible
+/// rectangle floating inside the icon.
 func renderWaves() -> NSImage {
     NSImage(size: NSSize(width: canvas, height: canvas), flipped: false) { _ in
         let waveColor = NSColor.white.withAlphaComponent(0.12)
@@ -28,19 +31,19 @@ func renderWaves() -> NSImage {
             let wave = NSBezierPath()
             let y = rect.minY + rect.height * yFactor
             let amplitude = 14.0 - Double(i) * 3
-            wave.move(to: NSPoint(x: rect.minX, y: y))
-            let segments = 4
-            let width = rect.width / CGFloat(segments)
+            wave.move(to: NSPoint(x: 0, y: y))
+            let segments = 5
+            let width = canvas / CGFloat(segments)
             for segment in 0 ..< segments {
-                let startX = rect.minX + CGFloat(segment) * width
+                let startX = CGFloat(segment) * width
                 wave.curve(
                     to: NSPoint(x: startX + width, y: y),
                     controlPoint1: NSPoint(x: startX + width * 0.33, y: y + amplitude),
                     controlPoint2: NSPoint(x: startX + width * 0.66, y: y - amplitude)
                 )
             }
-            wave.line(to: NSPoint(x: rect.maxX, y: rect.minY))
-            wave.line(to: NSPoint(x: rect.minX, y: rect.minY))
+            wave.line(to: NSPoint(x: canvas, y: 0))
+            wave.line(to: NSPoint(x: 0, y: 0))
             wave.close()
             waveColor.setFill()
             wave.fill()
