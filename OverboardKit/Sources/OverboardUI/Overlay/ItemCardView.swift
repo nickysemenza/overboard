@@ -498,7 +498,6 @@ struct ItemCardView: View {
                 forTypeIdentifier: typeID,
                 visibility: .all
             ) { completion in
-                nonisolated(unsafe) let completion = completion
                 Task {
                     do {
                         let reps = try await store.representations(for: item.id)
@@ -542,7 +541,6 @@ struct ItemCardView: View {
 
 /// Resolves and caches app icons by bundle ID. Icons are looked up lazily —
 /// we never persist them.
-@MainActor
 final class AppIconCache {
     static let shared = AppIconCache()
     private var cache: [String: NSImage?] = [:]

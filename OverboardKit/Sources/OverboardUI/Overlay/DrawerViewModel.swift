@@ -15,7 +15,6 @@ public enum PreviewState: Sendable {
     case editing
 }
 
-@MainActor
 @Observable
 public final class DrawerViewModel {
     public private(set) var items: [ClipItem] = []

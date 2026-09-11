@@ -1,3 +1,8 @@
---swiftversion 6.0
+--swiftversion 6.2
 --self insert
+# Swift 6.1+ allows trailing commas in argument lists; keep the repo on the
+# collections-only style rather than reformat 100+ files.
+--trailingcommas collections-only
+# Would rewrite every camelCase @Test name as a backticked sentence.
+--disable swiftTestingTestCaseNames
 --exclude .build,**/.build,DerivedData,build,.build-xcode

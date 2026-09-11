@@ -21,7 +21,7 @@ person's workflow and taste.
 Grab the zip from
 [Releases](https://github.com/nickysemenza/overboard/releases) — it's
 unsigned (no paid Developer Program behind this project), so the first launch
-needs **right-click → Open**. Or build from source (macOS 14+, Xcode 16+):
+needs **right-click → Open**. Or build from source (macOS 26+, Xcode 26+):
 
 ```sh
 git clone https://github.com/nickysemenza/overboard && cd overboard

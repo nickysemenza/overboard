@@ -5,9 +5,8 @@ import OverboardCore
 /// runloop-coupled, so the whole type is main-actor; each new search (or
 /// task cancellation) stops the previous query and resumes it with [].
 /// Live updates are never enabled — one query per (debounced) keystroke.
-@MainActor
 public final class SpotlightFileSearch {
-    public struct Hit: Sendable, Equatable {
+    public nonisolated struct Hit: Sendable, Equatable {
         public let name: String
         public let url: URL
 

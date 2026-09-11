@@ -26,14 +26,9 @@ extension View {
         modifier(CardEntrance(index: index))
     }
 
-    /// Liquid Glass on macOS 26, frosted material everywhere else.
-    @ViewBuilder
+    /// Liquid Glass panel chrome shared by every summonable surface.
     func glassPanel(cornerRadius: CGFloat) -> some View {
-        if #available(macOS 26.0, *) {
-            self.glassEffect(.regular, in: RoundedRectangle(cornerRadius: cornerRadius))
-        } else {
-            self.background(.regularMaterial, in: RoundedRectangle(cornerRadius: cornerRadius))
-        }
+        self.glassEffect(.regular, in: RoundedRectangle(cornerRadius: cornerRadius))
     }
 }
 

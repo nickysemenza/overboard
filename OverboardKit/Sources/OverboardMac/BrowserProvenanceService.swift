@@ -4,7 +4,7 @@ import os
 import OverboardCore
 
 /// The page a browser copy came from: the front tab's URL and (optional) title.
-public struct SourceProvenance: Sendable, Equatable {
+public nonisolated struct SourceProvenance: Sendable, Equatable {
     public let url: String
     public let title: String?
 
@@ -17,7 +17,9 @@ public struct SourceProvenance: Sendable, Equatable {
 /// Reads a browser's front-tab URL/title via AppleScript so a copy can carry a
 /// link back to where it came from. Mirrors `SpotifyNowPlayingMonitor`'s house
 /// pattern: NSAppleScript on a private serial queue, silent nil on any error.
-public enum BrowserProvenanceService {
+/// nonisolated: the module defaults to the main actor, but every entry point
+/// here hops to its own queue and touches only lock-guarded statics.
+public nonisolated enum BrowserProvenanceService {
     // Concurrent: a synchronous Apple Event can wedge indefinitely (a hung
     // target app or stuck TCC) and task cancellation can't interrupt it. On a
     // serial queue that stuck job would block every later provenance fetch for

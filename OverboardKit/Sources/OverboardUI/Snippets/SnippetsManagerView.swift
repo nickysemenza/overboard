@@ -2,7 +2,6 @@ import Observation
 import OverboardCore
 import SwiftUI
 
-@MainActor
 @Observable
 final class SnippetsManagerViewModel {
     var snippets: [Snippet] = []

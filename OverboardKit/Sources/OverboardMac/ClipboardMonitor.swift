@@ -5,7 +5,6 @@ import OverboardCore
 
 /// Polls NSPasteboard.changeCount and emits plain-struct snapshots.
 /// All privacy gating happens here, before any pasteboard data is read.
-@MainActor
 public final class ClipboardMonitor {
     /// Written alongside paste-back payloads so the monitor never re-captures
     /// its own writes.

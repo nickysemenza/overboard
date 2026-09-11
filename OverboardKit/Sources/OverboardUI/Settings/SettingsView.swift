@@ -459,7 +459,7 @@ private struct AISettingsTab: View {
             } footer: {
                 Text(ClipEnricher.isAvailable
                     ? "Clips get short titles, category badges, and one-line summaries, and the card menu gains AI transforms (summarize, fix grammar, …). Everything runs on-device — nothing leaves this Mac."
-                    : "Requires Apple Silicon, macOS 26, and Apple Intelligence enabled. Image OCR works regardless.")
+                    : "Requires Apple Silicon with Apple Intelligence enabled. Image OCR works regardless.")
             }
 
             Section {

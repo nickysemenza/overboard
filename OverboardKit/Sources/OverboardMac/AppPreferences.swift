@@ -4,7 +4,7 @@
 import Foundation
 import OverboardCore
 
-public extension Defaults.Keys {
+public nonisolated extension Defaults.Keys {
     // Raw key strings predate the Defaults migration — keep them byte-identical
     // so existing users' stored values survive.
     static let historyLimit = Key<Int>("historyLimit", default: 1000)
@@ -51,7 +51,7 @@ public extension Defaults.Keys {
 }
 
 /// Parsed views over the newline-list preference keys.
-public enum Preferences {
+public nonisolated enum Preferences {
     public static func currentExclusions() -> Set<String> {
         self.bundleIDSet(Defaults[.excludedBundleIDs])
     }

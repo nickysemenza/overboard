@@ -5,9 +5,8 @@ import OverboardCore
 /// canonical app folders is a few milliseconds for a few hundred bundles —
 /// fast enough to make app rows instant, unlike NSMetadataQuery, and it
 /// enables matching Spotlight can't do (initials, user aliases).
-@MainActor
 public final class AppIndex {
-    public struct Entry: Sendable, Equatable {
+    public nonisolated struct Entry: Sendable, Equatable {
         public let name: String
         public let url: URL
     }

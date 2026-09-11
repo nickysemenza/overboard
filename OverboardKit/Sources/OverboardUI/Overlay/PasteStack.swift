@@ -4,7 +4,6 @@ import OverboardCore
 /// A FIFO queue of items to paste sequentially. Queue from the drawer with
 /// ⌘↩, then pop with the paste-next global hotkey (default ⌥⌘V).
 /// Session-scoped by design — not persisted.
-@MainActor
 @Observable
 public final class PasteStack {
     public private(set) var items: [ClipItem] = []

@@ -5,7 +5,6 @@ import SwiftUI
 /// Owns the launcher panel lifecycle: summon, position, key handling,
 /// dismiss. Same shape as OverlayController, but centered Spotlight-style
 /// and with a vertical-list keyboard model.
-@MainActor
 public final class LauncherPanelController {
     private let viewModel: LauncherViewModel
     private let store: ClipStore

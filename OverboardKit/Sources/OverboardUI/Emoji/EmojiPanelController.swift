@@ -6,7 +6,6 @@ import SwiftUI
 /// dismiss. Same shape as LauncherPanelController but simpler — the panel is a
 /// fixed-size scrolling grid, so there's no grow-with-rows bookkeeping, no
 /// resume window, and no action palette.
-@MainActor
 public final class EmojiPanelController {
     private let viewModel: EmojiPickerViewModel
     private var panel: OverlayPanel?

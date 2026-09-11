@@ -6,9 +6,8 @@ import OverboardCore
 /// `/System/Library/PreferencePanes` bundles are partly gutted, so we scan the
 /// extensions instead and match on `EXExtensionPointIdentifier`. A scan is a
 /// few milliseconds, cached like AppIndex so pane rows render instantly.
-@MainActor
 public final class SettingsPaneIndex {
-    public struct Entry: Sendable, Equatable {
+    public nonisolated struct Entry: Sendable, Equatable {
         public let name: String
         /// The `x-apple.systempreferences:<bundle-id>` link that opens the pane.
         public let url: URL

@@ -8,7 +8,6 @@ import OverboardMac
 /// exposes it so the menu bar can offer a one-click download. Install stays
 /// manual (unsigned zips, no Sparkle) — this only closes the "I never knew a
 /// release shipped" gap.
-@MainActor
 @Observable
 final class UpdateChecker {
     /// The newer release tag when one is available, else nil.

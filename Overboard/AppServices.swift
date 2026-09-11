@@ -5,7 +5,6 @@ import OverboardMac
 import OverboardUI
 
 /// Observable capture counter so the menu bar boat can bounce on each capture.
-@MainActor
 @Observable
 final class CaptureSignal {
     private(set) var count = 0
@@ -23,7 +22,6 @@ final class CaptureSignal {
 /// `CommandProvider.isIncluded` — a `@Sendable` closure that runs off the main
 /// actor inside a task group — can read it without hopping actors. `setPaused`
 /// is the single writer that keeps the two in sync.
-@MainActor
 @Observable
 final class CaptureState {
     private(set) var isPaused = false
@@ -37,7 +35,6 @@ final class CaptureState {
 }
 
 /// Composition root: owns the store, monitor, overlay, hotkey, and paste-back.
-@MainActor
 final class AppServices {
     static let shared = AppServices()
 
@@ -340,7 +337,6 @@ final class AppServices {
         self.overlay.onCommitAITransform = { [weak self] item, transform, target in
             guard let self else { return }
             Task {
-                guard #available(macOS 26.0, *) else { return }
                 guard let text = try? await self.store.plainText(for: item.id) else { return }
                 HUDController.shared.flash("✨ \(transform.label)…", duration: .seconds(15))
                 do {
@@ -455,7 +451,6 @@ final class AppServices {
                 return
             }
             Task {
-                guard #available(macOS 26.0, *) else { return }
                 HUDController.shared.flash("✨ Thinking…", duration: .seconds(15))
                 do {
                     let result = try await AITransformer.apply(prompt: prompt, to: text)
@@ -649,9 +644,12 @@ final class AppServices {
     }
 
     /// Post-ingest enrichment: OCR for images (always), then LLM title +
-    /// category (macOS 26 + Apple Intelligence + setting enabled). Runs off
-    /// the ingest loop; every step is best-effort.
-    /// nonisolated: OCR is sync CPU work and must not land on the main actor.
+    /// category (Apple Intelligence + setting enabled). Runs off the ingest
+    /// loop; every step is best-effort.
+    /// @concurrent: OCR is sync CPU work and must not land on the main actor.
+    /// Plain `nonisolated async` would inherit the caller's actor under
+    /// NonisolatedNonsendingByDefault, so the hop off main is made explicit.
+    @concurrent
     private nonisolated static func enrich(item: ClipItem, snapshot: PasteboardSnapshot, store: ClipStore) async {
         // Only fresh, non-secret items; bumped duplicates are already enriched.
         guard item.useCount == 1, !item.isSecret else { return }
@@ -680,25 +678,24 @@ final class AppServices {
               text.count >= 80
         else { return }
 
-        if #available(macOS 26.0, *) {
-            guard let enrichment = try? await ClipEnricher.enrich(text: text) else { return }
-            // Short clips show fully on the card; a summary only earns its
-            // space once the preview truncates.
-            let summary = text.count >= ClipEnricher.summaryWorthwhileLength
-                ? enrichment.summary : nil
-            try? await store.attachEnrichment(
-                itemID: item.id,
-                title: enrichment.title,
-                category: enrichment.category,
-                summary: summary
-            )
-        }
+        guard let enrichment = try? await ClipEnricher.enrich(text: text) else { return }
+        // Short clips show fully on the card; a summary only earns its
+        // space once the preview truncates.
+        let summary = text.count >= ClipEnricher.summaryWorthwhileLength
+            ? enrichment.summary : nil
+        try? await store.attachEnrichment(
+            itemID: item.id,
+            title: enrichment.title,
+            category: enrichment.category,
+            summary: summary
+        )
     }
 
     /// Fetches rich-link metadata for one `.link` item and attaches it (or the
     /// empty-title sentinel on failure, so it's marked attempted and won't be
     /// retried by backfill). Guards on fetchability; nil-URL / unfetchable links
     /// still get the sentinel. Shared by post-ingest enrichment and backfill.
+    @concurrent
     private nonisolated static func fetchLinkMetadata(for item: ClipItem, store: ClipStore) async {
         guard let preview = item.previewText,
               let url = URL(string: preview.trimmingCharacters(in: .whitespacesAndNewlines)),

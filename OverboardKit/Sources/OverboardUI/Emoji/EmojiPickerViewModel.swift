@@ -28,7 +28,6 @@ public struct EmojiSection: Identifiable, Sendable {
 /// over the grid, and commit routing. Same shape as LauncherViewModel but far
 /// smaller — search is a synchronous in-memory filter, so there are no
 /// providers, debounce, or streaming.
-@MainActor
 @Observable
 public final class EmojiPickerViewModel {
     public var query = "" {

@@ -111,7 +111,7 @@ public struct LinkMetadataFetcher: Sendable {
                ) == 0
             {
                 // getnameinfo can append a scope id to link-local addrs (fe80::1%en0).
-                let numeric = String(cString: buffer)
+                let numeric = buffer.withUnsafeBufferPointer { String(cString: $0.baseAddress!) }
                 let bare = numeric.split(separator: "%").first.map(String.init) ?? numeric
                 if self.isPrivateHost(bare) { return true }
             }

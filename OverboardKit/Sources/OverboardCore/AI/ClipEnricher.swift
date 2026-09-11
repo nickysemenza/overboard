@@ -23,7 +23,6 @@ public enum ClipEnricher {
         AITransformer.isAvailable
     }
 
-    @available(macOS 26.0, *)
     public static func enrich(text: String) async throws -> Enrichment {
         let session = LanguageModelSession(instructions: """
         You label clipboard snippets. Generate a short descriptive title \
@@ -45,7 +44,6 @@ public enum ClipEnricher {
 }
 
 #if canImport(FoundationModels)
-    @available(macOS 26.0, *)
     @Generable
     private struct GeneratedLabel {
         @Guide(description: "A short descriptive title, 2-5 words")
