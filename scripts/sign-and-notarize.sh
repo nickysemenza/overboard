@@ -28,7 +28,10 @@ echo "Verifying code signature on $APP..."
 codesign --verify --deep --strict --verbose=2 "$APP"
 
 echo "Confirming the app is signed with a Developer ID Application identity..."
-if ! codesign -dvv "$APP" 2>&1 | grep -q "Developer ID Application"; then
+# Captured first: under pipefail, `grep -q` closing the pipe early makes
+# codesign exit on SIGPIPE and the whole pipeline read as a failure.
+SIGNATURE_INFO=$(codesign -dvv "$APP" 2>&1)
+if ! grep -q "Developer ID Application" <<< "$SIGNATURE_INFO"; then
     echo "error: $APP is not signed with a Developer ID Application identity." >&2
     echo "This script only notarizes an already-signed app — xcodebuild is expected" >&2
     echo "to have signed it (CODE_SIGN_IDENTITY=\"Developer ID Application\")." >&2
