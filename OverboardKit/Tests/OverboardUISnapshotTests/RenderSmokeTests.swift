@@ -53,6 +53,25 @@ struct RenderSmokeTests {
         #expect(self.rendersNonEmpty(self.card(item, dark: true)))
     }
 
+    @Test func launcherScopesRenderInBothAppearances() async {
+        let model = LauncherViewModel(instantProviders: [StubLauncherProvider(rows: [
+            .file(name: "2026 budget.xlsx", url: URL(fileURLWithPath: "/fixture/iCloud Drive/Wedding/2026 budget.xlsx"), info: FileSearchInfo(availability: .cloud)),
+            .clip(Fixtures.item(preview: "Wedding budget notes")),
+        ])], secondaryProviders: [])
+        model.query = "wedding budget"
+        for scope in LauncherScope.allCases {
+            model.scope = scope
+            model.scheduleSearch()
+            for _ in 0 ..< 100 where model.isSearching {
+                try? await Task.sleep(for: .milliseconds(5))
+            }
+            for dark in [false, true] {
+                let view = LauncherView(viewModel: model, store: self.store)
+                #expect(self.rendersNonEmpty(snapshotHost(view, width: model.showsPreview ? 1020 : 740, height: 650, dark: dark)))
+            }
+        }
+    }
+
     @Test func snippetCardRenders() {
         let snippet = Snippet(
             id: "smoke",

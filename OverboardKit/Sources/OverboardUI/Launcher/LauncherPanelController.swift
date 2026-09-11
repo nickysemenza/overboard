@@ -202,9 +202,10 @@ public final class LauncherPanelController {
         self.viewModel.moveSelection(delta)
     }
 
-    public func show() {
+    public func show(scope: LauncherScope? = nil, query: String? = nil, target: NSRunningApplication? = nil) {
         guard !self.isVisible else { return }
-        self.targetApp = NSWorkspace.shared.frontmostApplication
+        self.targetApp = target ?? NSWorkspace.shared.frontmostApplication
+        self.viewModel.targetAppName = self.targetApp?.localizedName ?? "previous app"
         // Reconcile the now-playing snapshot before rows render; if a track
         // change was missed, its onChange fires and refreshes the open panel.
         self.onWillShow()
@@ -228,6 +229,10 @@ public final class LauncherPanelController {
             display: false
         )
         self.viewModel.prepareForShow(clearQuery: stale)
+        if let scope { self.viewModel.setScope(scope) }
+        if let query { self.viewModel.query = query; self.viewModel.scheduleSearch() }
+        self.viewModel.startObserving()
+        panel.setFrame(self.frame(forRows: self.viewModel.results.count, headers: 0, on: self.screenWithMouse()), display: false)
         panel.makeKeyAndOrderFront(nil)
         // Preserved text refocuses select-all by default; drop the caret at the
         // end so the next keystroke appends instead of replacing. The field
@@ -252,6 +257,7 @@ public final class LauncherPanelController {
         // Every commit also funnels through here, so this captures Enter,
         // Escape, and click-outside alike.
         self.viewModel.closePalette()
+        self.viewModel.stopObserving()
         self.viewModel.recordCurrentQuery()
         self.onWillHide()
         self.removeMonitors()
@@ -274,27 +280,16 @@ public final class LauncherPanelController {
         return panel
     }
 
-    private func frame(forRows rows: Int, headers: Int, on screen: NSScreen) -> NSRect {
+    private func frame(forRows rows: Int, headers _: Int, on screen: NSScreen) -> NSRect {
         let visible = screen.visibleFrame
-        // The footer bar is always present, so its height is unconditional; the
-        // result-list block (divider + rows + headers) is only added when there
-        // are rows.
-        var height = Metrics.barOnlyHeight + Metrics.footerHeight
-        if rows > 0 {
-            height += Metrics.dividerHeight + CGFloat(rows) * Metrics.rowHeight
-                + CGFloat(headers) * Metrics.headerHeight
-        }
-        // While the palette is open, floor the height so the overlay has room.
-        if self.viewModel.isPaletteOpen {
-            height = max(height, Metrics.paletteMinHeight)
-        }
-        let top = visible.minY + visible.height * Metrics.topFraction
-        return NSRect(
-            x: visible.midX - Metrics.panelWidth / 2,
-            y: top - height,
-            width: Metrics.panelWidth,
-            height: height
-        )
+        let width = min(self.viewModel.showsPreview ? 1020.0 : 740.0, visible.width - 40)
+        var height = self.viewModel.showsPreview ? 650.0 : 180 + Double(max(3, min(rows, 8))) * 54
+        if self.viewModel.scope == .clipboard { height += 36 }
+        if self.viewModel.scope == .all, self.viewModel.query.isEmpty { height += Double(self.viewModel.headerCount) * 22 }
+        if self.viewModel.isPaletteOpen { height = max(height, 420) }
+        height = min(height, visible.height - 60)
+        let top = min(visible.maxY - 30, visible.midY + height / 2 + 60)
+        return NSRect(x: visible.midX - width / 2, y: max(visible.minY + 20, top - height), width: width, height: height)
     }
 
     /// Grows downward as rows arrive; the bar's top edge stays put.
@@ -352,8 +347,16 @@ public final class LauncherPanelController {
                 }
             }
 
+            if event.modifierFlags.contains(.command), let index = [UInt16(18), 19, 20, 21].firstIndex(of: event.keyCode) {
+                self.viewModel.setScope(LauncherScope.allCases[index])
+                return nil
+            }
             switch event.keyCode {
+            case 16 where event.modifierFlags.contains(.command): // ⌘Y previews without consuming query spaces
+                self.viewModel.togglePreview()
+                return nil
             case 53: // esc
+                if self.viewModel.isPreviewVisible { self.viewModel.togglePreview(); return nil }
                 self.hide()
                 return nil
             case 126: // up

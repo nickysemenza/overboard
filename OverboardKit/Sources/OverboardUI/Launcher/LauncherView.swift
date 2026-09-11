@@ -1,15 +1,21 @@
 import AppKit
 import OverboardCore
+import OverboardMac
 import SwiftUI
 import UniformTypeIdentifiers
 
+/// THESIS: Make the selected result recognizable and its action predictable.
+/// OWN-WORLD: macOS system type, native icons, restrained glass, one accent selection.
+/// STORY: Type, recognize the result, inspect when useful, press Return.
+/// FIRST VIEWPORT: Search and scopes above a bounded list; adjacent preview on
+/// demand; primary action in a reserved footer that never overlaps results.
+/// FORM: User-approved compact launcher plus list/detail clipboard browser;
+/// an extension of the existing native design, not a new visual-world selection.
+/// FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
 public struct LauncherView: View {
     @Bindable var viewModel: LauncherViewModel
     let store: ClipStore
     @FocusState private var fieldFocused: Bool
-    /// Shared between the panel's glass shape and the ⌘K palette's so Liquid
-    /// Glass can morph the palette out of the panel instead of cross-fading.
-    @Namespace private var glassNamespace
 
     public init(viewModel: LauncherViewModel, store: ClipStore) {
         self.viewModel = viewModel
@@ -17,90 +23,162 @@ public struct LauncherView: View {
     }
 
     public var body: some View {
-        GlassEffectContainer(spacing: 20) {
-            VStack(spacing: 8) {
+        Group {
+            VStack(spacing: 0) {
                 self.searchBar
-                if !self.viewModel.results.isEmpty {
-                    Divider()
-                    VStack(spacing: 2) {
-                        // Per-run section headers from `annotate`; the flat index
-                        // stays the selection key, headers are purely decorative.
-                        ForEach(
-                            Array(LauncherSection.annotate(self.viewModel.results).enumerated()),
-                            id: \.element.result.id
-                        ) { index, row in
-                            if let header = row.header {
-                                LauncherSectionHeader(title: header)
-                            }
-                            LauncherRow(
-                                result: row.result,
-                                store: self.store,
-                                isSelected: index == self.viewModel.selectedIndex,
-                                runningAppPaths: self.viewModel.runningAppPaths
-                            )
-                            .contentShape(RoundedRectangle(cornerRadius: 8))
-                            .onTapGesture {
-                                self.viewModel.selectedIndex = index
-                                self.viewModel.commit()
-                            }
-                        }
-                    }
-                    // Rows stream in (instant, then debounced) while the panel
-                    // resizes; animating insertions left ghost frames of the rows
-                    // (and their image thumbnails) mid-reflow.
-                    .transaction { $0.disablesAnimations = true }
-                    // Hard-clip so nothing (a loading thumbnail, a row mid-reflow)
-                    // can paint outside the list bounds.
-                    .clipped()
-                }
-                // Persistent action bar — present even with zero rows, so the panel
-                // always advertises the ⌘K palette and the selected row's primary
-                // action. The row hints and source badges that used to live per-row
-                // now live here (plus in the section headers).
+                self.scopeBar
+                if self.viewModel.scope == .clipboard { self.clipboardFilters }
                 Divider()
-                LauncherFooterBar(primaryAction: self.viewModel.primaryAction)
+                HStack(spacing: 0) {
+                    self.resultList
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    if self.viewModel.showsPreview {
+                        Divider()
+                        LauncherPreview(result: self.viewModel.selectedResult, store: self.store, query: self.viewModel.query,
+                                        onOpen: { self.viewModel.commit() })
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                }
+                if let message = self.viewModel.statusMessage {
+                    Label(message, systemImage: "exclamationmark.circle")
+                        .font(.caption).foregroundStyle(.secondary).padding(10)
+                }
+                Divider()
+                LauncherFooterBar(primaryAction: self.viewModel.primaryAction, label: self.viewModel.primaryActionLabel,
+                                  onCommit: { self.viewModel.commit() }, onActions: { self.viewModel.togglePalette() })
+                    .padding(.horizontal, 12).padding(.vertical, 9)
             }
-            .padding(14)
-            .glassPanel(cornerRadius: 16, id: "panel", in: self.glassNamespace)
+            .glassPanel(cornerRadius: 18)
             .overlay(alignment: .bottom) {
                 if self.viewModel.isPaletteOpen {
-                    LauncherActionPalette(viewModel: self.viewModel, glassNamespace: self.glassNamespace)
-                        .padding(.bottom, 18)
-                        .transition(.scale(scale: 0.95).combined(with: .opacity))
+                    LauncherActionPalette(viewModel: self.viewModel)
+                        .padding(.bottom, 46)
                 }
             }
-            .animation(.spring(response: 0.22, dampingFraction: 0.85), value: self.viewModel.isPaletteOpen)
             .padding(12)
-            .onAppear {
-                self.fieldFocused = true
-            }
-            .onChange(of: self.viewModel.showGeneration) {
-                self.fieldFocused = true
-            }
+            .onAppear { self.fieldFocused = true }
+            .onChange(of: self.viewModel.showGeneration) { self.fieldFocused = true }
+            .onChange(of: self.viewModel.scope) { self.fieldFocused = true }
             .onChange(of: self.viewModel.isPaletteOpen) {
-                // Return first responder to the field when the ⌘K palette closes,
-                // otherwise typed characters are dropped until the user clicks in.
-                if !self.viewModel.isPaletteOpen {
-                    self.fieldFocused = true
-                }
+                if !self.viewModel.isPaletteOpen { self.fieldFocused = true }
             }
-            .onChange(of: self.viewModel.query) {
-                self.viewModel.scheduleSearch()
-            }
+            .onChange(of: self.viewModel.query) { self.viewModel.scheduleSearch() }
+            .onChange(of: self.viewModel.clipboardFilter) { self.viewModel.scheduleSearch() }
         }
     }
 
     private var searchBar: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "bolt.fill")
-                .foregroundStyle(.secondary)
-            TextField("Calculate, search clips, files, the web…", text: self.$viewModel.query)
-                .textFieldStyle(.plain)
-                .font(.title3)
-                .focused(self.$fieldFocused)
+        HStack(spacing: 12) {
+            Image(systemName: "magnifyingglass").font(.title3).foregroundStyle(.secondary)
+            TextField(self.viewModel.scope == .clipboard ? "Find something you copied…" : "Search apps, files, clipboard, or the web…", text: self.$viewModel.query)
+                .textFieldStyle(.plain).font(.system(size: 20)).focused(self.$fieldFocused)
+                .accessibilityLabel("Search \(self.viewModel.scope.rawValue)")
+            if self.viewModel.isSearching { ProgressView().controlSize(.small) }
         }
-        .padding(.horizontal, 6)
-        .frame(height: 30)
+        .padding(.horizontal, 20).frame(height: 62)
+    }
+
+    private var scopeBar: some View {
+        HStack(spacing: 4) {
+            ForEach(Array(LauncherScope.allCases.enumerated()), id: \.element) { index, scope in
+                Button { self.viewModel.setScope(scope) } label: {
+                    HStack(spacing: 6) {
+                        Text(scope.rawValue).font(.system(size: 12, weight: .medium))
+                        Text("⌘\(index + 1)").font(.system(size: 10)).foregroundStyle(.secondary)
+                    }
+                    .padding(.horizontal, 11).padding(.vertical, 6)
+                    .background(self.viewModel.scope == scope ? Color.primary.opacity(0.10) : .clear, in: RoundedRectangle(cornerRadius: 7))
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(self.viewModel.scope == scope ? .isSelected : [])
+            }
+            Spacer(minLength: 0)
+            if self.viewModel.scope == .files {
+                Text(FileIndexService.shared.status).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+            }
+        }
+        .padding(.horizontal, 12).padding(.bottom, 10)
+    }
+
+    private var clipboardFilters: some View {
+        HStack(spacing: 8) {
+            Picker("Type", selection: self.$viewModel.clipboardFilter.kind) {
+                Text("All types").tag(ItemKind?.none)
+                ForEach(ItemKind.allCases, id: \.self) { kind in Text(kind.displayName).tag(Optional(kind)) }
+            }
+            Picker("Source", selection: self.$viewModel.clipboardFilter.source) {
+                Text("All apps").tag(String?.none)
+                ForEach(self.viewModel.sources, id: \.self) { Text($0).tag(Optional($0)) }
+            }
+            Picker("Copied", selection: self.$viewModel.clipboardFilter.period) {
+                ForEach(ClipboardFilter.Period.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+            }
+            Toggle(isOn: self.$viewModel.clipboardFilter.pinnedOnly) {
+                Image(systemName: "pin").accessibilityLabel("Pinned only")
+            }.toggleStyle(.button).help("Pinned only")
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .labelsHidden().controlSize(.small).padding(.horizontal, 16).padding(.bottom, 10)
+    }
+
+    private var resultList: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(spacing: 2) {
+                    if self.viewModel.results.isEmpty {
+                        ContentUnavailableView(self.viewModel.isSearching ? "Searching…" : "No results", systemImage: self.viewModel.scope == .clipboard ? "doc.on.clipboard" : "magnifyingglass",
+                                               description: Text(self.viewModel.scope == .clipboard ? "Copy something, or try a different search or filter." : "Try a shorter name or choose another scope."))
+                            .frame(maxWidth: .infinity, minHeight: 140)
+                    }
+                    ForEach(Array(self.viewModel.results.enumerated()), id: \.element.id) { index, result in
+                        if let header = self.historyHeader(at: index) {
+                            Text(header).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 10).padding(.top, 12).padding(.bottom, 4)
+                        }
+                        LauncherRow(result: result, store: self.store, isSelected: index == self.viewModel.selectedIndex,
+                                    runningAppPaths: self.viewModel.runningAppPaths, query: self.viewModel.query,
+                                    showsSourceBadge: self.viewModel.scope != .clipboard)
+                            .contentShape(Rectangle())
+                            .onTapGesture(count: 2) { self.viewModel.select(at: index); self.viewModel.commit() }
+                            .onTapGesture { self.viewModel.select(at: index) }
+                            .id(result.id)
+                    }
+                    if self.viewModel.hasMoreClipboard {
+                        Button("Show more history", action: self.viewModel.loadMoreClipboard)
+                            .buttonStyle(.plain).font(.caption).padding(12)
+                    }
+                }
+                .padding(8)
+            }
+            .onChange(of: self.viewModel.selectedResult?.id) {
+                if let id = self.viewModel.selectedResult?.id { proxy.scrollTo(id) }
+            }
+            .onChange(of: self.viewModel.results.count) {
+                if let id = self.viewModel.selectedResult?.id { proxy.scrollTo(id) }
+            }
+        }
+    }
+
+    private func historyHeader(at index: Int) -> String? {
+        if self.viewModel.scope == .all, self.viewModel.query.isEmpty {
+            switch self.viewModel.results[index] {
+            case .app: return index == 0 ? "Suggestions" : nil
+            case .recentSearch:
+                if index > 0, case .recentSearch = self.viewModel.results[index - 1] { return nil }
+                return "Recent searches"
+            default: return nil
+            }
+        }
+        guard self.viewModel.scope == .clipboard, self.viewModel.query.isEmpty,
+              case let .clip(item) = self.viewModel.results[index] else { return nil }
+        func label(_ date: Date) -> String {
+            if Calendar.current.isDateInToday(date) { return "Today" }
+            if Calendar.current.isDateInYesterday(date) { return "Yesterday" }
+            return date.formatted(date: .abbreviated, time: .omitted)
+        }
+        let title = label(item.lastUsedAt)
+        if index > 0, case let .clip(previous) = self.viewModel.results[index - 1], label(previous.lastUsedAt) == title { return nil }
+        return title
     }
 }
 
@@ -127,6 +205,9 @@ struct LauncherSectionHeader: View {
 /// always budgeted (`Metrics.footerHeight`).
 struct LauncherFooterBar: View {
     let primaryAction: LauncherAction?
+    var label: String?
+    var onCommit: () -> Void = {}
+    var onActions: () -> Void = {}
 
     var body: some View {
         HStack(spacing: 8) {
@@ -136,15 +217,15 @@ struct LauncherFooterBar: View {
                 .font(.caption)
             Spacer(minLength: 12)
             if let primaryAction {
-                Text(primaryAction.label)
-                    .font(.caption)
+                Button(self.label ?? primaryAction.label, action: self.onCommit)
+                    .buttonStyle(.plain).font(.caption.weight(.medium)).foregroundStyle(.primary)
                 Image(systemName: "return")
                     .font(.caption2)
                 Divider()
                     .frame(height: 12)
             }
-            Text("Actions")
-                .font(.caption)
+            Button("Actions", action: self.onActions)
+                .buttonStyle(.plain).font(.caption)
             Text("⌘K")
                 .font(.caption2)
                 .padding(.horizontal, 4)
@@ -162,7 +243,10 @@ struct LauncherRow: View {
     let store: ClipStore
     let isSelected: Bool
     let runningAppPaths: Set<String>
+    var query: String = ""
+    var showsSourceBadge = true
     @State private var thumbnail: NSImage?
+    @State private var excerpt: String?
 
     var body: some View {
         HStack(spacing: 10) {
@@ -177,10 +261,10 @@ struct LauncherRow: View {
                     }
                 }
             VStack(alignment: .leading, spacing: 1) {
-                Text(self.title)
+                SearchHighlightedText(text: self.title, query: self.query)
                     .font(.body.weight(self.titleWeight))
                     .lineLimit(1)
-                Text(self.subtitle)
+                SearchHighlightedText(text: self.subtitle, query: self.query)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -190,7 +274,14 @@ struct LauncherRow: View {
             // The footer bar + ⌘K palette + section headers now carry the
             // per-row hints and source labels; only the Spotify badge stays,
             // since now-playing rows have no section header to place them under.
-            if let badge = self.sourceBadge {
+            if case let .clip(item) = self.result, item.isPinned {
+                Image(systemName: "pin.fill").font(.caption).foregroundStyle(.secondary)
+            }
+            if case let .file(_, _, info) = self.result, info.availability != .local {
+                Image(systemName: info.availability == .unavailable ? "exclamationmark.icloud" : "icloud.and.arrow.down")
+                    .foregroundStyle(.secondary).help(info.availability == .unavailable ? "Unavailable" : "In the cloud")
+            }
+            if self.showsSourceBadge, let badge = self.sourceBadge {
                 HStack(spacing: 3) {
                     Image(systemName: badge.symbol)
                     Text(badge.label)
@@ -203,12 +294,19 @@ struct LauncherRow: View {
             }
         }
         .padding(.horizontal, 8)
-        .padding(.vertical, 6)
+        .frame(height: 46)
+        .padding(.vertical, 3)
         .background(
-            self.isSelected ? Color.accentColor.opacity(0.22) : .clear,
+            self.isSelected ? Color.accentColor.opacity(0.20) : .clear,
             in: RoundedRectangle(cornerRadius: 8)
         )
-        .task(id: self.result.id) {
+        .task(id: self.result.id + self.query) {
+            self.excerpt = nil
+            if case let .clip(item) = self.result, !self.query.isEmpty {
+                let excerpt = try? await self.store.matchExcerpt(itemID: item.id, query: self.query)
+                guard !Task.isCancelled else { return }
+                self.excerpt = excerpt
+            }
             await self.loadThumbnailIfNeeded()
         }
         .accessibilityElement(children: .combine)
@@ -222,7 +320,9 @@ struct LauncherRow: View {
             Image(systemName: "equal.circle.fill")
                 .font(.title2)
                 .foregroundStyle(.orange)
-        case let .app(_, url), let .file(_, url):
+        case let .file(_, _, info) where info.isDirectory:
+            Image(systemName: "folder.fill").font(.title2).foregroundStyle(.blue)
+        case let .app(_, url), let .file(_, url, _):
             Image(nsImage: Self.fileIcon(for: url))
                 .resizable()
                 .aspectRatio(contentMode: .fit)
@@ -297,8 +397,8 @@ struct LauncherRow: View {
         case let .calculation(_, display): display
         case let .app(name, _): name
         case let .snippet(snippet): snippet.title
-        case let .clip(item): Self.clipTitle(for: item)
-        case let .file(name, _): name
+        case let .clip(item): self.excerpt ?? Self.clipTitle(for: item)
+        case let .file(name, _, _): name
         case let .webSearch(query, _): "Search Google for “\(query)”"
         case let .systemSetting(name, _): name
         case let .command(command, _): command.title
@@ -318,7 +418,7 @@ struct LauncherRow: View {
         case .app: "Application"
         case let .snippet(snippet): Self.firstLine(of: snippet.body) ?? "Snippet"
         case let .clip(item): Self.clipSubtitle(for: item)
-        case let .file(_, url): (url.path as NSString).abbreviatingWithTildeInPath
+        case let .file(_, url, _): FileBreadcrumb.label(url.deletingLastPathComponent())
         case .webSearch: "Open in browser"
         case .systemSetting: "System Settings"
         // The provider's resolved subtitle wins (the live :stats count);
@@ -349,9 +449,9 @@ struct LauncherRow: View {
     /// Missing paths (demo mode's fake files) get their file-type icon
     /// instead of the blank generic-document one.
     private static func fileIcon(for url: URL) -> NSImage {
-        if FileManager.default.fileExists(atPath: url.path) {
-            return NSWorkspace.shared.icon(forFile: url.path)
-        }
+        // Generic type icons are metadata-only; probing a dataless file or
+        // requesting a Quick Look thumbnail here can trigger a download.
+        if url.pathExtension == "app" { return NSWorkspace.shared.icon(forFile: url.path) }
         let type = UTType(filenameExtension: url.pathExtension) ?? .data
         return NSWorkspace.shared.icon(for: type)
     }
@@ -363,6 +463,10 @@ struct LauncherRow: View {
     private var sourceBadge: (symbol: String, label: String)? {
         switch self.result {
         case .nowPlaying: (symbol: "music.note", label: "Spotify")
+        case .app: (symbol: "app", label: "App")
+        case .file: (symbol: "doc", label: "File")
+        case .clip: (symbol: "doc.on.clipboard", label: "Clipboard")
+        case .snippet: (symbol: "text.badge.star", label: "Snippet")
         default: nil
         }
     }

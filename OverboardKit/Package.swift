@@ -24,6 +24,7 @@ let package = Package(
         .library(name: "OverboardMac", targets: ["OverboardMac"]),
         .library(name: "OverboardUI", targets: ["OverboardUI"]),
         .executable(name: "overboard", targets: ["OverboardCLI"]),
+        .executable(name: "file-index-benchmark", targets: ["FileIndexBenchmark"]),
     ],
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.0.0"),
@@ -72,6 +73,12 @@ let package = Package(
         .executableTarget(
             name: "OverboardCLI",
             dependencies: ["OverboardCore"],
+            swiftSettings: approachableConcurrency
+        ),
+        .executableTarget(
+            name: "FileIndexBenchmark",
+            dependencies: ["OverboardCore"],
+            path: "Benchmarks/FileIndexBenchmark",
             swiftSettings: approachableConcurrency
         ),
         .testTarget(

@@ -48,6 +48,9 @@ public struct SettingsView: View {
             Tab("History", systemImage: "clock.arrow.circlepath") {
                 HistorySettingsTab(store: self.store)
             }
+            Tab("Files", systemImage: "folder") {
+                FileSearchSettingsTab()
+            }
             Tab("Apps", systemImage: "app.badge.checkmark") {
                 AppsSettingsTab()
             }
@@ -106,7 +109,7 @@ private struct GeneralSettingsTab: View {
                         .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
                 }
             } footer: {
-                Text("The launcher always calculates and offers a web search; snippet and clipboard rows search your saved snippets and history (operators like kind:image work), file results add Spotlight hits from your home folder, and system settings rows open macOS Settings panes (Displays, Bluetooth, Wi-Fi…). The Spotify row pins the current track to the bottom of the list — ↩ copies its share link, ⌘↩ opens Spotify. Aliases are one “sm = Sublime Merge” per line — initials like “sm” already match without one; use aliases to override or shorten further.")
+                Text("All mixes apps, files, clipboard, snippets, calculator, system settings, AI, and now playing. Use ⌘1–4 to switch scopes. File search locations are managed in Files. Aliases are one “sm = Sublime Merge” per line; initials work automatically.")
             }
 
             Section {

@@ -36,6 +36,7 @@ public final class DrawerViewModel {
     public var onCommitTransform: (ClipItem, ClipTransform) -> Void = { _, _ in }
     public var onCommitAITransform: (ClipItem, AITransform) -> Void = { _, _ in }
     public var onDismiss: () -> Void = {}
+    public var onBrowseHistory: () -> Void = {}
     /// Set by DrawerView, which owns the SwiftUI openSettings environment action.
     public var onOpenSettings: () -> Void = {}
     /// Runs a clip action against the selected items.

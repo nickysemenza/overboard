@@ -22,19 +22,18 @@ struct ActionPaletteSnapshotTests {
         return viewModel
     }
 
-    // glassPanel's NSVisualEffectView renders flat without a real window;
-    // these snapshots verify row content and layout, not the material.
+    // The independent native fill renders in snapshots as well as a real window.
 
     @Test func allActions() async throws {
         let viewModel = try await self.makeViewModel()
         let view = ActionPalette(viewModel: viewModel)
-        assertSnapshot(of: snapshotHost(view, width: 420, height: 480), as: snapshotImageStrategy)
+        assertSnapshot(of: snapshotHost(view, width: 420, height: 480), as: snapshotImageStrategy, record: snapshotRecordingMode)
     }
 
     @Test func fuzzyFiltered() async throws {
         let viewModel = try await self.makeViewModel()
         viewModel.paletteQuery = "case"
         let view = ActionPalette(viewModel: viewModel)
-        assertSnapshot(of: snapshotHost(view, width: 420, height: 480), as: snapshotImageStrategy)
+        assertSnapshot(of: snapshotHost(view, width: 420, height: 480), as: snapshotImageStrategy, record: snapshotRecordingMode)
     }
 }

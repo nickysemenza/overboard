@@ -8,8 +8,7 @@ import Testing
 @Suite(.localOnly)
 @MainActor
 struct LauncherSectionSnapshotTests {
-    /// App + clip + file rows through the real view model, so headers render
-    /// exactly as the annotate pass produces them (plus the standing web row).
+    /// Mixed rows show consistent type badges and a dedicated action footer.
     /// The app path deliberately doesn't exist — a missing bundle renders the
     /// generic app icon instead of a machine-dependent one.
     @Test func sectionHeaders() async throws {
@@ -17,20 +16,19 @@ struct LauncherSectionSnapshotTests {
         let viewModel = LauncherViewModel(
             instantProviders: [StubLauncherProvider(rows: [
                 .app(name: "Demo App", url: URL(fileURLWithPath: "/Applications/OverboardDemo.app")),
-                .clip(Fixtures.item(preview: "deploy checklist")),
-                .file(name: "notes.md", url: URL(fileURLWithPath: "/tmp/overboard-missing/notes.md")),
+                .clip(Fixtures.item(preview: "demo deploy checklist")),
+                .file(name: "demo notes.md", url: URL(fileURLWithPath: "/tmp/overboard-missing/notes.md")),
             ])],
             secondaryProviders: []
         )
-        viewModel.query = "zzz"
+        viewModel.query = "demo"
         viewModel.scheduleSearch()
         while viewModel.results.isEmpty {
             try? await Task.sleep(for: .milliseconds(10))
         }
 
         let view = LauncherView(viewModel: viewModel, store: store)
-        // 82 bar + 17 divider + 4 rows × 45 + 3 headers × 18 + 37 footer = 370.
-        assertSnapshot(of: snapshotHost(view, width: 640, height: 370), as: snapshotImageStrategy)
+        assertSnapshot(of: snapshotHost(view, width: 740, height: 370), as: snapshotImageStrategy, record: snapshotRecordingMode)
     }
 
     /// An app row whose bundle path is in `runningAppPaths` shows the small
@@ -43,30 +41,31 @@ struct LauncherSectionSnapshotTests {
             secondaryProviders: []
         )
         viewModel.runningAppPaths = [appURL.path]
-        viewModel.query = "zzz"
+        viewModel.query = "demo"
         viewModel.scheduleSearch()
         while viewModel.results.isEmpty {
             try? await Task.sleep(for: .milliseconds(10))
         }
 
         let view = LauncherView(viewModel: viewModel, store: store)
-        // 82 bar + 17 divider + 2 rows × 45 + 2 headers × 18 + 37 footer = 262.
-        assertSnapshot(of: snapshotHost(view, width: 640, height: 262), as: snapshotImageStrategy)
+        assertSnapshot(of: snapshotHost(view, width: 740, height: 316), as: snapshotImageStrategy, record: snapshotRecordingMode)
     }
 
     /// The persistent footer bar renders even with zero result rows: brand on
     /// the left, ⌘K affordance on the right (no primary-action segment, since
     /// nothing is selected).
-    @Test func footerBarWithNoRows() throws {
+    @Test func footerBarWithNoRows() async throws {
         Defaults[.launcherSearchHistory] = []
         let store = try Fixtures.store()
         let viewModel = LauncherViewModel(instantProviders: [], secondaryProviders: [])
-        // Empty query, no history → no rows, footer only.
+        // Empty query, no history or apps → no rows, footer only.
         viewModel.query = ""
         viewModel.scheduleSearch()
+        for _ in 0 ..< 100 where viewModel.isSearching {
+            try? await Task.sleep(for: .milliseconds(5))
+        }
 
         let view = LauncherView(viewModel: viewModel, store: store)
-        // 82 bar + 37 footer = 119.
-        assertSnapshot(of: snapshotHost(view, width: 640, height: 119), as: snapshotImageStrategy)
+        assertSnapshot(of: snapshotHost(view, width: 740, height: 316), as: snapshotImageStrategy, record: snapshotRecordingMode)
     }
 }

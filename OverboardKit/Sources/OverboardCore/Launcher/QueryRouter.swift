@@ -11,12 +11,12 @@ public struct QueryRouter: Sendable {
         self.providers = providers
     }
 
-    public func results(for query: String) async -> [LauncherResult] {
+    public func results(for query: String, scope: LauncherScope = .all) async -> [LauncherResult] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return [] }
+        guard !trimmed.isEmpty || scope != .all else { return [] }
         // Providers run concurrently — Spotlight gathers dominate and would
         // otherwise serialize — but rows keep provider priority order.
-        let providers = self.providers
+        let providers = self.providers.filter { $0.searchScopes.contains(scope) }
         return await withTaskGroup(of: (Int, [LauncherResult]).self) { group in
             for (index, provider) in providers.enumerated() {
                 group.addTask { await (index, provider.results(for: trimmed)) }
@@ -25,7 +25,7 @@ public struct QueryRouter: Sendable {
             for await (index, results) in group {
                 buckets[index] = results
             }
-            return buckets.flatMap(\.self)
+            return buckets.flatMap(\.self).filter(scope.includes)
         }
     }
 }
@@ -35,6 +35,10 @@ public struct QueryRouter: Sendable {
 public struct ConditionalProvider: LauncherProvider {
     private let base: any LauncherProvider
     private let isEnabled: @Sendable () -> Bool
+
+    public var searchScopes: Set<LauncherScope> {
+        self.base.searchScopes
+    }
 
     public init(_ base: any LauncherProvider, isEnabled: @escaping @Sendable () -> Bool) {
         self.base = base
@@ -48,6 +52,10 @@ public struct ConditionalProvider: LauncherProvider {
 }
 
 public struct CalculatorProvider: LauncherProvider {
+    public var searchScopes: Set<LauncherScope> {
+        [.all]
+    }
+
     public init() {}
 
     public func results(for query: String) async -> [LauncherResult] {
@@ -57,6 +65,10 @@ public struct CalculatorProvider: LauncherProvider {
 }
 
 public struct WebSearchProvider: LauncherProvider {
+    public var searchScopes: Set<LauncherScope> {
+        [.all]
+    }
+
     public init() {}
 
     /// URLComponents alone is wrong here: it leaves "+" literal in the query,

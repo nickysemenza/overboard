@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// One selectable row in a command palette — the minimal shape both the
@@ -11,7 +12,7 @@ struct CommandPaletteItem: Identifiable {
 
 /// The ⌘K command-palette chrome, factored out of `ActionPalette` so the
 /// launcher can reuse it: a query field over a filtered, keyboard-navigable
-/// row list, floating in a glass card. Owns no domain logic — the caller
+/// row list, floating on an independent menu surface. Owns no domain logic — the caller
 /// supplies the rows, binds query/index, and handles `onRun`.
 struct CommandPaletteView: View {
     let items: [CommandPaletteItem]
@@ -21,12 +22,6 @@ struct CommandPaletteView: View {
     /// keeps its own wording).
     let emptyMessage: String
     let onRun: (Int) -> Void
-    /// The host panel's glass namespace, shared via `GlassEffectContainer` so this
-    /// palette morphs out of the panel instead of cross-fading in. Nil when
-    /// hosted standalone (e.g. snapshot tests) — the palette then renders as
-    /// its own independent glass shape.
-    var glassNamespace: Namespace.ID?
-
     @FocusState private var queryFocused: Bool
 
     var body: some View {
@@ -61,7 +56,16 @@ struct CommandPaletteView: View {
             }
         }
         .frame(width: 380)
-        .glassPanel(cornerRadius: 12, id: "palette", in: self.glassNamespace)
+        // A second glass shape merges into the host panel's glass and ends up
+        // behind its list/preview. A native opaque fill keeps actions legible
+        // over both columns, including when Reduce Transparency is enabled.
+        .background(Color(nsColor: .windowBackgroundColor), in: RoundedRectangle(cornerRadius: 12))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12)
+                .strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.5)
+                .allowsHitTesting(false)
+        }
+        .compositingGroup()
         .shadow(color: .black.opacity(0.25), radius: 18, y: 6)
         .onAppear { self.queryFocused = true }
         .onChange(of: self.query) {

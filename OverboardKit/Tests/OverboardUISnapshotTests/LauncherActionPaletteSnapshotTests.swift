@@ -16,7 +16,7 @@ struct LauncherActionPaletteSnapshotTests {
             ])],
             secondaryProviders: []
         )
-        viewModel.query = "zzz"
+        viewModel.query = "example"
         viewModel.scheduleSearch()
         while viewModel.results.isEmpty {
             try? await Task.sleep(for: .milliseconds(10))
@@ -28,15 +28,15 @@ struct LauncherActionPaletteSnapshotTests {
     @Test func light() async {
         let viewModel = await self.makeViewModel()
         let view = LauncherActionPalette(viewModel: viewModel)
-        assertSnapshot(of: snapshotHost(view, width: 420, height: 320), as: snapshotImageStrategy)
+        assertSnapshot(of: snapshotHost(view, width: 420, height: 360), as: snapshotImageStrategy, record: snapshotRecordingMode)
     }
 
     @Test func dark() async {
         let viewModel = await self.makeViewModel()
         let view = LauncherActionPalette(viewModel: viewModel)
         assertSnapshot(
-            of: snapshotHost(view, width: 420, height: 320, dark: true),
-            as: snapshotImageStrategy
+            of: snapshotHost(view, width: 420, height: 360, dark: true),
+            as: snapshotImageStrategy, record: snapshotRecordingMode
         )
     }
 }

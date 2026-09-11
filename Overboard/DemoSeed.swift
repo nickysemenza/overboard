@@ -7,7 +7,7 @@ import OverboardCore
 ///   0 pinned note · 1 code · 2 link · 3 image · 4 JSON · 5 files · 6 color
 ///   · 7 secret · 8 prose · 9 markdown · 10 shell command
 enum DemoSeed {
-    /// Launcher file rows for demo mode — the real Spotlight provider would
+    /// Launcher file rows for demo mode — the real filename index would
     /// leak the developer's home folder into README screenshots. Paths are
     /// fake; LauncherRow falls back to file-type icons for missing files.
     struct LauncherFiles: LauncherProvider {
@@ -16,13 +16,16 @@ enum DemoSeed {
             "/Users/demo/Notes/release-checklist.md",
             "/Users/demo/Designs/overboard-icon.sketch",
             "/Users/demo/Decks/launch-review.key",
+            "/Users/demo/Documents/hello",
+            "/Users/demo/Library/Mobile Documents/com~apple~CloudDocs/Wedding/2026 budget.xlsx",
+            "/Users/demo/Documents/Projects/Client archive/2026/Planning and logistics/Meeting notes/release-retrospective.md",
         ]
 
         func results(for query: String) async -> [LauncherResult] {
             Self.paths
                 .map { URL(fileURLWithPath: $0) }
-                .filter { $0.lastPathComponent.localizedCaseInsensitiveContains(query) }
-                .map { .file(name: $0.lastPathComponent, url: $0) }
+                .filter { query.isEmpty || SearchMatcher.match(query: query, title: $0.lastPathComponent, context: $0.deletingLastPathComponent().path) != nil }
+                .map { .file(name: $0.lastPathComponent, url: $0, info: FileSearchInfo(availability: $0.path.contains("CloudDocs") ? .cloud : .local, location: $0.path.contains("CloudDocs") ? "iCloud Drive" : "On this Mac")) }
         }
     }
 

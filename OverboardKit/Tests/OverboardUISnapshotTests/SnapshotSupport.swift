@@ -40,3 +40,8 @@ func snapshotHost(
 @MainActor var snapshotImageStrategy: Snapshotting<NSView, NSImage> {
     .image(precision: 0.99, perceptualPrecision: 0.98)
 }
+
+/// Explicit opt-in for changed launcher references; ordinary test runs assert.
+@MainActor var snapshotRecordingMode: SnapshotTestingConfiguration.Record {
+    ProcessInfo.processInfo.environment["OVERBOARD_RECORD_SNAPSHOTS"] == "1" ? .all : .never
+}

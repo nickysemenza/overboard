@@ -5,7 +5,6 @@ import SwiftUI
 /// row, projected onto the shared `CommandPaletteView` chrome.
 struct LauncherActionPalette: View {
     @Bindable var viewModel: LauncherViewModel
-    var glassNamespace: Namespace.ID?
 
     var body: some View {
         CommandPaletteView(
@@ -15,8 +14,7 @@ struct LauncherActionPalette: View {
             query: self.$viewModel.paletteQuery,
             index: self.$viewModel.paletteIndex,
             emptyMessage: "No actions for this result",
-            onRun: { self.viewModel.runPaletteAction(at: $0) },
-            glassNamespace: self.glassNamespace
+            onRun: { self.viewModel.runPaletteAction(at: $0) }
         )
     }
 }
