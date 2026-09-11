@@ -307,3 +307,24 @@ public struct DrawerView: View {
         }
     }
 }
+
+#if DEBUG
+    #Preview("History") {
+        SeededPreview { store in
+            DrawerView(viewModel: Fixtures.drawerViewModel(store: store))
+        }
+        // Matches OverlayController's collapsed panel frame (full screen width,
+        // 282pt tall); a fixed 900pt stands in for the screen width in previews.
+        .frame(width: 900, height: 282)
+    }
+
+    #Preview("Empty") {
+        SeededPreview { store in
+            let viewModel = Fixtures.drawerViewModel(store: store)
+            viewModel.query = "zzzzzz no matches zzzzzz"
+            viewModel.scheduleSearch()
+            return DrawerView(viewModel: viewModel)
+        }
+        .frame(width: 900, height: 282)
+    }
+#endif

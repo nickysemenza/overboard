@@ -110,3 +110,19 @@ struct AppListEditor: View {
             .joined(separator: "\n")
     }
 }
+
+#if DEBUG
+    #Preview("With apps") {
+        @Previewable @State var raw = "com.apple.Safari\ncom.apple.Terminal"
+        AppListEditor(rawList: $raw)
+            .padding()
+            .frame(width: 400)
+    }
+
+    #Preview("Empty") {
+        @Previewable @State var raw = ""
+        AppListEditor(rawList: $raw)
+            .padding()
+            .frame(width: 400)
+    }
+#endif

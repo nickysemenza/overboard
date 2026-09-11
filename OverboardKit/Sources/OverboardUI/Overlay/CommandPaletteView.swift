@@ -91,3 +91,36 @@ struct CommandPaletteView: View {
         .contentShape(Rectangle())
     }
 }
+
+#if DEBUG
+    #Preview("Items") {
+        @Previewable @State var query = ""
+        @Previewable @State var index = 0
+        CommandPaletteView(
+            items: [
+                CommandPaletteItem(id: "paste", label: "Paste", systemImage: "doc.on.clipboard"),
+                CommandPaletteItem(id: "copy", label: "Copy", systemImage: "doc.on.doc"),
+                CommandPaletteItem(id: "pastePlain", label: "Paste as Plain Text", systemImage: "textformat"),
+                CommandPaletteItem(id: "openLink", label: "Open Link in Browser", systemImage: "safari"),
+            ],
+            query: $query,
+            index: $index,
+            emptyMessage: "No matching actions for this selection",
+            onRun: { _ in }
+        )
+        .padding(40)
+    }
+
+    #Preview("Empty") {
+        @Previewable @State var query = "zzz"
+        @Previewable @State var index = 0
+        CommandPaletteView(
+            items: [],
+            query: $query,
+            index: $index,
+            emptyMessage: "No matching actions for this selection",
+            onRun: { _ in }
+        )
+        .padding(40)
+    }
+#endif

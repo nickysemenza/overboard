@@ -476,3 +476,34 @@ private struct AISettingsTab: View {
         .formStyle(.grouped)
     }
 }
+
+#if DEBUG
+    #Preview("All tabs") {
+        SettingsView(store: try! Fixtures.store())
+    }
+
+    #Preview("General") {
+        GeneralSettingsTab()
+            .frame(width: 600, height: 500)
+    }
+
+    #Preview("History") {
+        HistorySettingsTab(store: try! Fixtures.store())
+            .frame(width: 600, height: 500)
+    }
+
+    #Preview("Apps") {
+        AppsSettingsTab()
+            .frame(width: 600, height: 500)
+    }
+
+    #Preview("Actions") {
+        ActionsSettingsTab()
+            .frame(width: 600, height: 500)
+    }
+
+    #Preview("AI") {
+        AISettingsTab()
+            .frame(width: 600, height: 500)
+    }
+#endif

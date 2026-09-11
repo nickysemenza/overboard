@@ -159,3 +159,53 @@ struct EmojiFooterBar: View {
         .frame(height: 20)
     }
 }
+
+#if DEBUG
+    #Preview("Category grid") {
+        EmojiPickerView(viewModel: Fixtures.emojiPickerViewModel())
+            .frame(width: 400, height: 460)
+    }
+
+    #Preview("Recently used") {
+        EmojiPickerView(viewModel: Fixtures.emojiPickerViewModel(recents: ["🔥", "🍕", "👍"]))
+            .frame(width: 400, height: 460)
+    }
+
+    #Preview("Search results") {
+        let viewModel = Fixtures.emojiPickerViewModel()
+        viewModel.query = "lo"
+        return EmojiPickerView(viewModel: viewModel)
+            .frame(width: 400, height: 460)
+    }
+
+    #Preview("Empty state") {
+        let viewModel = Fixtures.emojiPickerViewModel()
+        viewModel.query = "zzzzzz"
+        return EmojiPickerView(viewModel: viewModel)
+            .frame(width: 400, height: 460)
+    }
+
+    #Preview("Dark") {
+        EmojiPickerView(viewModel: Fixtures.emojiPickerViewModel())
+            .frame(width: 400, height: 460)
+            .preferredColorScheme(.dark)
+    }
+
+    #Preview("Cell: unselected") {
+        EmojiCell(emoji: Emoji(character: "🔥", name: "fire", keywords: [], category: .travel, version: 0.6), isSelected: false)
+            .padding()
+            .frame(width: 80)
+    }
+
+    #Preview("Cell: selected") {
+        EmojiCell(emoji: Emoji(character: "🔥", name: "fire", keywords: [], category: .travel, version: 0.6), isSelected: true)
+            .padding()
+            .frame(width: 80)
+    }
+
+    #Preview("Footer bar") {
+        EmojiFooterBar()
+            .padding()
+            .frame(width: 400)
+    }
+#endif

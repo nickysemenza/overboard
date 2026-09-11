@@ -163,3 +163,12 @@ public struct SnippetsManagerView: View {
         }
     }
 }
+
+#if DEBUG
+    #Preview("Manager") {
+        SeededPreview { store in
+            SnippetsManagerView(store: store)
+        }
+        .frame(width: 700, height: 420)
+    }
+#endif

@@ -20,3 +20,42 @@ struct LauncherActionPalette: View {
         )
     }
 }
+
+#if DEBUG
+    #Preview("Actions") {
+        LauncherActionPaletteDemo()
+            .frame(width: 420, height: 320)
+    }
+
+    /// Waits for the launcher's instant search pass to land (results come back
+    /// asynchronously through `scheduleSearch`), selects a link clip, then opens
+    /// the ⌘K palette — mirrors `LauncherActionPaletteSnapshotTests.makeViewModel`.
+    private struct LauncherActionPaletteDemo: View {
+        @State private var viewModel: LauncherViewModel?
+
+        var body: some View {
+            Group {
+                if let viewModel {
+                    LauncherActionPalette(viewModel: viewModel)
+                } else {
+                    ProgressView()
+                }
+            }
+            .task {
+                let model = LauncherViewModel(
+                    instantProviders: [StubLauncherProvider(rows: [
+                        .clip(Fixtures.item(kind: .link, preview: "https://example.com")),
+                    ])],
+                    secondaryProviders: []
+                )
+                model.query = "zzz"
+                model.scheduleSearch()
+                for _ in 0 ..< 2000 where model.results.isEmpty {
+                    await Task.yield()
+                }
+                model.togglePalette()
+                self.viewModel = model
+            }
+        }
+    }
+#endif

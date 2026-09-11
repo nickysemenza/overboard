@@ -65,3 +65,12 @@ public struct HistoryDebugView: View {
         return parts.joined(separator: " · ")
     }
 }
+
+#if DEBUG
+    #Preview("History") {
+        SeededPreview { store in
+            HistoryDebugView(store: store)
+        }
+        .frame(width: 420, height: 500)
+    }
+#endif

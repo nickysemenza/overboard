@@ -268,3 +268,57 @@ struct PreviewPane: View {
         self.related = await (try? store.relatedItems(to: item.id)) ?? []
     }
 }
+
+#if DEBUG
+    #Preview("Viewing") {
+        SeededPreview { store in
+            PreviewPaneDemo(store: store, editing: false)
+        }
+        // Matches OverlayController's expanded panel frame (full screen width,
+        // 540pt tall while previewing); a fixed 900pt stands in for the screen
+        // width in previews.
+        .frame(width: 900, height: 540)
+    }
+
+    #Preview("Editing") {
+        SeededPreview { store in
+            PreviewPaneDemo(store: store, editing: true)
+        }
+        .frame(width: 900, height: 540)
+    }
+
+    /// Waits for the seeded store's initial search to land, selects the plain-text
+    /// fixture item, then opens the preview pane (optionally straight into edit
+    /// mode) — `PreviewPane` only renders item content once
+    /// `viewModel.selectedItem` is non-nil.
+    private struct PreviewPaneDemo: View {
+        let store: ClipStore
+        let editing: Bool
+        @State private var viewModel: DrawerViewModel?
+
+        var body: some View {
+            Group {
+                if let viewModel {
+                    PreviewPane(viewModel: viewModel)
+                } else {
+                    ProgressView()
+                }
+            }
+            .task {
+                let model = Fixtures.drawerViewModel(store: self.store)
+                for _ in 0 ..< 2000 where model.items.isEmpty {
+                    await Task.yield()
+                }
+                if let index = model.items.firstIndex(where: { $0.previewText?.contains("Pick up the package") == true }) {
+                    model.selectedIndex = index
+                }
+                if self.editing {
+                    model.beginEdit()
+                } else {
+                    model.togglePreview()
+                }
+                self.viewModel = model
+            }
+        }
+    }
+#endif
