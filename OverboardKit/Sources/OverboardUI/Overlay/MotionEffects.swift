@@ -56,3 +56,17 @@ struct BobbingBoat: View {
         }
     }
 }
+
+#if DEBUG
+    #Preview("Bobbing boat") {
+        BobbingBoat()
+            .padding(40)
+    }
+
+    #Preview("Card entrance") {
+        let item = Fixtures.item(preview: "Cards ripple up into place when the drawer is summoned.")
+        ItemCardView(item: item, index: 0, isSelected: false, store: try! Fixtures.store())
+            .cardEntrance(index: 0)
+            .padding()
+    }
+#endif

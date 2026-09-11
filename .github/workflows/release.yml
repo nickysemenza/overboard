@@ -1,8 +1,16 @@
 name: Release
 
-# Tag pushes (v1.0.0) build the same unsigned zip as CI and attach it to a
-# GitHub Release. Unsigned because there's no paid Developer Program
-# membership — downloaders clear Gatekeeper with right-click → Open.
+# Tag pushes (v1.0.0) build a Developer-ID-signed, notarized zip — via the
+# shared ./.github/actions/build-signed composite action, also used by
+# ci.yml so every push/PR/workflow_dispatch run notarizes too when the
+# signing secrets are available (notarization is free and just takes a few
+# minutes) — and attach it to a GitHub Release. Requires five repo secrets
+# (see README.md § Release signing for how to generate each):
+#   DEVELOPER_ID_P12_BASE64      base64 of the exported .p12 (cert + key)
+#   DEVELOPER_ID_P12_PASSWORD    that .p12's export password
+#   APP_STORE_CONNECT_API_KEY_P8 contents of the notary API key's .p8
+#   APP_STORE_CONNECT_KEY_ID     that key's ID
+#   APP_STORE_CONNECT_ISSUER_ID  the API key's issuer ID
 on:
   push:
     tags: ["v*"]
@@ -22,31 +30,20 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Select newest Xcode 26
-        run: |
-          sudo xcode-select -s "$(ls -d /Applications/Xcode_26*.app | sort -V | tail -n 1)/Contents/Developer"
-          xcodebuild -version
+      - name: Compute version
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
-      # embed-git-version.sh derives the same number from the tag, so this is
-      # belt-and-braces: if git is ever unavailable in the runner, the release
-      # still ships labelled with its tag rather than the 0.0.0 floor. The
-      # script only ever raises the version, so the two cannot disagree.
-      - name: Build (Release, unsigned)
-        run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          xcodebuild -project Overboard.xcodeproj \
-            -scheme Overboard \
-            -configuration Release \
-            -derivedDataPath build \
-            CODE_SIGNING_ALLOWED=NO \
-            MARKETING_VERSION="$VERSION" \
-            build
-
-      - name: Zip app bundle
-        run: |
-          ditto -c -k --keepParent \
-            build/Build/Products/Release/Overboard.app \
-            "Overboard-${GITHUB_REF_NAME#v}.zip"
+      - name: Build, sign, and notarize
+        uses: ./.github/actions/build-signed
+        with:
+          version: ${{ steps.version.outputs.version }}
+          p12-base64: ${{ secrets.DEVELOPER_ID_P12_BASE64 }}
+          p12-password: ${{ secrets.DEVELOPER_ID_P12_PASSWORD }}
+          api-key-p8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+          api-key-id: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          api-issuer-id: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          output-zip: Overboard-${{ steps.version.outputs.version }}.zip
 
       - name: Create GitHub Release
         run: |

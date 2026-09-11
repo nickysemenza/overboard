@@ -1,0 +1,110 @@
+name: Build, sign, and notarize
+description: >
+  Builds Overboard.app with a Developer ID Application signature, then
+  notarizes and staples it via scripts/sign-and-notarize.sh. Shared by
+  release.yml (tag pushes) and ci.yml (every push/PR/workflow_dispatch run
+  where the signing secrets are available) so the signing steps live in one
+  place instead of being duplicated across both workflows.
+
+inputs:
+  version:
+    description: >
+      MARKETING_VERSION to bake into the build. Optional — leave unset to
+      let the "Embed git version" build phase (scripts/embed-git-version.sh)
+      derive it from git tags instead.
+    required: false
+    default: ""
+  p12-base64:
+    description: Base64 of the exported Developer ID Application .p12 (cert + key).
+    required: true
+  p12-password:
+    description: Export password for that .p12.
+    required: true
+  api-key-p8:
+    description: Contents of the App Store Connect API key (.p8) used for notarization.
+    required: true
+  api-key-id:
+    description: That API key's Key ID.
+    required: true
+  api-issuer-id:
+    description: The API key's Issuer ID.
+    required: true
+  output-zip:
+    description: Path to write the final notarized, stapled zip to.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Select newest Xcode 26
+      shell: bash
+      run: |
+        sudo xcode-select -s "$(ls -d /Applications/Xcode_26*.app | sort -V | tail -n 1)/Contents/Developer"
+        xcodebuild -version
+
+    # Imports the Developer ID Application cert+key into a temporary
+    # keychain for this run; the action deletes that keychain in its
+    # post-step regardless of how the job ends.
+    - uses: apple-actions/import-codesign-certs@v7
+      with:
+        p12-file-base64: ${{ inputs.p12-base64 }}
+        p12-password: ${{ inputs.p12-password }}
+
+    - name: Build (Release, signed)
+      shell: bash
+      env:
+        BUILD_VERSION: ${{ inputs.version }}
+      run: |
+        # Optional MARKETING_VERSION: release.yml always passes one (derived
+        # from the tag); ci.yml leaves it unset so embed-git-version.sh's
+        # git-describe fallback stamps the build instead.
+        VERSION_ARGS=()
+        if [ -n "$BUILD_VERSION" ]; then
+          VERSION_ARGS+=("MARKETING_VERSION=$BUILD_VERSION")
+        fi
+        xcodebuild -project Overboard.xcodeproj \
+          -scheme Overboard \
+          -configuration Release \
+          -derivedDataPath build \
+          CODE_SIGN_STYLE=Manual \
+          CODE_SIGN_IDENTITY="Developer ID Application" \
+          DEVELOPMENT_TEAM=Y9A97FXT63 \
+          OTHER_CODE_SIGN_FLAGS="--timestamp" \
+          CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO \
+          "${VERSION_ARGS[@]}" \
+          build
+      # DEVELOPMENT_TEAM=Y9A97FXT63: the paid Developer Program team (same
+      # as the project file). Stated explicitly because the identity lookup
+      # is keyed on it — pointing this at any other team fails with "No
+      # 'Developer ID Application' signing certificate matching team ID".
+      #
+      # CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO: `xcodebuild build` (unlike
+      # `archive`) injects com.apple.security.get-task-allow into the
+      # signature by default, which the notary service rejects outright
+      # ("The executable requests the com.apple.security.get-task-allow
+      # entitlement"). Distribution builds must not carry it.
+
+    - name: Write notary API key
+      shell: bash
+      # Written from an `env:` var, never inlined in the script, so the key
+      # material never appears in the run log even under debug logging.
+      run: printf '%s' "$API_KEY_P8" > "$RUNNER_TEMP/AuthKey.p8"
+      env:
+        API_KEY_P8: ${{ inputs.api-key-p8 }}
+
+    - name: Notarize and staple
+      shell: bash
+      run: |
+        scripts/sign-and-notarize.sh \
+          build/Build/Products/Release/Overboard.app \
+          "$OUTPUT_ZIP"
+      env:
+        OUTPUT_ZIP: ${{ inputs.output-zip }}
+        NOTARY_KEY_PATH: ${{ runner.temp }}/AuthKey.p8
+        NOTARY_KEY_ID: ${{ inputs.api-key-id }}
+        NOTARY_ISSUER_ID: ${{ inputs.api-issuer-id }}
+
+    - name: Remove notary API key
+      if: always()
+      shell: bash
+      run: rm -f "$RUNNER_TEMP/AuthKey.p8"

@@ -409,3 +409,158 @@ struct LauncherRow: View {
         }
     }
 }
+
+#if DEBUG
+    #Preview("Sections") {
+        let viewModel = LauncherViewModel(
+            instantProviders: [StubLauncherProvider(rows: [
+                .app(name: "Demo App", url: URL(fileURLWithPath: "/Applications/OverboardDemo.app")),
+                .clip(Fixtures.item(preview: "deploy checklist")),
+                .file(name: "notes.md", url: URL(fileURLWithPath: "/tmp/overboard-missing/notes.md")),
+            ])],
+            secondaryProviders: []
+        )
+        viewModel.query = "zzz"
+        viewModel.scheduleSearch()
+        return LauncherView(viewModel: viewModel, store: try! Fixtures.store())
+            .frame(width: 640, height: 370)
+    }
+
+    #Preview("Row: Calculation") {
+        LauncherRow(
+            result: .calculation(input: "12*4", display: "48"),
+            store: try! Fixtures.store(),
+            isSelected: false,
+            runningAppPaths: []
+        )
+        .padding()
+        .frame(width: 400)
+    }
+
+    #Preview("Row: App") {
+        LauncherRow(
+            result: .app(name: "Demo App", url: URL(fileURLWithPath: "/Applications/OverboardDemo.app")),
+            store: try! Fixtures.store(),
+            isSelected: false,
+            runningAppPaths: []
+        )
+        .padding()
+        .frame(width: 400)
+    }
+
+    #Preview("Row: Snippet") {
+        LauncherRow(
+            result: .snippet(Snippet(title: "Standup update", body: "Yesterday: shipped X.")),
+            store: try! Fixtures.store(),
+            isSelected: false,
+            runningAppPaths: []
+        )
+        .padding()
+        .frame(width: 400)
+    }
+
+    #Preview("Row: Clip") {
+        LauncherRow(
+            result: .clip(Fixtures.item(preview: "deploy checklist")),
+            store: try! Fixtures.store(),
+            isSelected: true,
+            runningAppPaths: []
+        )
+        .padding()
+        .frame(width: 400)
+    }
+
+    #Preview("Row: File") {
+        LauncherRow(
+            result: .file(name: "notes.md", url: URL(fileURLWithPath: "/tmp/overboard-missing/notes.md")),
+            store: try! Fixtures.store(),
+            isSelected: false,
+            runningAppPaths: []
+        )
+        .padding()
+        .frame(width: 400)
+    }
+
+    #Preview("Row: Web search") {
+        LauncherRow(
+            result: .webSearch(query: "swiftui previews", url: URL(string: "https://www.google.com/search?q=swiftui+previews")!),
+            store: try! Fixtures.store(),
+            isSelected: false,
+            runningAppPaths: []
+        )
+        .padding()
+        .frame(width: 400)
+    }
+
+    #Preview("Row: System setting") {
+        LauncherRow(
+            result: .systemSetting(
+                name: "Displays",
+                url: URL(string: "x-apple.systempreferences:com.apple.preference.displays")!
+            ),
+            store: try! Fixtures.store(),
+            isSelected: false,
+            runningAppPaths: []
+        )
+        .padding()
+        .frame(width: 400)
+    }
+
+    #Preview("Row: Command") {
+        LauncherRow(
+            result: .command(.stats, subtitle: "128 items"),
+            store: try! Fixtures.store(),
+            isSelected: false,
+            runningAppPaths: []
+        )
+        .padding()
+        .frame(width: 400)
+    }
+
+    #Preview("Row: Recent search") {
+        LauncherRow(
+            result: .recentSearch(query: "deploy checklist"),
+            store: try! Fixtures.store(),
+            isSelected: false,
+            runningAppPaths: []
+        )
+        .padding()
+        .frame(width: 400)
+    }
+
+    #Preview("Row: Now playing") {
+        LauncherRow(
+            result: .nowPlaying(
+                NowPlayingTrack(title: "Song Title", artist: "The Artist", trackID: "spotify:track:6rqhFgbbKwnb9MLmUQDhG6", state: .playing)
+            ),
+            store: try! Fixtures.store(),
+            isSelected: false,
+            runningAppPaths: []
+        )
+        .padding()
+        .frame(width: 400)
+    }
+
+    #Preview("Row: Ask AI") {
+        LauncherRow(
+            result: .askAI(prompt: "Summarize this"),
+            store: try! Fixtures.store(),
+            isSelected: false,
+            runningAppPaths: []
+        )
+        .padding()
+        .frame(width: 400)
+    }
+
+    #Preview("Section header") {
+        LauncherSectionHeader(title: "Apps")
+            .padding()
+            .frame(width: 300)
+    }
+
+    #Preview("Footer bar") {
+        LauncherFooterBar(primaryAction: .open)
+            .padding()
+            .frame(width: 400)
+    }
+#endif

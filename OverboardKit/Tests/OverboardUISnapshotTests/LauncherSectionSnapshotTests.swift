@@ -5,13 +5,6 @@ import SnapshotTesting
 import SwiftUI
 import Testing
 
-private struct StubProvider: LauncherProvider {
-    let rows: [LauncherResult]
-    func results(for _: String) async -> [LauncherResult] {
-        self.rows
-    }
-}
-
 @Suite(.localOnly)
 @MainActor
 struct LauncherSectionSnapshotTests {
@@ -22,7 +15,7 @@ struct LauncherSectionSnapshotTests {
     @Test func sectionHeaders() async throws {
         let store = try Fixtures.store()
         let viewModel = LauncherViewModel(
-            instantProviders: [StubProvider(rows: [
+            instantProviders: [StubLauncherProvider(rows: [
                 .app(name: "Demo App", url: URL(fileURLWithPath: "/Applications/OverboardDemo.app")),
                 .clip(Fixtures.item(preview: "deploy checklist")),
                 .file(name: "notes.md", url: URL(fileURLWithPath: "/tmp/overboard-missing/notes.md")),
@@ -46,7 +39,7 @@ struct LauncherSectionSnapshotTests {
         let store = try Fixtures.store()
         let appURL = URL(fileURLWithPath: "/Applications/OverboardDemo.app")
         let viewModel = LauncherViewModel(
-            instantProviders: [StubProvider(rows: [.app(name: "Demo App", url: appURL)])],
+            instantProviders: [StubLauncherProvider(rows: [.app(name: "Demo App", url: appURL)])],
             secondaryProviders: []
         )
         viewModel.runningAppPaths = [appURL.path]

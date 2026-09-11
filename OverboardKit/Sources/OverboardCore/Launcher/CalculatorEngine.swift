@@ -1,5 +1,8 @@
 import Expression
 import Foundation
+#if DEBUG
+    import Playgrounds
+#endif
 
 /// Inline calculator for the launcher. Thin wrapper around the Expression
 /// package: gates "does this look like math" before evaluating, adds the
@@ -235,3 +238,18 @@ public enum CalculatorEngine {
         return String(format: "%.10g", value)
     }
 }
+
+#if DEBUG
+    #Playground("Calculator expressions") {
+        let inputs = [
+            "12 + 30 * 2",
+            "15% of 80",
+            "2^10",
+            "sqrt(144)",
+            "42", // bare number — not worth a calculator row
+        ]
+        for input in inputs {
+            print(input, "→", CalculatorEngine.evaluate(input) as Any)
+        }
+    }
+#endif

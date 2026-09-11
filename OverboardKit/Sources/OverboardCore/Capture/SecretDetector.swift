@@ -1,4 +1,7 @@
 import Foundation
+#if DEBUG
+    import Playgrounds
+#endif
 
 /// Deterministic, pattern-based secret detection. Intentionally no entropy
 /// heuristics — false positives (hashes, URLs, IDs the user *wants* in
@@ -102,3 +105,20 @@ public enum SecretDetector {
         return sum.isMultiple(of: 10) ? .creditCard : nil
     }
 }
+
+#if DEBUG
+    #Playground("Secret kinds") {
+        let samples = [
+            "AKIAIOSFODNN7EXAMPLE",
+            "-----BEGIN RSA PRIVATE KEY-----\nMIIfakeExampleKeyData\n-----END RSA PRIVATE KEY-----",
+            "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U",
+            "ghp_FAKE1234567890ABCDEF",
+            "4111111111111111",
+            "just a normal sentence about cats",
+            "https://example.com/docs",
+        ]
+        for sample in samples {
+            print(sample, "→", SecretDetector.detect(in: sample) as Any)
+        }
+    }
+#endif

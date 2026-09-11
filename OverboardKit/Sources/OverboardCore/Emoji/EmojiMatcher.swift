@@ -1,4 +1,7 @@
 import Foundation
+#if DEBUG
+    import Playgrounds
+#endif
 
 /// Pure matching/ranking for emoji picker search, same shape as AppMatcher:
 /// the catalog supplies the emoji, this decides what a query matches and in
@@ -66,3 +69,22 @@ public enum EmojiMatcher {
             .map { emoji[$0.index] }
     }
 }
+
+#if DEBUG
+    #Playground("Emoji ranking") {
+        let sample = [
+            Emoji(character: "🔥", name: "fire", keywords: ["hot", "flame"], category: .objects, version: 1),
+            Emoji(character: "🚒", name: "fire engine", keywords: ["truck"], category: .travel, version: 1),
+            Emoji(character: "🧑‍🚒", name: "firefighter", keywords: ["rescue"], category: .people, version: 1),
+            Emoji(character: "😀", name: "grinning face", keywords: ["smile", "happy"], category: .smileys, version: 1),
+            Emoji(character: "🐶", name: "dog face", keywords: ["puppy", "pet"], category: .animals, version: 1),
+        ]
+        for query in ["fire", "dog", "zzz"] {
+            print(query, "→", EmojiMatcher.rank(query: query, in: sample).map(\.character))
+        }
+
+        print("exact:", EmojiMatcher.score(query: "fire", emoji: sample[0]) as Any)
+        print("prefix:", EmojiMatcher.score(query: "fire", emoji: sample[1]) as Any)
+        print("fuzzy:", EmojiMatcher.score(query: "upp", emoji: sample[4]) as Any)
+    }
+#endif

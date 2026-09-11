@@ -4,13 +4,6 @@ import SnapshotTesting
 import SwiftUI
 import Testing
 
-private struct StubProvider: LauncherProvider {
-    let rows: [LauncherResult]
-    func results(for _: String) async -> [LauncherResult] {
-        self.rows
-    }
-}
-
 @Suite(.localOnly)
 @MainActor
 struct LauncherActionPaletteSnapshotTests {
@@ -18,7 +11,7 @@ struct LauncherActionPaletteSnapshotTests {
     /// open link — the richest launcher action set.
     private func makeViewModel() async -> LauncherViewModel {
         let viewModel = LauncherViewModel(
-            instantProviders: [StubProvider(rows: [
+            instantProviders: [StubLauncherProvider(rows: [
                 .clip(Fixtures.item(kind: .link, preview: "https://example.com")),
             ])],
             secondaryProviders: []

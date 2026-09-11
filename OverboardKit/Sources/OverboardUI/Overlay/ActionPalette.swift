@@ -21,3 +21,13 @@ struct ActionPalette: View {
         )
     }
 }
+
+#if DEBUG
+    #Preview("Actions") {
+        SeededPreview { store in
+            let viewModel = Fixtures.drawerViewModel(store: store)
+            return ActionPalette(viewModel: viewModel)
+        }
+        .frame(width: 420, height: 480)
+    }
+#endif
