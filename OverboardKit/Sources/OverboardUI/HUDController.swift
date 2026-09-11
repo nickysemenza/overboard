@@ -3,7 +3,6 @@ import SwiftUI
 
 /// Tiny transient toast ("Copied — press ⌘V") shown near the bottom of the
 /// active screen. Never takes focus, ignores the mouse, fades on its own.
-@MainActor
 public final class HUDController {
     public static let shared = HUDController()
 
@@ -19,8 +18,7 @@ public final class HUDController {
                 .font(.callout.weight(.medium))
                 .padding(.horizontal, 16)
                 .padding(.vertical, 9)
-                .background(.regularMaterial, in: Capsule())
-                .overlay(Capsule().strokeBorder(.primary.opacity(0.15), lineWidth: 1))
+                .glassEffect(.regular, in: Capsule())
         )
         let size = content.fittingSize
 

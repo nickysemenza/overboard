@@ -4,7 +4,6 @@ import OverboardCore
 import SwiftUI
 
 /// Owns the overlay panel lifecycle: summon, position, key handling, dismiss.
-@MainActor
 public final class OverlayController {
     private let viewModel: DrawerViewModel
     private var panel: OverlayPanel?

@@ -26,13 +26,19 @@ extension View {
         modifier(CardEntrance(index: index))
     }
 
-    /// Liquid Glass on macOS 26, frosted material everywhere else.
+    /// Liquid Glass panel chrome shared by every summonable surface.
+    ///
+    /// Pass `id` + `namespace` when this shape sits alongside a sibling glass
+    /// shape inside a `GlassEffectContainer` (e.g. a panel and the ⌘K palette that
+    /// pops out of it) so Liquid Glass morphs between them instead of just
+    /// cross-fading. Leave both nil for a standalone glass shape.
     @ViewBuilder
-    func glassPanel(cornerRadius: CGFloat) -> some View {
-        if #available(macOS 26.0, *) {
+    func glassPanel(cornerRadius: CGFloat, id: String? = nil, in namespace: Namespace.ID? = nil) -> some View {
+        if let id, let namespace {
             self.glassEffect(.regular, in: RoundedRectangle(cornerRadius: cornerRadius))
+                .glassEffectID(id, in: namespace)
         } else {
-            self.background(.regularMaterial, in: RoundedRectangle(cornerRadius: cornerRadius))
+            self.glassEffect(.regular, in: RoundedRectangle(cornerRadius: cornerRadius))
         }
     }
 }

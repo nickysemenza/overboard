@@ -21,7 +21,7 @@ person's workflow and taste.
 Grab the zip from
 [Releases](https://github.com/nickysemenza/overboard/releases) — it's
 unsigned (no paid Developer Program behind this project), so the first launch
-needs **right-click → Open**. Or build from source (macOS 14+, Xcode 16+):
+needs **right-click → Open**. Or build from source (macOS 26+, Xcode 26+):
 
 ```sh
 git clone https://github.com/nickysemenza/overboard && cd overboard
@@ -79,6 +79,10 @@ updates. All clipboard data stays on your machine.
 - **CLI**: `overboard history|search|get|copy` with `--json` for scripts and
   agents; read-only against the app's database, copy goes through the clipboard
   so the app captures it. Install via `scripts/install-cli.sh`.
+- **Shortcuts, Siri & Spotlight**: App Intents for Copy Latest Clip, Search
+  Clipboard History, Copy Snippet (with a snippet picker), Set Clipboard
+  Capture, Show Drawer, and Show Launcher. Clips themselves are never exposed
+  as entities or indexed, so secrets stay out of Spotlight.
 - **Search**: FTS5 full-text with prefix matching, blended with on-device
   semantic search (NLEmbedding) so "money projection" finds "quarterly
   revenue forecast". Filter operators: `kind:image`, `app:claude`,
@@ -180,8 +184,13 @@ have to re-grant Accessibility after every build and paste-back will look
 ```sh
 xcodebuild -project Overboard.xcodeproj -scheme Overboard build   # app
 cd OverboardKit && swift test                                     # core tests
+./scripts/tools.sh lint    # pinned SwiftFormat + SwiftLint, same versions as CI
 ./scripts/dogfood.sh   # build Release, install to /Applications, relaunch
 ```
+
+`tools.sh` downloads the exact linter releases CI uses into the gitignored
+`.tools/` directory (`format` rewrites, `lint` checks), so a Homebrew upgrade
+can never make local and CI results disagree.
 
 `dogfood.sh` is the daily-driver loop: it signs with the stable Apple
 Development identity so the Accessibility grant survives the rebuild (see the

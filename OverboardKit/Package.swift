@@ -1,9 +1,24 @@
-// swift-tools-version: 6.0
+// swift-tools-version: 6.2
 import PackageDescription
+
+/// Swift 6.2 "approachable concurrency": `nonisolated async` runs on the
+/// caller's actor and conformances inherit their type's isolation. Mirrors
+/// SWIFT_APPROACHABLE_CONCURRENCY in the app target so package and app agree.
+let approachableConcurrency: [SwiftSetting] = [
+    .enableUpcomingFeature("NonisolatedNonsendingByDefault"),
+    .enableUpcomingFeature("InferIsolatedConformances"),
+]
+
+/// UI and AppKit-facing targets are main-actor by default; every type in them
+/// was already annotated `@MainActor`. Core (data layer, actors) and the CLI
+/// stay nonisolated.
+let mainActorByDefault: [SwiftSetting] = approachableConcurrency + [
+    .defaultIsolation(MainActor.self),
+]
 
 let package = Package(
     name: "OverboardKit",
-    platforms: [.macOS(.v14)],
+    platforms: [.macOS(.v26)],
     products: [
         .library(name: "OverboardCore", targets: ["OverboardCore"]),
         .library(name: "OverboardMac", targets: ["OverboardMac"]),
@@ -29,7 +44,8 @@ let package = Package(
             ],
             resources: [
                 .copy("Emoji/Resources/emoji.json"),
-            ]
+            ],
+            swiftSettings: approachableConcurrency
         ),
         .target(
             name: "OverboardMac",
@@ -37,7 +53,8 @@ let package = Package(
                 "OverboardCore",
                 .product(name: "KeyboardShortcuts", package: "KeyboardShortcuts"),
                 .product(name: "Defaults", package: "Defaults"),
-            ]
+            ],
+            swiftSettings: mainActorByDefault
         ),
         .target(
             name: "OverboardUI",
@@ -49,23 +66,28 @@ let package = Package(
                 .product(name: "Defaults", package: "Defaults"),
                 .product(name: "AsyncAlgorithms", package: "swift-async-algorithms"),
                 .product(name: "MarkdownUI", package: "swift-markdown-ui"),
-            ]
+            ],
+            swiftSettings: mainActorByDefault
         ),
         .executableTarget(
             name: "OverboardCLI",
-            dependencies: ["OverboardCore"]
+            dependencies: ["OverboardCore"],
+            swiftSettings: approachableConcurrency
         ),
         .testTarget(
             name: "OverboardCoreTests",
-            dependencies: ["OverboardCore"]
+            dependencies: ["OverboardCore"],
+            swiftSettings: approachableConcurrency
         ),
         .testTarget(
             name: "OverboardMacTests",
-            dependencies: ["OverboardMac", "OverboardCore"]
+            dependencies: ["OverboardMac", "OverboardCore"],
+            swiftSettings: approachableConcurrency
         ),
         .testTarget(
             name: "OverboardCLITests",
-            dependencies: ["OverboardCLI"]
+            dependencies: ["OverboardCLI"],
+            swiftSettings: approachableConcurrency
         ),
         .testTarget(
             name: "OverboardUISnapshotTests",
@@ -73,7 +95,10 @@ let package = Package(
                 "OverboardUI",
                 "OverboardCore",
                 .product(name: "SnapshotTesting", package: "swift-snapshot-testing"),
-            ]
+            ],
+            // Recorded PNGs are read by path by SnapshotTesting, not bundled.
+            exclude: ["__Snapshots__"],
+            swiftSettings: approachableConcurrency
         ),
     ]
 )

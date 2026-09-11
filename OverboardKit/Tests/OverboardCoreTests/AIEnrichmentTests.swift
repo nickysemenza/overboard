@@ -39,15 +39,15 @@ struct ImageTextRecognizerTests {
         return data as Data
     }
 
-    @Test func readsTextFromImage() throws {
+    @Test func readsTextFromImage() async throws {
         let png = try #require(renderTextImage("INVOICE 2024 OVERBOARD"))
-        let recognized = ImageTextRecognizer.recognizeText(in: png)
+        let recognized = await ImageTextRecognizer.recognizeText(in: png)
         let normalized = recognized?.uppercased() ?? ""
         #expect(normalized.contains("INVOICE"))
         #expect(normalized.contains("OVERBOARD"))
     }
 
-    @Test func returnsNilForBlankImage() throws {
+    @Test func returnsNilForBlankImage() async throws {
         let width = 100, height = 100
         let context = try #require(CGContext(
             data: nil, width: width, height: height,
@@ -65,7 +65,7 @@ struct ImageTextRecognizerTests {
         CGImageDestinationAddImage(destination, image, nil)
         CGImageDestinationFinalize(destination)
 
-        #expect(ImageTextRecognizer.recognizeText(in: data as Data) == nil)
+        #expect(await ImageTextRecognizer.recognizeText(in: data as Data) == nil)
     }
 }
 

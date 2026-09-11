@@ -11,9 +11,8 @@ import OverboardCore
 ///   - an AppleScript `refreshSnapshot()` reconcile, run at launch and on every
 ///     launcher summon, that recovers the state after a restart or a dropped
 ///     notification.
-@MainActor
 public final class SpotifyNowPlayingMonitor {
-    public static let spotifyBundleID = "com.spotify.client"
+    public nonisolated static let spotifyBundleID = "com.spotify.client"
     private static let playbackNotification = "com.spotify.client.PlaybackStateChanged"
 
     public private(set) var current: NowPlayingTrack?
@@ -34,7 +33,7 @@ public final class SpotifyNowPlayingMonitor {
     /// Caps concurrent snapshots so wedged Apple Events can't accumulate worker
     /// threads; a stuck script holds its slot and further snapshots skip. Static
     /// so the queue block can signal it without capturing the main-actor self.
-    private static let snapshotSlots = DispatchSemaphore(value: 2)
+    private nonisolated static let snapshotSlots = DispatchSemaphore(value: 2)
     private let logger = Logger(subsystem: "com.nickysemenza.overboard", category: "spotify")
 
     public init() {}
@@ -122,7 +121,8 @@ public final class SpotifyNowPlayingMonitor {
 
     /// Runs the Spotify snapshot AppleScript. Returns the tab-separated line,
     /// "" when stopped, or nil on error (Automation denied, script failure).
-    private static func runSnapshotScript() -> String? {
+    /// nonisolated: runs on `snapshotQueue`, never on the main actor.
+    private nonisolated static func runSnapshotScript() -> String? {
         let source = """
         tell application "Spotify"
             if player state is stopped then return ""

@@ -43,20 +43,17 @@ public enum AITransform: String, Sendable, CaseIterable, Identifiable {
 }
 
 public enum AITransformer {
-    /// True when the on-device model is ready (Apple Silicon, macOS 26+,
-    /// Apple Intelligence enabled).
+    /// True when the on-device model is ready (Apple Silicon with Apple
+    /// Intelligence enabled).
     public static var isAvailable: Bool {
         #if canImport(FoundationModels)
-            if #available(macOS 26.0, *) {
-                if case .available = SystemLanguageModel.default.availability {
-                    return true
-                }
+            if case .available = SystemLanguageModel.default.availability {
+                return true
             }
         #endif
         return false
     }
 
-    @available(macOS 26.0, *)
     public static func apply(_ transform: AITransform, to text: String) async throws -> String {
         // Fresh session per request: sessions accumulate transcript context,
         // and each transform should be stateless.
@@ -73,7 +70,6 @@ public enum AITransformer {
     /// Runs a free-text user instruction (the launcher's "Ask AI" row) over the
     /// clipboard text. Same stateless-session, same 6000-char input cap as the
     /// fixed transforms; only the instruction is user-supplied.
-    @available(macOS 26.0, *)
     public static func apply(prompt: String, to text: String) async throws -> String {
         let session = LanguageModelSession(instructions: """
         Apply the user's requested transformation to the text. Return only the \

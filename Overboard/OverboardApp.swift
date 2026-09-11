@@ -71,6 +71,7 @@ struct OverboardApp: App {
                     .frame(minWidth: 420, minHeight: 320)
             }
             .defaultSize(width: 520, height: 600)
+            .restorationBehavior(.disabled)
         #endif
 
         Window("Snippets", id: "snippets") {
@@ -78,6 +79,7 @@ struct OverboardApp: App {
                 .frame(minWidth: 540, minHeight: 360)
         }
         .defaultSize(width: 640, height: 420)
+        .restorationBehavior(.disabled)
 
         Settings {
             SettingsView(store: AppServices.shared.store)
@@ -95,10 +97,13 @@ private struct MenuBarLabel: View {
 
     var body: some View {
         Image(systemName: self.symbolName)
+            .contentTransition(.symbolEffect(.replace))
             .symbolEffect(.bounce, value: self.signal.count)
             // Dim the boat while paused so an off clipboard is obvious. Update
             // state still owns the circle-badge variant; pause owns the opacity.
             .foregroundStyle(self.captureState.isPaused ? .secondary : .primary)
+            .accessibilityLabel("Overboard")
+            .accessibilityValue(self.captureState.isPaused ? "Capture paused" : "Capturing")
     }
 
     private var symbolName: String {

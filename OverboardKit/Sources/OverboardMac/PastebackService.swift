@@ -5,7 +5,6 @@ import OverboardCore
 /// Writes history items back to the pasteboard and synthesizes ⌘V into the
 /// target app. Direct paste needs Accessibility; without it we fall back to
 /// copy-only (the caller shows a "press ⌘V" HUD).
-@MainActor
 public final class PastebackService {
     public enum Outcome: Sendable {
         /// ⌘V was synthesized into the target app.

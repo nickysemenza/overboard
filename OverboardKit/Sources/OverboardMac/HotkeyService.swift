@@ -18,7 +18,6 @@ public extension KeyboardShortcuts.Name {
 }
 
 /// Thin wrapper so only OverboardMac imports KeyboardShortcuts.
-@MainActor
 public enum HotkeyService {
     public static func onToggleDrawer(_ handler: @escaping @MainActor () -> Void) {
         KeyboardShortcuts.onKeyDown(for: .toggleDrawer, action: handler)

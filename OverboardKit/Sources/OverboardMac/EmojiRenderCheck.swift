@@ -4,7 +4,7 @@ import Foundation
 /// Answers "can this OS actually draw this emoji?" — the `isRenderable` gate
 /// EmojiCatalog uses to hide emoji newer than the installed Apple Color Emoji
 /// font (which would otherwise render as tofu or a decomposed ZWJ sequence).
-public enum EmojiRenderCheck {
+public nonisolated enum EmojiRenderCheck {
     /// A supported emoji lays out as a single glyph cluster in Apple Color
     /// Emoji. Unsupported ones either fall back to another font (lone
     /// unsupported scalars) or split into multiple glyphs (unsupported ZWJ

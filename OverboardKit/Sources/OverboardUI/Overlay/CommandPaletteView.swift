@@ -13,9 +13,6 @@ struct CommandPaletteItem: Identifiable {
 /// launcher can reuse it: a query field over a filtered, keyboard-navigable
 /// row list, floating in a glass card. Owns no domain logic — the caller
 /// supplies the rows, binds query/index, and handles `onRun`.
-///
-/// Layout here must stay byte-for-byte with the original `ActionPalette` so its
-/// recorded snapshot keeps passing without a re-record.
 struct CommandPaletteView: View {
     let items: [CommandPaletteItem]
     @Binding var query: String
@@ -24,6 +21,11 @@ struct CommandPaletteView: View {
     /// keeps its own wording).
     let emptyMessage: String
     let onRun: (Int) -> Void
+    /// The host panel's glass namespace, shared via `GlassEffectContainer` so this
+    /// palette morphs out of the panel instead of cross-fading in. Nil when
+    /// hosted standalone (e.g. snapshot tests) — the palette then renders as
+    /// its own independent glass shape.
+    var glassNamespace: Namespace.ID?
 
     @FocusState private var queryFocused: Bool
 
@@ -59,11 +61,7 @@ struct CommandPaletteView: View {
             }
         }
         .frame(width: 380)
-        .glassPanel(cornerRadius: 12)
-        .overlay {
-            RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(.primary.opacity(0.15), lineWidth: 1)
-        }
+        .glassPanel(cornerRadius: 12, id: "palette", in: self.glassNamespace)
         .shadow(color: .black.opacity(0.25), radius: 18, y: 6)
         .onAppear { self.queryFocused = true }
         .onChange(of: self.query) {

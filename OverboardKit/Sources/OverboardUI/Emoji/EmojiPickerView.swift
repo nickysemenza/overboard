@@ -13,29 +13,27 @@ public struct EmojiPickerView: View {
     }
 
     public var body: some View {
-        VStack(spacing: 8) {
-            self.searchBar
-            Divider()
-            if self.viewModel.sections.isEmpty {
-                self.emptyState
-            } else {
-                self.grid
+        GlassEffectContainer(spacing: 20) {
+            VStack(spacing: 8) {
+                self.searchBar
+                Divider()
+                if self.viewModel.sections.isEmpty {
+                    self.emptyState
+                } else {
+                    self.grid
+                }
+                Divider()
+                EmojiFooterBar()
             }
-            Divider()
-            EmojiFooterBar()
-        }
-        .padding(14)
-        .glassPanel(cornerRadius: 16)
-        .overlay {
-            RoundedRectangle(cornerRadius: 16)
-                .strokeBorder(.primary.opacity(0.12), lineWidth: 1)
-        }
-        .padding(12)
-        .onAppear {
-            self.fieldFocused = true
-        }
-        .onChange(of: self.viewModel.showGeneration) {
-            self.fieldFocused = true
+            .padding(14)
+            .glassPanel(cornerRadius: 16)
+            .padding(12)
+            .onAppear {
+                self.fieldFocused = true
+            }
+            .onChange(of: self.viewModel.showGeneration) {
+                self.fieldFocused = true
+            }
         }
     }
 
@@ -89,6 +87,7 @@ public struct EmojiPickerView: View {
                 // them smears glyphs mid-scroll (same fix as the launcher list).
                 .transaction { $0.disablesAnimations = true }
             }
+            .scrollEdgeEffectStyle(.soft, for: .top)
             .onChange(of: self.viewModel.selectedIndex) {
                 guard let id = self.viewModel.selectedCellID else { return }
                 proxy.scrollTo(id)
@@ -126,6 +125,8 @@ struct EmojiCell: View {
             )
             .contentShape(RoundedRectangle(cornerRadius: 8))
             .help(self.emoji.name)
+            .accessibilityLabel(self.emoji.name)
+            .accessibilityAddTraits(self.isSelected ? .isSelected : [])
     }
 }
 

@@ -5,7 +5,6 @@ import OverboardMac
 
 /// State machine for the launcher bar: instant calculator/web rows on every
 /// keystroke, Spotlight file rows spliced in after a debounce.
-@MainActor
 @Observable
 public final class LauncherViewModel {
     public enum CommitModifier: Sendable {

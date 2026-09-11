@@ -5,7 +5,6 @@ import SwiftUI
 /// Syntax highlighting for code clips in the preview pane, via highlight.js
 /// (JavaScriptCore — fully local). The Highlightr instance is cached because
 /// loading the JS engine costs ~100ms.
-@MainActor
 enum CodeHighlighter {
     /// Inputs are capped so a pathological clip can't stall the preview.
     private static let maxLength = 12000

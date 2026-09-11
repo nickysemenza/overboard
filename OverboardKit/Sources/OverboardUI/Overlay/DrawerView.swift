@@ -8,61 +8,62 @@ public struct DrawerView: View {
     @FocusState private var searchFocused: Bool
     @Environment(\.openSettings) private var openSettings
     @Default(.savedSearches) private var savedSearches
+    /// Shared between the panel's glass shape and the ⌘K palette's so Liquid
+    /// Glass can morph the palette out of the panel instead of cross-fading.
+    @Namespace private var glassNamespace
 
     public init(viewModel: DrawerViewModel) {
         self.viewModel = viewModel
     }
 
     public var body: some View {
-        VStack(spacing: 10) {
-            if self.viewModel.previewState == .hidden {
-                self.searchBar
-                if self.viewModel.mode == .history, !self.savedSearches.isEmpty {
-                    self.savedSearchBar
+        GlassEffectContainer(spacing: 20) {
+            VStack(spacing: 10) {
+                if self.viewModel.previewState == .hidden {
+                    self.searchBar
+                    if self.viewModel.mode == .history, !self.savedSearches.isEmpty {
+                        self.savedSearchBar
+                    }
+                    self.cardStrip
+                    self.footerHints
+                } else {
+                    PreviewPane(viewModel: self.viewModel)
                 }
-                self.cardStrip
-                self.footerHints
-            } else {
-                PreviewPane(viewModel: self.viewModel)
             }
-        }
-        .overlay {
-            if self.viewModel.isPaletteOpen {
-                ActionPalette(viewModel: self.viewModel)
-                    .transition(.scale(scale: 0.95).combined(with: .opacity))
+            .overlay {
+                if self.viewModel.isPaletteOpen {
+                    ActionPalette(viewModel: self.viewModel, glassNamespace: self.glassNamespace)
+                        .transition(.scale(scale: 0.95).combined(with: .opacity))
+                }
             }
-        }
-        .animation(.spring(response: 0.22, dampingFraction: 0.85), value: self.viewModel.isPaletteOpen)
-        .padding(14)
-        .glassPanel(cornerRadius: 16)
-        .overlay {
-            RoundedRectangle(cornerRadius: 16)
-                .strokeBorder(.primary.opacity(0.12), lineWidth: 1)
-        }
-        .padding(12)
-        .onAppear {
-            self.searchFocused = true
-            // The overlay controller can't reach SwiftUI environment actions;
-            // hand it the capability.
-            self.viewModel.onOpenSettings = {
-                self.openSettings()
-                NSApp.activate(ignoringOtherApps: true)
-            }
-        }
-        .onChange(of: self.viewModel.query) {
-            self.viewModel.scheduleSearch()
-        }
-        .onChange(of: self.viewModel.previewState) {
-            if self.viewModel.previewState == .hidden {
+            .animation(.spring(response: 0.22, dampingFraction: 0.85), value: self.viewModel.isPaletteOpen)
+            .padding(14)
+            .glassPanel(cornerRadius: 16, id: "panel", in: self.glassNamespace)
+            .padding(12)
+            .onAppear {
                 self.searchFocused = true
+                // The overlay controller can't reach SwiftUI environment actions;
+                // hand it the capability.
+                self.viewModel.onOpenSettings = {
+                    self.openSettings()
+                    NSApp.activate(ignoringOtherApps: true)
+                }
             }
-        }
-        .onChange(of: self.viewModel.isPaletteOpen) {
-            // The ⌘K palette owns focus while open; when it closes, first
-            // responder isn't returned automatically, so typed characters would
-            // be dropped until the user clicks back into the field.
-            if !self.viewModel.isPaletteOpen {
-                self.searchFocused = true
+            .onChange(of: self.viewModel.query) {
+                self.viewModel.scheduleSearch()
+            }
+            .onChange(of: self.viewModel.previewState) {
+                if self.viewModel.previewState == .hidden {
+                    self.searchFocused = true
+                }
+            }
+            .onChange(of: self.viewModel.isPaletteOpen) {
+                // The ⌘K palette owns focus while open; when it closes, first
+                // responder isn't returned automatically, so typed characters would
+                // be dropped until the user clicks back into the field.
+                if !self.viewModel.isPaletteOpen {
+                    self.searchFocused = true
+                }
             }
         }
     }
@@ -88,6 +89,7 @@ public struct DrawerView: View {
                 .buttonStyle(.borderless)
                 .foregroundStyle(.secondary)
                 .help("Save this search")
+                .accessibilityLabel("Save search")
             }
 
             if self.viewModel.stack.count > 0 {

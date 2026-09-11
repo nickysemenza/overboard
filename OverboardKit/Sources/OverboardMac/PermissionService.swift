@@ -3,7 +3,6 @@ import Foundation
 
 /// Accessibility (TCC) state. Direct paste is an upgrade, not a gate: every
 /// feature except ⌘V synthesis works without this permission.
-@MainActor
 public enum PermissionService {
     private static var hasPromptedThisLaunch = false
 

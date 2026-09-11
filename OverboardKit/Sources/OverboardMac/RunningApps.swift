@@ -2,7 +2,6 @@ import AppKit
 
 /// Snapshot + change notifications for running regular apps, keyed by bundle
 /// URL path (matches AppIndex's canonical /Applications paths).
-@MainActor
 public final class RunningApps {
     public var onChange: () -> Void = {}
     private var observers: [NSObjectProtocol] = []
@@ -26,14 +25,18 @@ public final class RunningApps {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.onChange()
+            MainActor.assumeIsolated {
+                self?.onChange()
+            }
         }
         let terminateObserver = notificationCenter.addObserver(
             forName: NSWorkspace.didTerminateApplicationNotification,
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.onChange()
+            MainActor.assumeIsolated {
+                self?.onChange()
+            }
         }
 
         self.observers = [launchObserver, terminateObserver]

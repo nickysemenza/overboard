@@ -12,3 +12,6 @@ dist/
 # SPM
 .build/
 .swiftpm/
+
+# Pinned dev tools fetched by scripts/tools.sh
+.tools/
