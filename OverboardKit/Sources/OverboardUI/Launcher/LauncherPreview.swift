@@ -1,5 +1,6 @@
 import AppKit
 import OverboardCore
+import OverboardFilePreview
 import OverboardMac
 import Quartz
 import SwiftUI
@@ -50,6 +51,7 @@ struct LauncherPreview: View {
     @State private var loadedID: String?
     @State private var error: String?
     @State private var fileState: FileSearchInfo.Availability?
+    @State private var filePreviewContent: FilePreviewContent?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -82,7 +84,11 @@ struct LauncherPreview: View {
                 } else if self.fileState == .unavailable {
                     ContentUnavailableView("File unavailable", systemImage: "exclamationmark.icloud", description: Text("It may have moved, or its location may be offline. Rebuild the index in Settings → Files."))
                 } else if self.fileState == .local {
-                    NativeFilePreview(url: url)
+                    if let filePreviewContent {
+                        FilePreviewView(content: filePreviewContent)
+                    } else {
+                        NativeFilePreview(url: url)
+                    }
                 } else {
                     ProgressView()
                 }
@@ -129,7 +135,7 @@ struct LauncherPreview: View {
     }
 
     private func load() async {
-        self.text = nil; self.image = nil; self.code = nil; self.error = nil; self.fileState = nil
+        self.text = nil; self.image = nil; self.code = nil; self.error = nil; self.fileState = nil; self.filePreviewContent = nil
         self.loading = true
         defer { if !Task.isCancelled { self.loadedID = self.result?.id; self.loading = false } }
         do {
@@ -158,6 +164,11 @@ struct LauncherPreview: View {
                 let state = await Task.detached(priority: .utility) { FileAvailability.status(at: url) }.value
                 guard !Task.isCancelled else { return }
                 self.fileState = state
+                if state == .local, FilePreviewEligibility.supports(url) {
+                    self.filePreviewContent = await Task.detached(priority: .utility) {
+                        try? FilePreviewLoader.load(url)
+                    }.value
+                }
             case let .snippet(item): self.text = item.body
             case let .calculation(input, display): self.text = "\(input) = \(display)"
             case let .webSearch(query, _): self.text = query

@@ -1,5 +1,6 @@
 import AppKit
 import OverboardCore
+import OverboardFilePreview
 @testable import OverboardUI
 import SwiftUI
 import Testing
@@ -82,5 +83,22 @@ struct RenderSmokeTests {
         )
         let view = SnippetCardView(snippet: snippet, index: 0, isSelected: false)
         #expect(self.rendersNonEmpty(snapshotHost(view, width: 220, height: 210)))
+    }
+
+    @Test func filePreviewsRenderInBothAppearances() {
+        let source = FilePreviewContent(
+            url: URL(fileURLWithPath: "/tmp/Preview.swift"), text: "let preview = true\n",
+            language: "swift", isMarkdown: false, isTruncated: false, fileSize: 19
+        )
+        let markdown = FilePreviewContent(
+            url: URL(fileURLWithPath: "/tmp/Preview.md"),
+            text: "# Preview\n\n```swift\nlet highlighted = true\n```\n\n| One | Two |\n| --- | --- |\n| 1 | 2 |",
+            language: nil, isMarkdown: true, isTruncated: true, fileSize: 96
+        )
+        for content in [source, markdown] {
+            for dark in [false, true] {
+                #expect(self.rendersNonEmpty(snapshotHost(FilePreviewView(content: content), width: 520, height: 360, dark: dark)))
+            }
+        }
     }
 }

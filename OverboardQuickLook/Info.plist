@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDisplayName</key>
+	<string>Overboard Quick Look</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>XPC!</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>NSExtension</key>
+	<dict>
+		<key>NSExtensionAttributes</key>
+		<dict>
+		<key>QLSupportedContentTypes</key>
+		<array>
+			<string>public.c-source</string>
+			<string>public.c-plus-plus-source</string>
+			<string>public.objective-c-source</string>
+			<string>public.objective-c-plus-plus-source</string>
+			<string>public.swift-source</string>
+			<string>public.shell-script</string>
+			<string>public.python-script</string>
+			<string>com.netscape.javascript-source</string>
+			<string>public.yaml</string>
+			<string>public.json</string>
+			<string>public.toml</string>
+			<string>com.microsoft.ini</string>
+			<string>com.apple.property-list</string>
+			<string>public.xml</string>
+			<string>net.daringfireball.markdown</string>
+			<string>public.html</string>
+			<string>public.css</string>
+			<string>public.plain-text</string>
+			<string>public.comma-separated-values-text</string>
+			<string>public.tab-separated-values-text</string>
+			<string>com.apple.log</string>
+			<string>org.iso.sql</string>
+			<string>com.nickysemenza.overboard.source</string>
+			<string>com.nickysemenza.overboard.configuration</string>
+			<string>com.nickysemenza.overboard.markup</string>
+			<string>com.nickysemenza.overboard.text</string>
+		</array>
+		<key>QLSupportsSearchableItems</key>
+		<false/>
+		<key>QLIsDataBasedPreview</key>
+		<false/>
+	</dict>
+		<key>NSExtensionPointIdentifier</key>
+		<string>com.apple.quicklook.preview</string>
+		<key>NSExtensionPrincipalClass</key>
+		<string>$(PRODUCT_MODULE_NAME).PreviewViewController</string>
+	</dict>
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key><string>com.nickysemenza.overboard.source</string>
+			<key>UTTypeDescription</key><string>Source code</string>
+			<key>UTTypeConformsTo</key><array><string>public.plain-text</string></array>
+			<key>UTTypeTagSpecification</key><dict><key>public.filename-extension</key><array><string>c</string><string>cc</string><string>cpp</string><string>cxx</string><string>h</string><string>hpp</string><string>m</string><string>mm</string><string>swift</string><string>java</string><string>kt</string><string>go</string><string>rs</string><string>py</string><string>rb</string><string>php</string><string>pl</string><string>lua</string><string>r</string><string>js</string><string>jsx</string><string>ts</string><string>tsx</string><string>vue</string><string>svelte</string><string>dart</string><string>cs</string><string>fs</string><string>fsx</string><string>scala</string><string>ex</string><string>exs</string><string>erl</string><string>hrl</string><string>hs</string><string>clj</string><string>cljs</string><string>sh</string><string>bash</string><string>zsh</string><string>fish</string><string>ps1</string><string>sql</string></array></dict>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key><string>com.nickysemenza.overboard.configuration</string>
+			<key>UTTypeDescription</key><string>Configuration file</string>
+			<key>UTTypeConformsTo</key><array><string>public.plain-text</string></array>
+			<key>UTTypeTagSpecification</key><dict><key>public.filename-extension</key><array><string>yaml</string><string>yml</string><string>json</string><string>jsonc</string><string>toml</string><string>ini</string><string>cfg</string><string>conf</string><string>properties</string><string>env</string><string>editorconfig</string><string>xcconfig</string><string>plist</string><string>xml</string><string>gradle</string><string>makefile</string><string>cmake</string><string>dockerfile</string><string>gitignore</string><string>gitattributes</string><string>gitmodules</string></array></dict>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key><string>com.nickysemenza.overboard.markup</string>
+			<key>UTTypeDescription</key><string>Markup stylesheet</string>
+			<key>UTTypeConformsTo</key><array><string>public.plain-text</string></array>
+			<key>UTTypeTagSpecification</key><dict><key>public.filename-extension</key><array><string>md</string><string>markdown</string><string>mdown</string><string>mkdn</string><string>rst</string><string>html</string><string>htm</string><string>xhtml</string><string>css</string><string>scss</string><string>sass</string><string>less</string></array></dict>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key><string>com.nickysemenza.overboard.text</string>
+			<key>UTTypeDescription</key><string>Plain text data</string>
+			<key>UTTypeConformsTo</key><array><string>public.plain-text</string></array>
+			<key>UTTypeTagSpecification</key><dict><key>public.filename-extension</key><array><string>txt</string><string>text</string><string>log</string><string>csv</string><string>tsv</string></array></dict>
+		</dict>
+	</array>
+</dict>
+</plist>

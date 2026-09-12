@@ -121,6 +121,16 @@ struct LauncherCommitRoutingTests {
         #expect(viewModel.history == ["one"])
     }
 
+    @Test func legacySearchHistoryNormalizesWithoutChangingItsStoredOrder() {
+        let viewModel = self.freshViewModel()
+        Defaults[.launcherSearchHistory] = ["old", "middle", "old", "new"]
+
+        viewModel.prepareForShow(clearQuery: true)
+
+        #expect(viewModel.history == ["middle", "old", "new"])
+        #expect(Defaults[.launcherSearchHistory] == ["middle", "old", "new"])
+    }
+
     @Test func secondaryRowsSpliceAboveWebRow() async {
         let snippet = Snippet(title: "Standup", body: "notes")
         let clip = Fixtures.item(preview: "deploy checklist")

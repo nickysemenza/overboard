@@ -106,6 +106,14 @@ updates. All clipboard data stays on your machine.
   preview — scroll long text, see images large, browse with ←/→, view source-page
   URL and title. ⌘E edits the text inline before pasting (⌘↩ pastes the edited
   version).
+- **Code previews**: Finder, Spotlight Quick Look, and the launcher share an
+  on-demand syntax preview for source, configuration, markup, plain-text, log,
+  CSV, and TSV files, plus other extensions macOS explicitly identifies as
+  `public.plain-text`. Previews read at most 256 KiB only after selection;
+  their bounded sample is signature-checked before decoding and never feeds the
+  file index. Rich `public.text` formats such as RTF, PDFs, images, Office/iWork
+  documents, archives, media, databases, and app bundles keep their system or
+  vendor preview.
 - **OCR**: copied images and screenshots are text-recognized (Vision) and
   fully searchable by their contents — find that wifi-password screenshot
   by typing the network name.

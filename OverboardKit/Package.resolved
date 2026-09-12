@@ -1,5 +1,5 @@
 {
-  "originHash" : "94f102de7c162d1961a939da1406095cbcc31bd1e1c921e4bca318dea90aab8e",
+  "originHash" : "e7ffd9e1c6362e65ee9310b3eae94e3530e94434c1cf8e0ee25303dcce1e77bf",
   "pins" : [
     {
       "identity" : "defaults",
@@ -17,6 +17,15 @@
       "state" : {
         "revision" : "95ffe4c352e456cede933d9910d25b9c84039d1b",
         "version" : "0.13.9"
+      }
+    },
+    {
+      "identity" : "filetype",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/velocityzen/FileType",
+      "state" : {
+        "revision" : "2dd39f2fdde25681fbf8184ad83f6226bf86ca0a",
+        "version" : "2.2.1"
       }
     },
     {
