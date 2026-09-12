@@ -23,7 +23,16 @@ struct ItemCardView: View {
     @State private var thumbnail: NSImage?
     @State private var hovering = false
     @State private var miniCode: NSAttributedString?
+    /// The (length-capped) source text behind `miniCode`, kept so a
+    /// colorScheme flip can re-highlight without re-fetching from the store.
+    @State private var miniCodeSource: String?
     @State private var swatch: NSColor?
+    @State private var faviconImage: NSImage?
+    @State private var linkPreviewImage: NSImage?
+    /// Dominant color of the source app's icon, for the tinted header
+    /// gradient — computed once per `.task(id:)` pass instead of during
+    /// every layout pass.
+    @State private var headerTint: Color?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -67,6 +76,10 @@ struct ItemCardView: View {
         }
         .task(id: self.item.id) {
             await self.loadThumbnailIfNeeded()
+        }
+        .onChange(of: self.colorScheme) {
+            guard let source = self.miniCodeSource else { return }
+            Task { self.miniCode = await CodeHighlighter.highlight(source, dark: self.colorScheme == .dark) }
         }
         .contextMenu {
             Button("Paste") { self.onPaste(.full) }
@@ -191,7 +204,7 @@ struct ItemCardView: View {
         .padding(.vertical, 7)
         .background {
             // Paste-style signature: header tinted by the source app's icon.
-            if let tint = AppIconCache.shared.tint(forBundleID: item.sourceBundleID) {
+            if let tint = self.headerTint {
                 LinearGradient(
                     colors: [tint.opacity(0.45), tint.opacity(0.2)],
                     startPoint: .leading,
@@ -396,16 +409,6 @@ struct ItemCardView: View {
         return self.linkHost ?? "Link"
     }
 
-    private var faviconImage: NSImage? {
-        guard let data = item.faviconData, !data.isEmpty else { return nil }
-        return NSImage(data: data)
-    }
-
-    private var linkPreviewImage: NSImage? {
-        guard let data = item.previewImageData, !data.isEmpty else { return nil }
-        return NSImage(data: data)
-    }
-
     /// Metadata line under the card content (char/line counts, file size…).
     /// Images carry their dimensions in the image overlay instead, so they get
     /// no footer row here. Nil metadata renders nothing — no placeholder.
@@ -465,6 +468,8 @@ struct ItemCardView: View {
     }
 
     private func loadThumbnailIfNeeded() async {
+        // Header tint runs for every kind, so it lives outside the switch.
+        self.headerTint = AppIconCache.shared.tint(forBundleID: self.item.sourceBundleID)
         switch self.item.kind {
         case .image:
             guard self.thumbnail == nil,
@@ -486,10 +491,11 @@ struct ItemCardView: View {
                   self.item.category == "code",
                   let text = try? await store.plainText(for: item.id)
             else { return }
-            self.miniCode = CodeHighlighter.highlight(
-                String(text.prefix(500)),
-                dark: self.colorScheme == .dark
-            )
+            let capped = String(text.prefix(500))
+            self.miniCodeSource = capped
+            let highlighted = await CodeHighlighter.highlight(capped, dark: self.colorScheme == .dark)
+            guard !Task.isCancelled else { return }
+            self.miniCode = highlighted
 
         case .color:
             guard self.swatch == nil,
@@ -499,7 +505,17 @@ struct ItemCardView: View {
             else { return }
             self.swatch = try? NSKeyedUnarchiver.unarchivedObject(ofClass: NSColor.self, from: data)
 
-        default:
+        case .link:
+            // Already-fetched bytes on the model — just decode once here
+            // instead of on every body evaluation.
+            if self.faviconImage == nil, let data = item.faviconData, !data.isEmpty {
+                self.faviconImage = NSImage(data: data)
+            }
+            if self.linkPreviewImage == nil, let data = item.previewImageData, !data.isEmpty {
+                self.linkPreviewImage = NSImage(data: data)
+            }
+
+        case .file:
             break
         }
     }
@@ -570,27 +586,50 @@ struct ItemCardView: View {
 }
 
 /// Resolves and caches app icons by bundle ID. Icons are looked up lazily —
-/// we never persist them.
+/// we never persist them. Backed by `NSCache` (rather than a plain
+/// dictionary) so the icon/tint caches can be evicted under memory pressure
+/// instead of growing for the life of the process.
+@MainActor
 final class AppIconCache {
     static let shared = AppIconCache()
-    private var cache: [String: NSImage?] = [:]
-    private var tintCache: [String: Color?] = [:]
+
+    /// `NSCache` needs a reference-type value; wraps the (possibly-nil)
+    /// lookup result so a bundle ID known to have no icon/tint stays
+    /// distinguishable from one never looked up.
+    private final class IconBox {
+        let image: NSImage?
+        init(_ image: NSImage?) {
+            self.image = image
+        }
+    }
+
+    private final class TintBox {
+        let color: Color?
+        init(_ color: Color?) {
+            self.color = color
+        }
+    }
+
+    private let iconCache = NSCache<NSString, IconBox>()
+    private let tintCache = NSCache<NSString, TintBox>()
 
     func icon(forBundleID bundleID: String?) -> NSImage? {
         guard let bundleID else { return nil }
-        if let cached = cache[bundleID] { return cached }
+        let key = bundleID as NSString
+        if let boxed = self.iconCache.object(forKey: key) { return boxed.image }
         let icon = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID)
             .map { NSWorkspace.shared.icon(forFile: $0.path) }
-        self.cache[bundleID] = icon
+        self.iconCache.setObject(IconBox(icon), forKey: key)
         return icon
     }
 
     /// Dominant color of the app's icon (average pixel), for tinted headers.
     func tint(forBundleID bundleID: String?) -> Color? {
         guard let bundleID else { return nil }
-        if let cached = tintCache[bundleID] { return cached }
+        let key = bundleID as NSString
+        if let boxed = self.tintCache.object(forKey: key) { return boxed.color }
         let tint = self.icon(forBundleID: bundleID).flatMap(Self.averageColor)
-        self.tintCache[bundleID] = tint
+        self.tintCache.setObject(TintBox(tint), forKey: key)
         return tint
     }
 

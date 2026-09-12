@@ -1,5 +1,4 @@
 import AppKit
-import Highlightr
 import MarkdownUI
 import SwiftUI
 
@@ -45,18 +44,10 @@ public struct FilePreviewView: View {
         }
         .task(id: "\(self.content.url.path)-\(self.colorScheme == .dark)") {
             guard !self.content.isMarkdown else { self.highlighted = nil; return }
-            self.highlighted = FilePreviewHighlighter.highlight(self.content.text, language: self.content.language, dark: self.colorScheme == .dark)
+            let highlighted = await HighlightrCache.shared.highlight(self.content.text, language: self.content.language, dark: self.colorScheme == .dark)
+            guard !Task.isCancelled else { return }
+            self.highlighted = highlighted
         }
-    }
-}
-
-@MainActor
-private enum FilePreviewHighlighter {
-    static func highlight(_ text: String, language: String?, dark: Bool) -> NSAttributedString? {
-        guard let highlightr = Highlightr() else { return nil }
-        highlightr.setTheme(to: dark ? "atom-one-dark" : "xcode")
-        highlightr.theme.codeFont = .monospacedSystemFont(ofSize: 12, weight: .regular)
-        return language.flatMap { highlightr.highlight(text, as: $0) } ?? highlightr.highlight(text)
     }
 }
 
@@ -65,7 +56,7 @@ private struct HighlightrMarkdownSyntaxHighlighter: CodeSyntaxHighlighter {
     let dark: Bool
 
     func highlightCode(_ code: String, language: String?) -> Text {
-        guard let highlighted = FilePreviewHighlighter.highlight(code, language: language, dark: self.dark),
+        guard let highlighted = HighlightrCache.shared.highlightSync(code, language: language, dark: self.dark),
               let attributed = try? AttributedString(highlighted, including: \.appKit)
         else { return Text(code) }
         return Text(attributed)

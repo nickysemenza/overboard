@@ -57,6 +57,12 @@ struct LauncherPreview: View {
     @State private var error: String?
     @State private var fileState: FileSearchInfo.Availability?
     @State private var filePreviewContent: FilePreviewContent?
+    /// Shown only once loading has taken longer than the delay below, so a
+    /// fast load (the common case) never flashes a spinner on every
+    /// selection change.
+    @State private var showSpinner = false
+    @State private var spinnerTask: Task<Void, Never>?
+    private static let spinnerDelay: Duration = .milliseconds(150)
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -67,13 +73,18 @@ struct LauncherPreview: View {
         .background(.background.opacity(0.35))
         .task(id: self.result?.id) { await self.load() }
         .onChange(of: self.colorScheme) {
-            if self.code != nil, let text { self.code = CodeHighlighter.highlight(text, dark: self.colorScheme == .dark) }
+            guard self.code != nil, let text else { return }
+            Task { self.code = await CodeHighlighter.highlight(text, dark: self.colorScheme == .dark) }
         }
     }
 
     @ViewBuilder private var content: some View {
         if self.loading || self.loadedID != self.result?.id {
-            ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+            if self.showSpinner {
+                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                Color.clear.frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
         } else if let error {
             ContentUnavailableView("Preview unavailable", systemImage: "doc", description: Text(error))
         } else if let result {
@@ -142,7 +153,17 @@ struct LauncherPreview: View {
     private func load() async {
         self.text = nil; self.image = nil; self.code = nil; self.error = nil; self.fileState = nil; self.filePreviewContent = nil
         self.loading = true
-        defer { if !Task.isCancelled { self.loadedID = self.result?.id; self.loading = false } }
+        self.showSpinner = false
+        self.spinnerTask?.cancel()
+        self.spinnerTask = Task {
+            try? await Task.sleep(for: Self.spinnerDelay)
+            guard !Task.isCancelled else { return }
+            self.showSpinner = true
+        }
+        defer {
+            self.spinnerTask?.cancel()
+            if !Task.isCancelled { self.loadedID = self.result?.id; self.loading = false }
+        }
         do {
             switch self.result {
             case let .clip(item):
@@ -162,7 +183,9 @@ struct LauncherPreview: View {
                     guard !Task.isCancelled else { return }
                     self.text = text
                     if item.category == "code" || CodeHighlighter.looksLikeCode(text) {
-                        self.code = CodeHighlighter.highlight(text, dark: self.colorScheme == .dark)
+                        let highlighted = await CodeHighlighter.highlight(text, dark: self.colorScheme == .dark)
+                        guard !Task.isCancelled else { return }
+                        self.code = highlighted
                     }
                 }
             case let .file(_, url, _):

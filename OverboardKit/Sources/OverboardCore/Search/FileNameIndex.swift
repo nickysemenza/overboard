@@ -1,5 +1,6 @@
 import Foundation
 import GRDB
+import os
 
 public struct IndexedFile: Codable, Sendable, FetchableRecord, PersistableRecord {
     public static let databaseTableName = "file_entry"
@@ -40,6 +41,10 @@ public struct IndexedFile: Codable, Sendable, FetchableRecord, PersistableRecord
 /// history. Trigram retrieval runs in SQLite; Swift ranks only the candidates.
 public actor FileNameIndex {
     private let database: DatabaseQueue
+    /// Makes `search` visible in Instruments alongside the launcher's own
+    /// instant/secondary-pass intervals (`LauncherViewModel`); zero-cost when
+    /// no tracing session is attached.
+    private let searchSignposter = OSSignposter(subsystem: "com.nickysemenza.overboard", category: "Search")
 
     public init(url: URL? = nil) throws {
         self.database = try url.map { try DatabaseQueue(path: $0.path) } ?? DatabaseQueue()
@@ -107,6 +112,8 @@ public actor FileNameIndex {
     }
 
     public func search(_ query: String, limit: Int = 60) throws -> [LauncherResult] {
+        let state = self.searchSignposter.beginInterval("FileNameIndex.search")
+        defer { self.searchSignposter.endInterval("FileNameIndex.search", state) }
         let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
         let tokens = SearchMatcher.tokens(query)
         guard !query.isEmpty else {

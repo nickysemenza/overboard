@@ -1,32 +1,20 @@
 import AppKit
-import Highlightr
+import OverboardFilePreview
 import SwiftUI
 
 /// Syntax highlighting for code clips in the preview pane, via highlight.js
-/// (JavaScriptCore — fully local). The Highlightr instance is cached because
-/// loading the JS engine costs ~100ms.
+/// (JavaScriptCore — fully local). Delegates to `HighlightrCache`
+/// (`OverboardFilePreview`) so this and the file-preview path share one
+/// cached instance (~100ms to boot) and run off the caller's actor via that
+/// cache's serial queue.
 enum CodeHighlighter {
     /// Inputs are capped so a pathological clip can't stall the preview.
     private static let maxLength = 12000
 
-    private static var cached: Highlightr?
-    private static var cachedThemeIsDark: Bool?
-
-    static func highlight(_ code: String, dark: Bool) -> NSAttributedString? {
-        guard let highlightr = instance(dark: dark) else { return nil }
+    static func highlight(_ code: String, dark: Bool) async -> NSAttributedString? {
         let capped = String(code.prefix(self.maxLength))
         // No language hint: highlight.js auto-detection.
-        return highlightr.highlight(capped)
-    }
-
-    private static func instance(dark: Bool) -> Highlightr? {
-        if let cached, self.cachedThemeIsDark == dark { return cached }
-        guard let highlightr = self.cached ?? Highlightr() else { return nil }
-        highlightr.setTheme(to: dark ? "atom-one-dark" : "xcode")
-        highlightr.theme.codeFont = .monospacedSystemFont(ofSize: 12, weight: .regular)
-        self.cached = highlightr
-        self.cachedThemeIsDark = dark
-        return highlightr
+        return await HighlightrCache.shared.highlight(capped, dark: dark)
     }
 
     /// Cheap fallback for when the AI categorizer hasn't run (or is off):

@@ -143,7 +143,7 @@ struct LauncherCommitRoutingTests {
         )
         viewModel.query = "zzz"
         viewModel.scheduleSearch()
-        // Secondary providers land after the 250 ms debounce.
+        // Secondary providers land after the 120 ms debounce.
         while viewModel.results.count < 3 {
             try? await Task.sleep(for: .milliseconds(25))
         }

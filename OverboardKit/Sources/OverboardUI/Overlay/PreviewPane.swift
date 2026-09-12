@@ -36,6 +36,10 @@ struct PreviewPane: View {
         .task(id: self.item?.id) {
             await self.load()
         }
+        .onChange(of: self.colorScheme) {
+            guard self.highlightedCode != nil, let text = self.fullText else { return }
+            Task { self.highlightedCode = await CodeHighlighter.highlight(text, dark: self.colorScheme == .dark) }
+        }
         .onChange(of: self.viewModel.previewState) {
             self.editorFocused = self.viewModel.previewState == .editing
         }
@@ -239,14 +243,18 @@ struct PreviewPane: View {
             self.fullText = text
             if let text, item.kind == .text, !item.isSecret {
                 if item.category == "code" {
-                    self.highlightedCode = CodeHighlighter.highlight(text, dark: self.colorScheme == .dark)
+                    let highlighted = await CodeHighlighter.highlight(text, dark: self.colorScheme == .dark)
+                    guard !Task.isCancelled else { return }
+                    self.highlightedCode = highlighted
                 } else if MarkdownDetector.looksLikeMarkdown(text) {
                     // Checked before looksLikeCode: a README's fenced block
                     // trips the code heuristic, and the clip would never
                     // render as markdown.
                     self.markdownSource = text
                 } else if CodeHighlighter.looksLikeCode(text) {
-                    self.highlightedCode = CodeHighlighter.highlight(text, dark: self.colorScheme == .dark)
+                    let highlighted = await CodeHighlighter.highlight(text, dark: self.colorScheme == .dark)
+                    guard !Task.isCancelled else { return }
+                    self.highlightedCode = highlighted
                 }
             }
         case .file:

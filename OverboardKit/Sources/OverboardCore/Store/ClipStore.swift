@@ -1,6 +1,7 @@
 import Foundation
 import GRDB
 import NaturalLanguage
+import os
 
 /// A breakdown of the live (non-deleted) library, for the History settings tab.
 public struct LibraryStats: Sendable {
@@ -45,6 +46,10 @@ public actor ClipStore {
     private let blobs: BlobStore
     /// Double-optional: nil = not loaded yet, .some(nil) = unavailable.
     private var embeddingCache: NLEmbedding??
+    /// Makes `search` visible in Instruments alongside the launcher's own
+    /// instant/secondary-pass intervals (`LauncherViewModel`); zero-cost when
+    /// no tracing session is attached.
+    private let searchSignposter = OSSignposter(subsystem: "com.nickysemenza.overboard", category: "Search")
 
     public init(dbWriter: any DatabaseWriter, blobs: BlobStore) {
         self.dbWriter = dbWriter
@@ -250,6 +255,8 @@ public actor ClipStore {
     /// FTS search ranked by bm25 blended with recency. The query may carry
     /// `kind:` / `app:` / `category:` operators (see ParsedQuery).
     public func search(_ query: String, limit: Int = 100) throws -> [ClipItem] {
+        let state = self.searchSignposter.beginInterval("ClipStore.search")
+        defer { self.searchSignposter.endInterval("ClipStore.search", state) }
         let parsed = ParsedQuery.parse(query)
         let match = FTSQuery.match(for: parsed.text)
 
@@ -353,14 +360,26 @@ public actor ClipStore {
         }
     }
 
-    public func matchExcerpt(itemID: String, query: String) throws -> String? {
-        guard let match = FTSQuery.match(for: ParsedQuery.parse(query).text) else { return nil }
+    /// FTS match excerpts for many items in one round trip — the launcher used
+    /// to fetch these one row at a time (a per-row `.task`, dozens of
+    /// concurrent SQLite calls while typing); it now batches every visible
+    /// clip row into a single query.
+    public func matchExcerpts(itemIDs: [String], query: String) throws -> [String: String] {
+        guard !itemIDs.isEmpty, let match = FTSQuery.match(for: ParsedQuery.parse(query).text) else { return [:] }
+        let placeholders = Array(repeating: "?", count: itemIDs.count).joined(separator: ",")
         return try self.dbWriter.read { db in
-            try String.fetchOne(db, sql: """
-            SELECT snippet(item_fts, 0, '', '', ' … ', 18)
+            let rows = try Row.fetchAll(db, sql: """
+            SELECT item.id AS id, snippet(item_fts, 0, '', '', ' … ', 18) AS excerpt
             FROM item_fts JOIN item ON item.rowid = item_fts.rowid
-            WHERE item_fts MATCH ? AND item.id = ? AND item.isSecret = 0 AND item.deletedAt IS NULL
-            """, arguments: [match, itemID])
+            WHERE item_fts MATCH ? AND item.id IN (\(placeholders)) AND item.isSecret = 0 AND item.deletedAt IS NULL
+            """, arguments: StatementArguments([match] + itemIDs))
+            var excerpts: [String: String] = [:]
+            for row in rows {
+                if let id: String = row["id"], let excerpt: String = row["excerpt"] {
+                    excerpts[id] = excerpt
+                }
+            }
+            return excerpts
         }
     }
 

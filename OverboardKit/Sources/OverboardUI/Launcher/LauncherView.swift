@@ -136,9 +136,12 @@ public struct LauncherView: View {
                             Text(header).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                                 .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 10).padding(.top, 12).padding(.bottom, 4)
                         }
+                        // Computed once per search pass in the view model
+                        // (batched into one store call) rather than per row.
+                        let excerpt: String? = if case let .clip(item) = result { self.viewModel.matchExcerpts[item.id] } else { nil }
                         LauncherRow(result: result, store: self.store, isSelected: index == self.viewModel.selectedIndex,
                                     runningAppPaths: self.viewModel.runningAppPaths, query: self.viewModel.query,
-                                    showsSourceBadge: self.viewModel.scope != .clipboard)
+                                    showsSourceBadge: self.viewModel.scope != .clipboard, excerpt: excerpt)
                             .contentShape(Rectangle())
                             .onTapGesture(count: 2) { self.viewModel.select(at: index); self.viewModel.commit() }
                             .onTapGesture { self.viewModel.select(at: index) }
@@ -248,8 +251,11 @@ struct LauncherRow: View {
     let runningAppPaths: Set<String>
     var query: String = ""
     var showsSourceBadge = true
+    /// FTS match excerpt for a `.clip` row, computed once per search pass in
+    /// `LauncherViewModel.matchExcerpts` (batched into one store call) rather
+    /// than fetched here per row.
+    var excerpt: String?
     @State private var thumbnail: NSImage?
-    @State private var excerpt: String?
 
     var body: some View {
         HStack(spacing: 10) {
@@ -304,13 +310,7 @@ struct LauncherRow: View {
             self.isSelected ? Color.accentColor.opacity(0.20) : .clear,
             in: RoundedRectangle(cornerRadius: 8)
         )
-        .task(id: self.result.id + self.query) {
-            self.excerpt = nil
-            if case let .clip(item) = self.result, !self.query.isEmpty {
-                let excerpt = try? await self.store.matchExcerpt(itemID: item.id, query: self.query)
-                guard !Task.isCancelled else { return }
-                self.excerpt = excerpt
-            }
+        .task(id: self.result.id) {
             await self.loadThumbnailIfNeeded()
         }
         .accessibilityElement(children: .combine)

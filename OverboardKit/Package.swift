@@ -68,7 +68,6 @@ let package = Package(
                 "OverboardMac",
                 "OverboardFilePreview",
                 .product(name: "KeyboardShortcuts", package: "KeyboardShortcuts"),
-                .product(name: "Highlightr", package: "Highlightr"),
                 .product(name: "Defaults", package: "Defaults"),
                 .product(name: "AsyncAlgorithms", package: "swift-async-algorithms"),
                 .product(name: "MarkdownUI", package: "swift-markdown-ui"),
