@@ -183,8 +183,7 @@ public struct LauncherView: View {
 }
 
 /// Section label above the first row of each provider run ("Apps", "Files",
-/// "Recent", …). Panel height budgets `Metrics.headerHeight` per header, so
-/// keep this in sync with LauncherPanelController if the styling changes.
+/// "Recent", …). Headers share the scrolling result viewport.
 struct LauncherSectionHeader: View {
     let title: String
 
@@ -201,8 +200,7 @@ struct LauncherSectionHeader: View {
 
 /// Persistent bottom action bar. Left brands the panel; right shows the
 /// selected row's primary (↩) action and the ⌘K palette affordance. Rendered
-/// whenever the panel is visible — even with no results — so the bar height is
-/// always budgeted (`Metrics.footerHeight`).
+/// whenever the panel is visible — even with no results — in dedicated space.
 struct LauncherFooterBar: View {
     let primaryAction: LauncherAction?
     var label: String?
