@@ -46,6 +46,22 @@ opt-outable features: fetching link-preview metadata (page title, favicon,
 description, og:image — toggle in Settings → General), and checking for app
 updates. All clipboard data stays on your machine.
 
+### Network activity
+
+Overboard makes exactly two kinds of outbound request, both on by default but
+individually toggleable, and neither sends any of your clipboard content:
+
+- **Link-preview metadata** — fetches a copied page's title, favicon,
+  description, and og:image. Toggle: Settings → General → "Fetch link titles
+  and icons".
+- **App update check** — polls GitHub's releases API once a day to see if a
+  newer version exists. Toggle: Settings → General → "Check for updates
+  automatically".
+
+Both use an ephemeral `URLSession` with cookie storage and the URL cache
+disabled, so neither request can read or leave behind cookies, and nothing
+is cached to disk.
+
 ## Features
 
 - **Capture**: clipboard history for text, rich text, links, images, files,
@@ -204,6 +220,17 @@ have to re-grant Accessibility after every build and paste-back will look
 signature too, so the Accessibility grant also survives release-to-release
 upgrades, not just local rebuilds.
 
+### Why Overboard isn't sandboxed
+
+The main app needs Accessibility-driven paste-back (synthesizing `CGEvent`s
+into the frontmost app), global hotkeys, continuous pasteboard polling, and
+file-metadata indexing across the home folder and iCloud Drive — none of
+which App Sandbox permits. The Quick Look extension, which only renders a
+preview for a file the system already handed it, is sandboxed. Hardened
+runtime is on for both targets regardless. Clipboard and index data live in
+an Application Support directory created `0700`, so no other user or
+sandboxed process on the machine can read it.
+
 ### Building
 
 ```sh
@@ -218,6 +245,10 @@ cd OverboardKit && swift test                                     # core tests
 `tools.sh` downloads the exact linter releases CI uses into the gitignored
 `.tools/` directory (`format` rewrites, `lint` checks), so a Homebrew upgrade
 can never make local and CI results disagree.
+
+Run `./scripts/hooks/install.sh` once to add a pre-commit hook that runs
+`scripts/tools.sh lint` before every commit — catches formatting/lint issues
+locally instead of on the next CI run. Not installed by default.
 
 `dogfood.sh` defaults to Debug for fast edits, builds only the current Mac's
 architecture, and reuses `build/dogfood` for both configurations. The first

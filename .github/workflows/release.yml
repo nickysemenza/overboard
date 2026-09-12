@@ -15,6 +15,14 @@ on:
   push:
     tags: ["v*"]
 
+# One release group per workflow (tags are unique, but this keeps a
+# re-pushed tag from racing itself). cancel-in-progress is deliberately
+# false: notarization runs inside this job, and killing it mid-flight would
+# leave the tag's release build half-notarized with no automatic retry.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: write
 

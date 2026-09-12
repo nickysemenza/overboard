@@ -21,6 +21,13 @@
 #
 # Best-effort throughout — never fail a build over version metadata. With no
 # git and no tags, whatever the project file set stands.
+#
+# This phase is why the project's ENABLE_USER_SCRIPT_SANDBOXING build setting
+# must stay NO: this script shells out to `git` (outside the sandbox's
+# allowed inputs) and writes directly into the already-built Info.plist
+# (outside its declared outputs), both of which the user-script sandbox
+# blocks. pbxproj build settings can't carry an inline comment explaining
+# that, so it lives here instead.
 set -e
 
 plist="${TARGET_BUILD_DIR}/${INFOPLIST_PATH}"

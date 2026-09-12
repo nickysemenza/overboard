@@ -1,0 +1,65 @@
+name: SPM dependency check
+
+# SPM isn't a Dependabot-supported ecosystem (see .github/dependabot.yml,
+# which only covers github-actions), so nothing otherwise notices when
+# OverboardKit's Swift package dependencies drift behind upstream. This
+# workflow is the hand-rolled analog: run `swift package update --dry-run`
+# on a schedule and file/refresh a single tracking issue when it finds
+# anything, instead of silently going stale forever.
+on:
+  schedule:
+    - cron: "0 9 1 * *" # 09:00 UTC on the 1st of every month
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+jobs:
+  check:
+    name: Check for SPM dependency updates
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Select newest Xcode 26
+        run: |
+          sudo xcode-select -s "$(ls -d /Applications/Xcode_26*.app | sort -V | tail -n 1)/Contents/Developer"
+          xcodebuild -version
+
+      # --dry-run never touches Package.resolved; it just reports what
+      # `swift package update` would change. Each changed dependency is
+      # printed as a "~ name old -> new" line, which is also what we grep
+      # below to decide whether there's anything worth filing.
+      - name: Run swift package update --dry-run
+        id: check
+        run: |
+          output=$(swift package --package-path OverboardKit update --dry-run 2>&1) || true
+          echo "$output"
+          {
+            echo "output<<DRYRUN_EOF"
+            echo "$output"
+            echo "DRYRUN_EOF"
+          } >> "$GITHUB_OUTPUT"
+          if echo "$output" | grep -q '^~ '; then
+            echo "has_updates=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_updates=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Keep this to a single standing issue rather than one per run: search
+      # for an existing open one by title first, comment on it if found,
+      # otherwise create it.
+      - name: Open or update tracking issue
+        if: steps.check.outputs.has_updates == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITLE: "SPM dependencies have updates available"
+          BODY: ${{ steps.check.outputs.output }}
+        run: |
+          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+            --search "\"$TITLE\" in:title" --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" --body "$BODY"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --body "$BODY"
+          fi

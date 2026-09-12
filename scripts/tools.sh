@@ -7,6 +7,10 @@
 #   scripts/tools.sh lint        # swiftformat --lint + swiftlint --strict
 #   scripts/tools.sh format      # rewrite sources with swiftformat
 #
+# To run `lint` automatically before every commit, install the pre-commit
+# hook once with scripts/hooks/install.sh (not wired up here — it symlinks
+# into .git/hooks, which this script deliberately never touches on its own).
+#
 # Bump versions here and nowhere else.
 set -euo pipefail
 

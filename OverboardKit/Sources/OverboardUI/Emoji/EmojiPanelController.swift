@@ -130,27 +130,27 @@ public final class EmojiPanelController {
         self.keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self, let panel = self.panel, event.window === panel else { return event }
 
-            switch event.keyCode {
-            case 53: // esc clears the throwaway query first; second esc dismisses
+            switch KeyCode(rawValue: event.keyCode) {
+            case .escape: // clears the throwaway query first; second esc dismisses
                 if self.viewModel.query.isEmpty {
                     self.hide()
                 } else {
                     self.viewModel.query = ""
                 }
                 return nil
-            case 123: // left
+            case .leftArrow:
                 self.viewModel.moveSelection(.left)
                 return nil
-            case 124: // right
+            case .rightArrow:
                 self.viewModel.moveSelection(.right)
                 return nil
-            case 125: // down
+            case .downArrow:
                 self.viewModel.moveSelection(.down)
                 return nil
-            case 126: // up
+            case .upArrow:
                 self.viewModel.moveSelection(.up)
                 return nil
-            case 36, 76: // return, keypad enter — ⌘ copies instead of pasting
+            case .returnKey, .keypadEnter: // ⌘ copies instead of pasting
                 self.viewModel.commit(copyOnly: event.modifierFlags.contains(.command))
                 return nil
             default:

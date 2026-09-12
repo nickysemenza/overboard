@@ -18,6 +18,17 @@ final class UpdateChecker {
     private let logger = Logger(subsystem: "com.nickysemenza.overboard", category: "updates")
     private var pollTask: Task<Void, Never>?
 
+    /// Ephemeral, no cookies/cache: same reasoning as LinkMetadataFetcher (see
+    /// OverboardKit/Sources/OverboardCore/Links/LinkMetadataFetcher.swift) —
+    /// this is a background API poll, not a browsing session, so it shouldn't
+    /// persist cookies or leave a cache entry on disk.
+    private let session: URLSession = {
+        let config = URLSessionConfiguration.ephemeral
+        config.httpCookieStorage = nil
+        config.urlCache = nil
+        return URLSession(configuration: config)
+    }()
+
     private static let latestReleaseURL =
         URL(string: "https://api.github.com/repos/nickysemenza/overboard/releases/latest")!
     private static let pollInterval: Duration = .seconds(24 * 3600)
@@ -52,7 +63,16 @@ final class UpdateChecker {
             var request = URLRequest(url: Self.latestReleaseURL)
             request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
             request.timeoutInterval = 15
-            let (data, _) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await self.session.data(for: request)
+
+            let statusCode = (response as? HTTPURLResponse)?.statusCode
+            guard statusCode == 200 else {
+                // Distinguishes a GitHub rate-limit (403) or other API hiccup
+                // from being offline, which throws instead and lands below.
+                self.logger.info("update check got status \(statusCode ?? -1, privacy: .public), skipping")
+                return
+            }
+
             let release = try JSONDecoder().decode(GitHubRelease.self, from: data)
 
             if let newer = UpdateCheck.newerRelease(current: AppVersion.marketing, latestTag: release.tagName) {

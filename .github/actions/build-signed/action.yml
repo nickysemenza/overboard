@@ -44,8 +44,11 @@ runs:
 
     # Imports the Developer ID Application cert+key into a temporary
     # keychain for this run; the action deletes that keychain in its
-    # post-step regardless of how the job ends.
-    - uses: apple-actions/import-codesign-certs@v7
+    # post-step regardless of how the job ends. Pinned to a full commit SHA
+    # (not the mutable `v7` tag) since this action handles the signing
+    # certificate secret — the one supply-chain risk in this workflow worth
+    # closing that way.
+    - uses: apple-actions/import-codesign-certs@5142e029c445c10ffc7149d172e540235a065466 # v7
       with:
         p12-file-base64: ${{ inputs.p12-base64 }}
         p12-password: ${{ inputs.p12-password }}

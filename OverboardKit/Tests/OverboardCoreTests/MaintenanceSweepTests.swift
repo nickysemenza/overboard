@@ -8,7 +8,7 @@ struct MaintenanceSweepTests {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("overboard-sweep-\(UUID().uuidString)", isDirectory: true)
         let blobs = try BlobStore(directory: dir)
-        return try (ClipStore(dbWriter: queue, blobs: blobs), blobs)
+        return (ClipStore(dbWriter: queue, blobs: blobs), blobs)
     }
 
     /// A large image payload lands in the blob store, so ingest gives us a real
