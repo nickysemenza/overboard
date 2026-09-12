@@ -135,10 +135,11 @@ public final class LauncherViewModel {
     /// stay inside the existing scrolling viewport.
     public var onLayoutChanged: () -> Void = {}
 
-    /// Bundle paths of apps macOS currently reports as running. A later slice
-    /// populates this (from `NSWorkspace.runningApplications`); for now it stays
-    /// empty, so `isSelectedAppRunning` is always false and the "Switch to" /
-    /// Quit actions never surface.
+    /// Bundle paths of apps macOS currently reports as running. `AppServices`
+    /// snapshots `NSWorkspace.runningApplications` into this on summon and on
+    /// change while the panel is visible, which drives `isSelectedAppRunning`
+    /// and the "Switch to" / Quit actions. Empty in tests and previews that
+    /// don't wire that snapshot up.
     public var runningAppPaths: Set<String> = []
 
     /// Rows pinned under every result list (the Spotify now-playing footer).
@@ -150,6 +151,9 @@ public final class LauncherViewModel {
     private let instantRouter: QueryRouter
     private let secondaryProviders: [any LauncherProvider]
     private var searchTask: Task<Void, Never>?
+    /// Bumped by every `scheduleSearch` call; lets a cancelled task's deferred
+    /// cleanup recognize it's stale instead of clobbering a newer task's state.
+    private var searchGeneration = 0
 
     /// Instant providers (apps) answer from memory and render on every
     /// keystroke alongside the calculator; secondary providers (files) run
@@ -199,19 +203,30 @@ public final class LauncherViewModel {
         if !preserveSelection {
             self.clipboardLimit = 200
             self.hasMoreClipboard = false
-            self.results = []
+            // Deliberately not clearing `results` here: the stale list stays on
+            // screen until the instant pass (`setResults` below) replaces it, so
+            // fast typing doesn't flash the empty state between keystrokes.
             self.userSelected = false
             self.selectedIndex = 0
             self.isPaletteOpen = false
         }
         self.statusMessage = nil
         self.isSearching = true
+        // Each call claims a new generation so a task cancelled by a later
+        // keystroke can't clear `isSearching` after a newer task has already
+        // taken over (and possibly finished) — only the current generation's
+        // exit is allowed to flip the flag back off.
+        self.searchGeneration += 1
+        let generation = self.searchGeneration
         if query.isEmpty, scope == .all {
             let recents = self.history.reversed().prefix(self.maxRecentRows).map { LauncherResult.recentSearch(query: $0) }
             self.setResults(recents, preserveSelection: preserveSelection)
             self.searchTask = Task {
                 let apps = await self.instantRouter.results(for: "", scope: .apps)
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled else {
+                    self.finishSearch(generation)
+                    return
+                }
                 let counts = Defaults[.launcherItemUseCounts]
                 let candidates = apps.filter { row in
                     if counts[row.id, default: 0] > 0 { return true }
@@ -220,7 +235,7 @@ public final class LauncherViewModel {
                 }
                 let suggestions = self.sortByFrecency(candidates).prefix(6)
                 self.setResults(Array(suggestions) + recents, preserveSelection: true)
-                self.isSearching = false
+                self.finishSearch(generation)
             }
             return
         }
@@ -229,24 +244,33 @@ public final class LauncherViewModel {
                 do {
                     let items = try await store.browseHistory(query, filter: self.clipboardFilter, limit: self.clipboardLimit + 1)
                     let stats = try await store.libraryStats(topSources: 100)
-                    guard !Task.isCancelled else { return }
+                    guard !Task.isCancelled else {
+                        self.finishSearch(generation)
+                        return
+                    }
                     self.sources = stats.bySource.map(\.app).sorted()
                     self.hasMoreClipboard = items.count > self.clipboardLimit
                     self.setResults(items.prefix(self.clipboardLimit).map(LauncherResult.clip), preserveSelection: true)
                 } catch {
-                    guard !Task.isCancelled else { return }
+                    guard !Task.isCancelled else {
+                        self.finishSearch(generation)
+                        return
+                    }
                     self.statusMessage = "Couldn’t search clipboard history. Try again."
                     self.setResults([])
                 }
-                self.isSearching = false
+                self.finishSearch(generation)
                 return
             }
             let instant = await self.instantRouter.results(for: query, scope: scope)
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled else {
+                self.finishSearch(generation)
+                return
+            }
             self.setResults(instant, preserveSelection: true)
             let providers = self.secondaryProviders.filter { $0.searchScopes.contains(scope) }
             guard !query.hasPrefix(":"), !providers.isEmpty else {
-                self.isSearching = false
+                self.finishSearch(generation)
                 return
             }
             var buckets = [[LauncherResult]](repeating: [], count: providers.count)
@@ -260,9 +284,16 @@ public final class LauncherViewModel {
                     self.setResults(instant + buckets.flatMap(\.self), preserveSelection: true)
                 }
             }
-            guard !Task.isCancelled else { return }
-            self.isSearching = false
+            self.finishSearch(generation)
         }
+    }
+
+    /// Clears `isSearching` only if no newer `scheduleSearch` call has started
+    /// since this task began — a stale, cancelled task must never clear the
+    /// spinner out from under a search that superseded it.
+    private func finishSearch(_ generation: Int) {
+        guard self.searchGeneration == generation else { return }
+        self.isSearching = false
     }
 
     public func moveSelection(_ delta: Int) {

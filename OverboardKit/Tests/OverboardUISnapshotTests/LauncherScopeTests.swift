@@ -103,18 +103,23 @@ struct LauncherScopeTests {
         #expect(model.results.first == frequent)
     }
 
-    @Test func aNewQueryImmediatelyClearsAnOldAction() async {
+    /// `scheduleSearch` deliberately stops clearing `results` synchronously on
+    /// every keystroke (that used to flash the "No results" empty state
+    /// between characters for a fast typist) — the previous list now stays on
+    /// screen until the instant pass's `setResults` call replaces it.
+    @Test func newQueryKeepsPreviousResultsVisibleUntilTheInstantPassReplacesThem() async {
         let file = LauncherResult.file(name: "hello.txt", url: URL(fileURLWithPath: "/tmp/hello.txt"))
         let model = LauncherViewModel(secondaryProviders: [DelayedLauncherProvider(rows: [file], delay: .milliseconds(30))])
         model.query = "hello"
         model.scheduleSearch()
         await self.waitForSearch(model)
-        var opened = false
-        model.onOpenFile = { _ in opened = true }
+        #expect(!model.results.isEmpty)
         model.query = "completely different"
         model.scheduleSearch()
-        model.commit()
-        #expect(!opened)
+        // No await yet: the instant pass hasn't had a chance to run, so this
+        // is the synchronous state right after the keystroke.
+        #expect(!model.results.isEmpty)
+        await self.waitForSearch(model)
         model.stopObserving()
     }
 
@@ -152,5 +157,52 @@ struct LauncherScopeTests {
         #expect(model.primaryActionLabel == "Download & Open")
         model.commit()
         #expect(opened == 1)
+    }
+
+    /// Regression test for two related bugs in `scheduleSearch`: (1) it used
+    /// to blank `results` synchronously on every keystroke, flashing the
+    /// "No results" empty state for a fast typist, and (2) a search task
+    /// cancelled by a newer keystroke could still clear `isSearching` after
+    /// the newer task had already claimed (or finished) it, leaving the
+    /// spinner stuck forever spinning or falsely idle. A slow instant
+    /// provider stands in for real provider latency so each search stays
+    /// in flight long enough to observe both fixes.
+    @Test func rapidQueryChangesNeverFlashEmptyResultsAndClearTheSpinner() async {
+        let terminal = LauncherResult.app(name: "Terminal", url: URL(fileURLWithPath: "/Applications/Terminal.app"))
+        let model = LauncherViewModel(
+            instantProviders: [DelayedLauncherProvider(rows: [terminal], delay: .milliseconds(20))],
+            secondaryProviders: []
+        )
+        model.query = "t"
+        model.scheduleSearch()
+        await self.waitForSearch(model)
+        #expect(!model.results.isEmpty)
+
+        // A bounded poll is the simplest reliable way to sample `results`
+        // between the rapid-fire keystrokes below; the view model exposes no
+        // dedicated "did the list ever go empty" signal.
+        var observedEmptyResults = false
+        let observer = Task {
+            while !Task.isCancelled {
+                if model.results.isEmpty { observedEmptyResults = true }
+                try? await Task.sleep(for: .milliseconds(1))
+            }
+        }
+
+        // Three keystrokes back-to-back, each cancelling the previous
+        // in-flight search before its slow instant provider resolves.
+        model.query = "te"
+        model.scheduleSearch()
+        model.query = "ter"
+        model.scheduleSearch()
+        model.query = "term"
+        model.scheduleSearch()
+
+        await self.waitForSearch(model)
+        observer.cancel()
+
+        #expect(!observedEmptyResults)
+        #expect(!model.isSearching)
+        #expect(!model.results.isEmpty)
     }
 }

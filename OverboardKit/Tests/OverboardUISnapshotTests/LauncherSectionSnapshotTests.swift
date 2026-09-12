@@ -8,9 +8,11 @@ import Testing
 @Suite(.localOnly)
 @MainActor
 struct LauncherSectionSnapshotTests {
-    /// Mixed rows show consistent type badges and a dedicated action footer.
-    /// The app path deliberately doesn't exist — a missing bundle renders the
-    /// generic app icon instead of a machine-dependent one.
+    /// Mixed rows show consistent section headers (type is conveyed by the
+    /// header above each run of rows, not a per-row badge — only the
+    /// no-section-header now-playing row keeps one) and a dedicated action
+    /// footer. The app path deliberately doesn't exist — a missing bundle
+    /// renders the generic app icon instead of a machine-dependent one.
     @Test func sectionHeaders() async throws {
         let store = try Fixtures.store()
         let viewModel = LauncherViewModel(

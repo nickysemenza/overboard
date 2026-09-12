@@ -34,7 +34,12 @@ enum FileBreadcrumb {
         if let range = path.range(of: "/Library/CloudStorage/") {
             return path[range.upperBound...].replacingOccurrences(of: "/", with: " › ")
         }
-        return (path as NSString).abbreviatingWithTildeInPath.replacingOccurrences(of: "/", with: " › ")
+        // Paths outside the home directory come back from `abbreviatingWithTildeInPath`
+        // unabbreviated (still leading with "/"), which would otherwise turn into a
+        // leading " › " once every slash becomes a separator.
+        let abbreviated = (path as NSString).abbreviatingWithTildeInPath
+        let withoutLeadingSlash = abbreviated.hasPrefix("/") ? String(abbreviated.dropFirst()) : abbreviated
+        return withoutLeadingSlash.replacingOccurrences(of: "/", with: " › ")
     }
 }
 

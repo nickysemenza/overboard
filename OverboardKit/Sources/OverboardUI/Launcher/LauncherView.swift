@@ -461,10 +461,6 @@ struct LauncherRow: View {
     private var sourceBadge: (symbol: String, label: String)? {
         switch self.result {
         case .nowPlaying: (symbol: "music.note", label: "Spotify")
-        case .app: (symbol: "app", label: "App")
-        case .file: (symbol: "doc", label: "File")
-        case .clip: (symbol: "doc.on.clipboard", label: "Clipboard")
-        case .snippet: (symbol: "text.badge.star", label: "Snippet")
         default: nil
         }
     }

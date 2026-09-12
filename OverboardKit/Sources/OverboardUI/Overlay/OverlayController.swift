@@ -1,5 +1,4 @@
 import AppKit
-import os
 import OverboardCore
 import SwiftUI
 
@@ -10,7 +9,6 @@ public final class OverlayController {
     private var keyMonitor: Any?
     private var clickMonitor: Any?
     private var resignObserver: NSObjectProtocol?
-    private let logger = Logger(subsystem: "com.nickysemenza.overboard", category: "overlay")
 
     /// The app that was frontmost when the drawer was summoned — i.e. where a
     /// paste should land. Recorded before the panel appears.

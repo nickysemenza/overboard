@@ -44,6 +44,7 @@ final class UpdateChecker {
     func openReleasePage() {
         guard let releaseURL else { return }
         NSWorkspace.shared.open(releaseURL)
+        self.availableTag = nil
     }
 
     private func checkOnce() async {
