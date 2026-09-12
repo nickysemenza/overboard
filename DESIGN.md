@@ -118,7 +118,7 @@ App icons, file icons, syntax highlighting, image previews, and source-derived c
 
 The search field and scope controls sit above a vertically scrolling result region. A reserved footer follows that region in the layout. The optional preview sits beside the list with a native divider and its own content padding. Both columns share available width; long content scrolls within its region.
 
-The launcher currently caps its width at 740pt without preview and 1020pt with preview, fitting inside the screen's visible frame with 40pt of horizontal clearance. Height budgets three to eight result rows, additional scope controls and home section headings, then caps against the visible screen. These are launcher-specific window constraints, not global breakpoints.
+The launcher uses a stable 740×612pt viewport for ordinary searches, including its first appearance before results arrive. Result counts and home section headings never resize the window. An explicit preview expands it to 1020×650pt; Clipboard scope adds 36pt for filters. Expansion keeps the search field's top edge anchored. All sizes fit inside the screen's visible frame with 40pt of horizontal and 60pt of vertical clearance. These are launcher-specific window constraints, not global breakpoints.
 
 Result rows use the frontmatter geometry, a 28pt icon slot, a two-line title/metadata stack, and a trailing information area. The list has 8pt inset and 2pt gaps. Filenames stay on one line; breadcrumbs truncate in the middle so both location and nearby folder context survive.
 

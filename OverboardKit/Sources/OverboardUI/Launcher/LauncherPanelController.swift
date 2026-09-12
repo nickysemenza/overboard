@@ -53,23 +53,13 @@ public final class LauncherPanelController {
     public var onWillHide: () -> Void = {}
 
     private enum Metrics {
-        static let panelWidth: CGFloat = 640
-        /// Outer padding (12×2) + glass padding (14×2) + search bar (30).
-        static let barOnlyHeight: CGFloat = 82
-        /// Divider plus its VStack gaps.
-        static let dividerHeight: CGFloat = 17
-        static let rowHeight: CGFloat = 45
-        /// LauncherSectionHeader: caption2 line (~13) + top padding (2) + the
-        /// list VStack gap (2), rounded up — undershooting clips the last row.
-        static let headerHeight: CGFloat = 18
-        /// Persistent footer action bar: its top Divider (~1) + two 8 pt VStack
-        /// gaps + the 20 pt bar. Added to every panel frame, rows or not.
-        static let footerHeight: CGFloat = 37
-        /// Fraction of the screen's visible height where the bar's top sits.
-        static let topFraction: CGFloat = 0.72
-        /// While the ⌘K palette is open, keep the panel at least this tall so the
-        /// overlay isn't clipped by a short (or empty) result list.
-        static let paletteMinHeight: CGFloat = 320
+        static let panelWidth: CGFloat = 740
+        /// Reserve the result viewport before showing the window. Rows and
+        /// section headings scroll inside it instead of moving the search field.
+        static let panelHeight: CGFloat = 612
+        static let previewWidth: CGFloat = 1020
+        static let previewHeight: CGFloat = 650
+        static let clipboardFilterHeight: CGFloat = 36
     }
 
     public init(store: ClipStore, viewModel: LauncherViewModel) {
@@ -167,8 +157,8 @@ public final class LauncherPanelController {
             self.hide()
             self.onOpenClipLink(url)
         }
-        viewModel.onLayoutChanged = { [weak self] rows, headers in
-            self?.resizePanel(rows: rows, headers: headers)
+        viewModel.onLayoutChanged = { [weak self] in
+            self?.resizePanel()
         }
     }
 
@@ -217,22 +207,13 @@ public final class LauncherPanelController {
         // (or the first-ever open) start fresh.
         let stale = self.lastHiddenAt.map { Date().timeIntervalSince($0) > Self.resumeWindow } ?? true
 
-        // Open at the height of the preserved rows (0 when clearing) so a
-        // reopened launcher doesn't snap up from one row to a full list — that
-        // abrupt resize left ghost frames of the rows mid-reflow.
-        panel.setFrame(
-            self.frame(
-                forRows: stale ? 0 : self.viewModel.results.count,
-                headers: stale ? 0 : self.viewModel.headerCount,
-                on: self.screenWithMouse()
-            ),
-            display: false
-        )
         self.viewModel.prepareForShow(clearQuery: stale)
         if let scope { self.viewModel.setScope(scope) }
         if let query { self.viewModel.query = query; self.viewModel.scheduleSearch() }
         self.viewModel.startObserving()
-        panel.setFrame(self.frame(forRows: self.viewModel.results.count, headers: 0, on: self.screenWithMouse()), display: false)
+        // Apply the final scope's viewport before ordering the panel onscreen,
+        // including the first summon while suggestions are still loading.
+        panel.setFrame(self.frame(on: self.screenWithMouse()), display: false)
         panel.makeKeyAndOrderFront(nil)
         // Preserved text refocuses select-all by default; drop the caret at the
         // end so the next keystroke appends instead of replacing. The field
@@ -270,7 +251,7 @@ public final class LauncherPanelController {
 
     private func makePanel() -> OverlayPanel {
         let panel = OverlayPanel(
-            contentRect: NSRect(x: 0, y: 0, width: Metrics.panelWidth, height: Metrics.barOnlyHeight)
+            contentRect: NSRect(x: 0, y: 0, width: Metrics.panelWidth, height: Metrics.panelHeight)
         )
         let hosting = NSHostingView(
             rootView: LauncherView(viewModel: self.viewModel, store: self.store)
@@ -280,36 +261,31 @@ public final class LauncherPanelController {
         return panel
     }
 
-    private func frame(forRows rows: Int, headers _: Int, on screen: NSScreen) -> NSRect {
+    private func frame(on screen: NSScreen) -> NSRect {
         let visible = screen.visibleFrame
-        let width = min(self.viewModel.showsPreview ? 1020.0 : 740.0, visible.width - 40)
-        var height = self.viewModel.showsPreview ? 650.0 : 180 + Double(max(3, min(rows, 8))) * 54
-        if self.viewModel.scope == .clipboard { height += 36 }
-        if self.viewModel.scope == .all, self.viewModel.query.isEmpty { height += Double(self.viewModel.headerCount) * 22 }
-        if self.viewModel.isPaletteOpen { height = max(height, 420) }
+        let width = min(self.viewModel.showsPreview ? Metrics.previewWidth : Metrics.panelWidth, visible.width - 40)
+        var height = self.viewModel.showsPreview ? Metrics.previewHeight : Metrics.panelHeight
+        if self.viewModel.scope == .clipboard { height += Metrics.clipboardFilterHeight }
         height = min(height, visible.height - 60)
-        let top = min(visible.maxY - 30, visible.midY + height / 2 + 60)
-        return NSRect(x: visible.midX - width / 2, y: max(visible.minY + 20, top - height), width: width, height: height)
+        let compactHeight = min(Metrics.panelHeight, visible.height - 60)
+        let top = min(visible.maxY - 30, visible.midY + compactHeight / 2 + 60)
+        return NSRect(x: visible.midX - width / 2, y: max(visible.minY + 30, top - height), width: width, height: height)
     }
 
-    /// Grows downward as rows arrive; the bar's top edge stays put.
-    private func resizePanel(rows: Int, headers: Int) {
+    /// Only an explicit scope/preview change can resize the panel. Keep its
+    /// top edge anchored and avoid resetting an unchanged AppKit frame.
+    private func resizePanel() {
         guard let panel, panel.isVisible else { return }
         let screen = panel.screen ?? self.screenWithMouse()
-        panel.setFrame(self.frame(forRows: rows, headers: headers, on: screen), display: true)
+        let frame = self.frame(on: screen)
+        guard panel.frame != frame else { return }
+        panel.setFrame(frame, display: true)
     }
 
-    /// Opens or closes the ⌘K palette and reflows the panel: opening floors the
-    /// height at `paletteMinHeight` (via `frame(forRows:)`), closing restores
-    /// the pre-palette height so the panel doesn't stay stretched.
+    /// The ⌘K palette fits inside the reserved result viewport.
     private func setPaletteOpen(_ open: Bool) {
         guard open != self.viewModel.isPaletteOpen else { return }
         self.viewModel.togglePalette()
-        // `togglePalette` no-ops when there's nothing to show — only reflow if
-        // the state actually changed. On close, `frame(forRows:)` recomputes the
-        // natural (footer + rows) height, so the panel shrinks back on its own.
-        guard self.viewModel.isPaletteOpen == open else { return }
-        self.resizePanel(rows: self.viewModel.results.count, headers: self.viewModel.headerCount)
     }
 
     private func screenWithMouse() -> NSScreen {

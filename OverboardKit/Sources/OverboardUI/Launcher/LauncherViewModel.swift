@@ -54,14 +54,14 @@ public final class LauncherViewModel {
         self.isPreviewVisible = false
         self.closePalette()
         self.scheduleSearch()
-        self.onLayoutChanged(self.results.count, self.headerCount)
+        self.onLayoutChanged()
     }
 
     public func togglePreview() {
         guard self.selectedResult != nil else { return }
         self.userSelected = true
         self.isPreviewVisible.toggle()
-        self.onLayoutChanged(self.results.count, self.headerCount)
+        self.onLayoutChanged()
     }
 
     public func loadMoreClipboard() {
@@ -131,8 +131,9 @@ public final class LauncherViewModel {
     public var onQuitApp: (URL) -> Void = { _ in }
     /// Open a link clip's URL in the browser (⌘K → Open Link on a link clip).
     public var onOpenClipLink: (URL) -> Void = { _ in }
-    /// Lets the panel controller resize as rows and section headers come and go.
-    public var onLayoutChanged: (_ rows: Int, _ headers: Int) -> Void = { _, _ in }
+    /// Only explicit scope/preview changes resize the window; result updates
+    /// stay inside the existing scrolling viewport.
+    public var onLayoutChanged: () -> Void = {}
 
     /// Bundle paths of apps macOS currently reports as running. A later slice
     /// populates this (from `NSWorkspace.runningApplications`); for now it stays
@@ -149,10 +150,6 @@ public final class LauncherViewModel {
     private let instantRouter: QueryRouter
     private let secondaryProviders: [any LauncherProvider]
     private var searchTask: Task<Void, Never>?
-    /// Header count of the current `results` — the panel controller sizes with
-    /// it, and `setResults` only fires `onLayoutChanged` when it (or the row
-    /// count) actually moves.
-    public private(set) var headerCount = 0
 
     /// Instant providers (apps) answer from memory and render on every
     /// keystroke alongside the calculator; secondary providers (files) run
@@ -458,12 +455,10 @@ public final class LauncherViewModel {
             self.paletteIndex = 0
             self.isPaletteOpen = true
         }
-        self.onLayoutChanged(self.results.count, self.headerCount)
     }
 
     public func closePalette() {
         self.isPaletteOpen = false
-        self.onLayoutChanged(self.results.count, self.headerCount)
     }
 
     public func movePaletteSelection(_ delta: Int) {
@@ -530,18 +525,10 @@ public final class LauncherViewModel {
         }
         var seen = Set<String>()
         self.results = combined.filter { seen.insert($0.id).inserted }
-        self.headerCount = self.query.isEmpty && self.scope == .all ? Set(self.results.compactMap { row -> String? in
-            switch row {
-            case .app: "suggestions"
-            case .recentSearch: "recent"
-            default: nil
-            }
-        }).count : 0
         if let anchor, let index = self.results.firstIndex(where: { $0.id == anchor }) {
             self.selectedIndex = index
         } else {
             self.selectedIndex = 0
         }
-        self.onLayoutChanged(self.results.count, self.headerCount)
     }
 }
