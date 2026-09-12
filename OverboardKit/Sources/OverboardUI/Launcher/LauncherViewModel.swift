@@ -103,7 +103,7 @@ public final class LauncherViewModel {
     /// Recent searches, most-recent last; persisted across launches. Surfaced as
     /// the result rows when the field is empty.
     public private(set) var history: [String] = Defaults[.launcherSearchHistory]
-    private let maxHistory = 20
+    private static let maxHistory = 20
     /// How many recents to actually show on an empty field — a short hint, not a
     /// full history dump that fills the panel.
     private let maxRecentRows = 3
@@ -164,6 +164,7 @@ public final class LauncherViewModel {
         askAIProvider: AskAIProvider = AskAIProvider(isAvailable: { false })
     ) {
         self.clipboardStore = clipboardStore
+        self.history = Self.normalizedHistory(Defaults[.launcherSearchHistory])
         self.instantRouter = QueryRouter(
             providers: [commandProvider, CalculatorProvider()] + instantProviders
                 + [WebSearchProvider(), askAIProvider]
@@ -182,7 +183,10 @@ public final class LauncherViewModel {
         }
         // Pick up entries this session has saved since the model was created so
         // the empty-field recents list is current.
-        self.history = Defaults[.launcherSearchHistory]
+        self.history = Self.normalizedHistory(Defaults[.launcherSearchHistory])
+        if self.history != Defaults[.launcherSearchHistory] {
+            Defaults[.launcherSearchHistory] = self.history
+        }
         self.selectedIndex = 0
         self.showGeneration += 1
         self.scheduleSearch()
@@ -273,14 +277,10 @@ public final class LauncherViewModel {
     public func recordCurrentQuery() {
         let trimmed = self.query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        var updated = self.history
-        updated.removeAll { $0 == trimmed }
-        updated.append(trimmed)
-        if updated.count > self.maxHistory {
-            updated.removeFirst(updated.count - self.maxHistory)
-        }
-        self.history = updated
-        Defaults[.launcherSearchHistory] = updated
+        var updated = BoundedRecents(mostRecentFirst: self.history.reversed(), limit: Self.maxHistory)
+        updated.record(trimmed)
+        self.history = Array(updated.mostRecentFirst.reversed())
+        Defaults[.launcherSearchHistory] = self.history
     }
 
     /// Removes the selected recent-search row from history (⌘⌫ on the empty
@@ -291,16 +291,16 @@ public final class LauncherViewModel {
         guard self.results.indices.contains(self.selectedIndex),
               case let .recentSearch(query) = self.results[self.selectedIndex]
         else { return false }
-        var updated = self.history
-        updated.removeAll { $0 == query }
-        self.history = updated
-        Defaults[.launcherSearchHistory] = updated
+        var updated = BoundedRecents(mostRecentFirst: self.history.reversed(), limit: Self.maxHistory)
+        updated.remove(query)
+        self.history = Array(updated.mostRecentFirst.reversed())
+        Defaults[.launcherSearchHistory] = self.history
         // Re-render the (still empty-field) recents list; setResults reclamps the
         // selection so it lands on the next row down.
         let oldIndex = self.selectedIndex
         self.setResults(
             self.results.filter { if case .app = $0 { true } else { false } }
-                + updated.reversed().prefix(self.maxRecentRows).map { .recentSearch(query: $0) }
+                + self.history.reversed().prefix(self.maxRecentRows).map { .recentSearch(query: $0) }
         )
         self.selectedIndex = min(oldIndex, max(self.results.count - 1, 0))
         return true
@@ -504,6 +504,10 @@ public final class LauncherViewModel {
 
     private func sortByFrecency(_ rows: [LauncherResult]) -> [LauncherResult] {
         LauncherFrecency.sorted(rows, counts: Defaults[.launcherItemUseCounts], lastUsed: Defaults[.launcherItemLastUsed])
+    }
+
+    private static func normalizedHistory(_ persisted: [String]) -> [String] {
+        Array(BoundedRecents(mostRecentFirst: persisted.reversed(), limit: LauncherViewModel.maxHistory).mostRecentFirst.reversed())
     }
 
     private func setResults(_ newResults: [LauncherResult], preserveSelection: Bool = false) {

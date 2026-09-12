@@ -10,17 +10,16 @@ public enum EmojiRecents {
     /// Returns `recents` with `character` moved (or inserted) at the front,
     /// deduplicated, and capped at `cap`.
     public static func recording(_ character: String, into recents: [String]) -> [String] {
-        var updated = recents.filter { $0 != character }
-        updated.insert(character, at: 0)
-        if updated.count > self.cap {
-            updated.removeLast(updated.count - self.cap)
-        }
-        return updated
+        var updated = BoundedRecents(mostRecentFirst: recents, limit: self.cap)
+        updated.record(character)
+        return updated.mostRecentFirst
     }
 
     /// Drops characters not present in the catalog (e.g. after dataset
     /// regeneration), preserving the relative order of what remains.
     public static func pruned(_ recents: [String], validCharacters: Set<String>) -> [String] {
-        recents.filter { validCharacters.contains($0) }
+        var updated = BoundedRecents(mostRecentFirst: recents, limit: self.cap)
+        updated.prune { validCharacters.contains($0) }
+        return updated.mostRecentFirst
     }
 }

@@ -23,6 +23,7 @@ let package = Package(
         .library(name: "OverboardCore", targets: ["OverboardCore"]),
         .library(name: "OverboardMac", targets: ["OverboardMac"]),
         .library(name: "OverboardUI", targets: ["OverboardUI"]),
+        .library(name: "OverboardFilePreview", targets: ["OverboardFilePreview"]),
         .executable(name: "overboard", targets: ["OverboardCLI"]),
         .executable(name: "file-index-benchmark", targets: ["FileIndexBenchmark"]),
     ],
@@ -34,6 +35,8 @@ let package = Package(
         .package(url: "https://github.com/sindresorhus/Defaults", from: "9.0.0"),
         .package(url: "https://github.com/apple/swift-async-algorithms", from: "1.0.0"),
         .package(url: "https://github.com/gonzalezreal/swift-markdown-ui", from: "2.4.0"),
+        .package(url: "https://github.com/apple/swift-collections.git", .upToNextMinor(from: "1.6.0")),
+        .package(url: "https://github.com/velocityzen/FileType", from: "2.2.1"),
         .package(url: "https://github.com/pointfreeco/swift-snapshot-testing", from: "1.18.0"),
     ],
     targets: [
@@ -42,6 +45,7 @@ let package = Package(
             dependencies: [
                 .product(name: "GRDB", package: "GRDB.swift"),
                 .product(name: "Expression", package: "Expression"),
+                .product(name: "OrderedCollections", package: "swift-collections"),
             ],
             resources: [
                 .copy("Emoji/Resources/emoji.json"),
@@ -62,11 +66,21 @@ let package = Package(
             dependencies: [
                 "OverboardCore",
                 "OverboardMac",
+                "OverboardFilePreview",
                 .product(name: "KeyboardShortcuts", package: "KeyboardShortcuts"),
                 .product(name: "Highlightr", package: "Highlightr"),
                 .product(name: "Defaults", package: "Defaults"),
                 .product(name: "AsyncAlgorithms", package: "swift-async-algorithms"),
                 .product(name: "MarkdownUI", package: "swift-markdown-ui"),
+            ],
+            swiftSettings: mainActorByDefault
+        ),
+        .target(
+            name: "OverboardFilePreview",
+            dependencies: [
+                .product(name: "Highlightr", package: "Highlightr"),
+                .product(name: "MarkdownUI", package: "swift-markdown-ui"),
+                .product(name: "FileType", package: "FileType"),
             ],
             swiftSettings: mainActorByDefault
         ),
@@ -101,10 +115,16 @@ let package = Package(
             dependencies: [
                 "OverboardUI",
                 "OverboardCore",
+                "OverboardFilePreview",
                 .product(name: "SnapshotTesting", package: "swift-snapshot-testing"),
             ],
             // Recorded PNGs are read by path by SnapshotTesting, not bundled.
             exclude: ["__Snapshots__"],
+            swiftSettings: approachableConcurrency
+        ),
+        .testTarget(
+            name: "OverboardFilePreviewTests",
+            dependencies: ["OverboardFilePreview"],
             swiftSettings: approachableConcurrency
         ),
     ]

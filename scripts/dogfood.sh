@@ -64,6 +64,14 @@ echo "Installing to $DEST..."
 rm -rf "$DEST"
 ditto "$APP" "$DEST"
 
+EXTENSION="$DEST/Contents/PlugIns/OverboardQuickLook.appex"
+if [[ -d "$EXTENSION" ]]; then
+    # Replacing an already-installed bundle does not reliably cause pluginkit
+    # to rescan embedded Quick Look extensions. Register it explicitly so the
+    # next Finder Quick Look request sees the just-built provider.
+    /usr/bin/pluginkit -a "$EXTENSION"
+fi
+
 echo "Launching..."
 open "$DEST"
 

@@ -65,3 +65,13 @@ highest=$(printf '%s\n%s\n' "$current" "$version" | sort -V | tail -n 1)
 if [ "$highest" = "$version" ]; then
     set_key CFBundleShortVersionString "$version"
 fi
+
+# App extensions are copied before this app-target phase runs. Keep their
+# release version identical to the containing app so signing/notarization and
+# Quick Look registration never observe a mismatched bundle pair.
+final_version=$(get_key CFBundleShortVersionString)
+for extension_plist in "$TARGET_BUILD_DIR/$WRAPPER_NAME/Contents/PlugIns/"*.appex/Contents/Info.plist; do
+    [ -f "$extension_plist" ] || continue
+    /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string $final_version" "$extension_plist" 2>/dev/null \
+        || /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $final_version" "$extension_plist"
+done

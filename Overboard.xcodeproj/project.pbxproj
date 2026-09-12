@@ -10,10 +10,14 @@
 		0B420000000000000000A001 /* OverboardCore in Frameworks */ = {isa = PBXBuildFile; productRef = 0B4200000000000000004001 /* OverboardCore */; };
 		0B420000000000000000A002 /* OverboardMac in Frameworks */ = {isa = PBXBuildFile; productRef = 0B4200000000000000004002 /* OverboardMac */; };
 		0B420000000000000000A003 /* OverboardUI in Frameworks */ = {isa = PBXBuildFile; productRef = 0B4200000000000000004003 /* OverboardUI */; };
+		0B420000000000000000A004 /* OverboardFilePreview in Frameworks */ = {isa = PBXBuildFile; productRef = 0B4200000000000000004004 /* OverboardFilePreview */; };
+		0B420000000000000000A005 /* OverboardQuickLook.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 0B420000000000000000E002 /* OverboardQuickLook.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		0B420000000000000000A006 /* OverboardFilePreview in Frameworks */ = {isa = PBXBuildFile; productRef = 0B4200000000000000004005 /* OverboardFilePreview */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		0B420000000000000000E001 /* Overboard.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Overboard.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		0B420000000000000000E002 /* OverboardQuickLook.appex */ = {isa = PBXFileReference; explicitFileType = wrapper.app-extension; includeInIndex = 0; path = OverboardQuickLook.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -26,7 +30,23 @@
 			path = Overboard;
 			sourceTree = "<group>";
 		};
+		0B420000000000000000B002 /* OverboardQuickLook */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (0B420000000000000000B003 /* Exceptions for "OverboardQuickLook" folder in "OverboardQuickLook" target */, );
+			explicitFileTypes = {};
+			explicitFolders = ();
+			path = OverboardQuickLook;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		0B420000000000000000B003 /* Exceptions for "OverboardQuickLook" folder in "OverboardQuickLook" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (Info.plist, );
+			target = 0B420000000000000000F002 /* OverboardQuickLook */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		0B420000000000000000C001 /* Frameworks */ = {
@@ -36,6 +56,15 @@
 				0B420000000000000000A001 /* OverboardCore in Frameworks */,
 				0B420000000000000000A002 /* OverboardMac in Frameworks */,
 				0B420000000000000000A003 /* OverboardUI in Frameworks */,
+				0B420000000000000000A006 /* OverboardFilePreview in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		0B420000000000000000C011 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0B420000000000000000A004 /* OverboardFilePreview in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -46,6 +75,7 @@
 			isa = PBXGroup;
 			children = (
 				0B420000000000000000B001 /* Overboard */,
+				0B420000000000000000B002 /* OverboardQuickLook */,
 				0B420000000000000000D002 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -54,6 +84,7 @@
 			isa = PBXGroup;
 			children = (
 				0B420000000000000000E001 /* Overboard.app */,
+				0B420000000000000000E002 /* OverboardQuickLook.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -68,12 +99,12 @@
 				0B420000000000000000C002 /* Sources */,
 				0B420000000000000000C001 /* Frameworks */,
 				0B420000000000000000C003 /* Resources */,
+				0B420000000000000000C005 /* Embed App Extensions */,
 				0B420000000000000000C004 /* Embed git version */,
 			);
 			buildRules = (
 			);
-			dependencies = (
-			);
+			dependencies = (0B420000000000000000F101 /* PBXTargetDependency */, );
 			fileSystemSynchronizedGroups = (
 				0B420000000000000000B001 /* Overboard */,
 			);
@@ -82,10 +113,24 @@
 				0B4200000000000000004001 /* OverboardCore */,
 				0B4200000000000000004002 /* OverboardMac */,
 				0B4200000000000000004003 /* OverboardUI */,
+				0B4200000000000000004005 /* OverboardFilePreview */,
 			);
 			productName = Overboard;
 			productReference = 0B420000000000000000E001 /* Overboard.app */;
 			productType = "com.apple.product-type.application";
+		};
+		0B420000000000000000F002 /* OverboardQuickLook */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 0B4200000000000000002003 /* Build configuration list for PBXNativeTarget "OverboardQuickLook" */;
+			buildPhases = (0B420000000000000000C012 /* Sources */, 0B420000000000000000C011 /* Frameworks */, 0B420000000000000000C013 /* Resources */, 0B420000000000000000C014 /* Embed git version */, );
+			buildRules = ();
+			dependencies = ();
+			fileSystemSynchronizedGroups = (0B420000000000000000B002 /* OverboardQuickLook */, );
+			name = OverboardQuickLook;
+			packageProductDependencies = (0B4200000000000000004004 /* OverboardFilePreview */, );
+			productName = OverboardQuickLook;
+			productReference = 0B420000000000000000E002 /* OverboardQuickLook.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -100,6 +145,7 @@
 					0B420000000000000000F001 = {
 						CreatedOnToolsVersion = 16.2;
 					};
+					0B420000000000000000F002 = { CreatedOnToolsVersion = 16.2; };
 				};
 			};
 			buildConfigurationList = 0B4200000000000000002001 /* Build configuration list for PBXProject "Overboard" */;
@@ -120,6 +166,7 @@
 			projectRoot = "";
 			targets = (
 				0B420000000000000000F001 /* Overboard */,
+				0B420000000000000000F002 /* OverboardQuickLook */,
 			);
 		};
 /* End PBXProject section */
@@ -132,7 +179,12 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		0B420000000000000000C013 /* Resources */ = { isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		0B420000000000000000C005 /* Embed App Extensions */ = { isa = PBXCopyFilesBuildPhase; buildActionMask = 2147483647; dstPath = ""; dstSubfolderSpec = 13; files = (0B420000000000000000A005 /* OverboardQuickLook.appex in Embed App Extensions */, ); name = "Embed App Extensions"; runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
 		0B420000000000000000C004 /* Embed git version */ = {
@@ -151,6 +203,18 @@
 			shellPath = /bin/sh;
 			shellScript = "\"${SRCROOT}/scripts/embed-git-version.sh\"\n";
 		};
+		0B420000000000000000C014 /* Embed git version */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = ();
+			inputPaths = ("$(TARGET_BUILD_DIR)/$(INFOPLIST_PATH)", );
+			name = "Embed git version";
+			outputPaths = ();
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${SRCROOT}/scripts/embed-git-version.sh\"\n";
+		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -161,7 +225,12 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		0B420000000000000000C012 /* Sources */ = { isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		0B420000000000000000F101 /* PBXTargetDependency */ = { isa = PBXTargetDependency; target = 0B420000000000000000F002 /* OverboardQuickLook */; };
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		0B4200000000000000001001 /* Debug */ = {
@@ -342,6 +411,52 @@
 			};
 			name = Release;
 		};
+		0B4200000000000000001005 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = OverboardQuickLook/OverboardQuickLook.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = Y9A97FXT63;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				ENABLE_HARDENED_RUNTIME = YES;
+				INFOPLIST_FILE = OverboardQuickLook/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/../Frameworks", "@loader_path/../../Frameworks", );
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 0.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.nickysemenza.overboard.quicklook;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		0B4200000000000000001006 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = OverboardQuickLook/OverboardQuickLook.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = Y9A97FXT63;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				ENABLE_HARDENED_RUNTIME = YES;
+				INFOPLIST_FILE = OverboardQuickLook/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/../Frameworks", "@loader_path/../../Frameworks", );
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 0.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.nickysemenza.overboard.quicklook;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -360,6 +475,12 @@
 				0B4200000000000000001003 /* Debug */,
 				0B4200000000000000001004 /* Release */,
 			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		0B4200000000000000002003 /* Build configuration list for PBXNativeTarget "OverboardQuickLook" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (0B4200000000000000001005 /* Debug */, 0B4200000000000000001006 /* Release */, );
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
@@ -384,6 +505,14 @@
 		0B4200000000000000004003 /* OverboardUI */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = OverboardUI;
+		};
+		0B4200000000000000004004 /* OverboardFilePreview */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = OverboardFilePreview;
+		};
+		0B4200000000000000004005 /* OverboardFilePreview */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = OverboardFilePreview;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

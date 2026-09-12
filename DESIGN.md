@@ -166,7 +166,7 @@ Source badges and saved searches use compact capsules with quiet native fill. Th
 
 ### Preview
 
-The content occupies the main preview area; a divider separates its metadata below. Text supports selection and scrolling, images fit their bounds, code uses the shared syntax renderer, and available local files use native Quick Look. Cloud, unavailable, loading, and empty states use concise text with meaningful native symbols. Keep descriptive metadata readable when the content is small or absent.
+The content occupies the main preview area; a divider separates its metadata below. Text supports selection and scrolling, images fit their bounds, code uses the shared syntax renderer, and eligible local readable-text files use the same bounded renderer as the Quick Look extension. Eligibility is an explicit readable-format map plus macOS `public.plain-text` conformance; rich `public.text` formats remain native. The loader samples at most 256 KiB and rejects recognized binary signatures before decoding. Other local files use native Quick Look. Cloud, unavailable, loading, and empty states use concise text with meaningful native symbols. Keep descriptive metadata readable when the content is small or absent.
 
 ### Clipboard Cards
 
