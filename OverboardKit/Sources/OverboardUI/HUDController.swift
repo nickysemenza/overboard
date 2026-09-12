@@ -56,6 +56,10 @@ public final class HUDController {
     /// currently has the mouse, recomputed on every flash since the message —
     /// and therefore the panel's fitting size — changes each time.
     private func position(_ panel: NSPanel) {
+        // The hosting view is reused, so its fitting size still reflects the
+        // previous message until SwiftUI lays out the new one; force that pass
+        // now or the capsule is sized for whatever text was shown last time.
+        panel.contentView?.layoutSubtreeIfNeeded()
         guard let size = panel.contentView?.fittingSize else { return }
         let screen = NSScreen.screens.first {
             NSMouseInRect(NSEvent.mouseLocation, $0.frame, false)
