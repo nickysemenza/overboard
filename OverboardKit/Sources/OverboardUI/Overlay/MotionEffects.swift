@@ -23,6 +23,14 @@ struct CardEntrance: ViewModifier {
     }
 }
 
+/// Corner radii for the summonable panel shells (DESIGN.md § Shapes: "Larger
+/// shells retain their component-specific shapes").
+enum PanelRadius {
+    static let launcher: CGFloat = 18
+    static let drawer: CGFloat = 16
+    static let palette: CGFloat = 12
+}
+
 extension View {
     func cardEntrance(index: Int) -> some View {
         modifier(CardEntrance(index: index))
@@ -35,12 +43,18 @@ extension View {
     /// adjacent shapes. Floating menus use their own opaque surface: overlapping
     /// glass shapes merge behind the host content. Leave both nil for standalone glass.
     func glassPanel(cornerRadius: CGFloat, id: String? = nil, in namespace: Namespace.ID? = nil) -> some View {
-        modifier(AccessibleGlassPanel(cornerRadius: cornerRadius, id: id, namespace: namespace))
+        modifier(AccessibleGlassPanel(shape: RoundedRectangle(cornerRadius: cornerRadius), id: id, namespace: namespace))
+    }
+
+    /// Same shared glass chrome, for shells that aren't a rounded rectangle
+    /// (the HUD's capsule).
+    func glassPanel(shape: some Shape, id: String? = nil, in namespace: Namespace.ID? = nil) -> some View {
+        modifier(AccessibleGlassPanel(shape: shape, id: id, namespace: namespace))
     }
 }
 
-private struct AccessibleGlassPanel: ViewModifier {
-    let cornerRadius: CGFloat
+private struct AccessibleGlassPanel<S: Shape>: ViewModifier {
+    let shape: S
     let id: String?
     let namespace: Namespace.ID?
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -49,11 +63,11 @@ private struct AccessibleGlassPanel: ViewModifier {
     func body(content: Content) -> some View {
         Group {
             if self.reduceTransparency {
-                content.background(Color(nsColor: .windowBackgroundColor), in: RoundedRectangle(cornerRadius: self.cornerRadius))
+                content.background(Color(nsColor: .windowBackgroundColor), in: self.shape)
             } else if let id, let namespace {
-                content.glassEffect(.regular, in: RoundedRectangle(cornerRadius: self.cornerRadius)).glassEffectID(id, in: namespace)
+                content.glassEffect(.regular, in: self.shape).glassEffectID(id, in: namespace)
             } else {
-                content.glassEffect(.regular, in: RoundedRectangle(cornerRadius: self.cornerRadius))
+                content.glassEffect(.regular, in: self.shape)
             }
         }
         .transaction { if self.reduceMotion { $0.animation = nil } }

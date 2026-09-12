@@ -52,6 +52,7 @@ struct SnippetCardView: View {
                 Text("⌘\(self.index + 1)")
                     .font(.caption2.monospaced())
                     .foregroundStyle(.tertiary)
+                    .accessibilityLabel("Command \(self.index + 1)")
             }
         }
         .padding(.horizontal, 10)

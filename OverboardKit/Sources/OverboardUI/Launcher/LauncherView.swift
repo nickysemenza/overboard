@@ -48,7 +48,7 @@ public struct LauncherView: View {
                                   onCommit: { self.viewModel.commit() }, onActions: { self.viewModel.togglePalette() })
                     .padding(.horizontal, 12).padding(.vertical, 9)
             }
-            .glassPanel(cornerRadius: 18)
+            .glassPanel(cornerRadius: PanelRadius.launcher)
             .overlay(alignment: .bottom) {
                 if self.viewModel.isPaletteOpen {
                     LauncherActionPalette(viewModel: self.viewModel)
@@ -70,6 +70,7 @@ public struct LauncherView: View {
     private var searchBar: some View {
         HStack(spacing: 12) {
             Image(systemName: "magnifyingglass").font(.title3).foregroundStyle(.secondary)
+                .accessibilityHidden(true)
             TextField(self.viewModel.scope == .clipboard ? "Find something you copied…" : "Search apps, files, clipboard, or the web…", text: self.$viewModel.query)
                 .textFieldStyle(.plain).font(.system(size: 20)).focused(self.$fieldFocused)
                 .accessibilityLabel("Search \(self.viewModel.scope.rawValue)")
@@ -211,6 +212,7 @@ struct LauncherFooterBar: View {
         HStack(spacing: 8) {
             Image(systemName: "bolt.fill")
                 .font(.caption)
+                .accessibilityHidden(true)
             Text("Overboard")
                 .font(.caption)
             Spacer(minLength: 12)
@@ -219,16 +221,19 @@ struct LauncherFooterBar: View {
                     .buttonStyle(.plain).font(.caption.weight(.medium)).foregroundStyle(.primary)
                 Image(systemName: "return")
                     .font(.caption2)
+                    .accessibilityHidden(true)
                 Divider()
                     .frame(height: 12)
             }
             Button("Actions", action: self.onActions)
                 .buttonStyle(.plain).font(.caption)
+                .accessibilityLabel("Actions, Command K")
             Text("⌘K")
                 .font(.caption2)
                 .padding(.horizontal, 4)
                 .padding(.vertical, 1)
                 .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 4))
+                .accessibilityHidden(true)
         }
         .foregroundStyle(.secondary)
         .padding(.horizontal, 8)
@@ -263,7 +268,7 @@ struct LauncherRow: View {
                     .font(.body.weight(self.titleWeight))
                     .lineLimit(1)
                 SearchHighlightedText(text: self.subtitle, query: self.query)
-                    .font(.caption)
+                    .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -282,6 +287,7 @@ struct LauncherRow: View {
             if self.showsSourceBadge, let badge = self.sourceBadge {
                 HStack(spacing: 3) {
                     Image(systemName: badge.symbol)
+                        .accessibilityHidden(true)
                     Text(badge.label)
                 }
                 .font(.caption2)

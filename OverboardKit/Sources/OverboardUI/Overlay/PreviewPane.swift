@@ -102,6 +102,7 @@ struct PreviewPane: View {
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: "globe")
+                    .accessibilityHidden(true)
                 Text(label)
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -210,8 +211,8 @@ struct PreviewPane: View {
         Text(self.viewModel.previewState == .editing
             ? "⌘↩ paste edited text   esc cancel"
             : "↩ paste   ⌘E edit   ←/→ browse   space or esc close")
-            .font(.caption2)
-            .foregroundStyle(.tertiary)
+            .font(.caption)
+            .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .center)
     }
 

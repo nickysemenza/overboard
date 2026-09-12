@@ -13,27 +13,25 @@ public struct EmojiPickerView: View {
     }
 
     public var body: some View {
-        GlassEffectContainer(spacing: 20) {
-            VStack(spacing: 8) {
-                self.searchBar
-                Divider()
-                if self.viewModel.sections.isEmpty {
-                    self.emptyState
-                } else {
-                    self.grid
-                }
-                Divider()
-                EmojiFooterBar()
+        VStack(spacing: 8) {
+            self.searchBar
+            Divider()
+            if self.viewModel.sections.isEmpty {
+                self.emptyState
+            } else {
+                self.grid
             }
-            .padding(14)
-            .glassPanel(cornerRadius: 16)
-            .padding(12)
-            .onAppear {
-                self.fieldFocused = true
-            }
-            .onChange(of: self.viewModel.showGeneration) {
-                self.fieldFocused = true
-            }
+            Divider()
+            EmojiFooterBar()
+        }
+        .padding(14)
+        .glassPanel(cornerRadius: PanelRadius.drawer)
+        .padding(12)
+        .onAppear {
+            self.fieldFocused = true
+        }
+        .onChange(of: self.viewModel.showGeneration) {
+            self.fieldFocused = true
         }
     }
 
@@ -41,6 +39,7 @@ public struct EmojiPickerView: View {
         HStack(spacing: 8) {
             Image(systemName: "face.smiling")
                 .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
             TextField("Search emoji…", text: self.$viewModel.query)
                 .textFieldStyle(.plain)
                 .font(.title3)
@@ -137,6 +136,7 @@ struct EmojiFooterBar: View {
         HStack(spacing: 8) {
             Image(systemName: "bolt.fill")
                 .font(.caption)
+                .accessibilityHidden(true)
             Text("Overboard")
                 .font(.caption)
             Spacer(minLength: 12)
@@ -144,6 +144,7 @@ struct EmojiFooterBar: View {
                 .font(.caption)
             Image(systemName: "return")
                 .font(.caption2)
+                .accessibilityHidden(true)
             Divider()
                 .frame(height: 12)
             Text("Copy")

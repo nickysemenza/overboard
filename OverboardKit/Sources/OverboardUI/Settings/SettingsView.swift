@@ -86,10 +86,10 @@ private struct GeneralSettingsTab: View {
     var body: some View {
         Form {
             Section {
-                KeyboardShortcuts.Recorder("Summon drawer", name: .toggleDrawer)
+                KeyboardShortcuts.Recorder("Show Drawer", name: .toggleDrawer)
                 KeyboardShortcuts.Recorder("Paste next from stack", name: .pasteNextFromStack)
-                KeyboardShortcuts.Recorder("Summon launcher", name: .toggleLauncher)
-                KeyboardShortcuts.Recorder("Summon emoji picker", name: .toggleEmojiPicker)
+                KeyboardShortcuts.Recorder("Show Launcher", name: .toggleLauncher)
+                KeyboardShortcuts.Recorder("Show Emoji Picker", name: .toggleEmojiPicker)
             } footer: {
                 Text("The emoji picker's default shortcut (⌃⌘Space) takes over the system emoji viewer's binding while Overboard is running — record a different one here to get the system viewer back.")
             }
@@ -157,7 +157,7 @@ private struct GeneralSettingsTab: View {
                     }
                 }
                 Toggle("Check for updates automatically", isOn: self.$updateCheckEnabled)
-                Button("Copy version info") {
+                Button("Copy Version Info") {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(AppVersion.summary, forType: .string)
                 }
@@ -217,7 +217,10 @@ private struct HistorySettingsTab: View {
             }
 
             Section {
-                LabeledContent("Items", value: self.stats?.total.formatted() ?? "—")
+                LabeledContent("Items") {
+                    Text(self.stats?.total.formatted() ?? "—")
+                        .monospacedDigit()
+                }
                 LabeledContent("On disk", value: self.diskUsage ?? "—")
                 Button("Clear History…", role: .destructive) {
                     self.confirmingClear = true

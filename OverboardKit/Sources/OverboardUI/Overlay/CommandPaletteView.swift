@@ -29,6 +29,7 @@ struct CommandPaletteView: View {
             HStack(spacing: 8) {
                 Image(systemName: "command")
                     .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
                 TextField("Type an action…", text: self.$query)
                     .textFieldStyle(.plain)
                     .font(.title3)
@@ -59,9 +60,9 @@ struct CommandPaletteView: View {
         // A second glass shape merges into the host panel's glass and ends up
         // behind its list/preview. A native opaque fill keeps actions legible
         // over both columns, including when Reduce Transparency is enabled.
-        .background(Color(nsColor: .windowBackgroundColor), in: RoundedRectangle(cornerRadius: 12))
+        .background(Color(nsColor: .windowBackgroundColor), in: RoundedRectangle(cornerRadius: PanelRadius.palette))
         .overlay {
-            RoundedRectangle(cornerRadius: 12)
+            RoundedRectangle(cornerRadius: PanelRadius.palette)
                 .strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.5)
                 .allowsHitTesting(false)
         }
@@ -78,12 +79,14 @@ struct CommandPaletteView: View {
             Image(systemName: item.systemImage)
                 .frame(width: 18)
                 .foregroundStyle(isHighlighted ? .primary : .secondary)
+                .accessibilityHidden(true)
             Text(item.label)
             Spacer()
             if isHighlighted {
                 Image(systemName: "return")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
             }
         }
         .padding(.horizontal, 10)

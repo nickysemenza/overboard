@@ -19,6 +19,7 @@ struct ItemCardView: View {
     var onPreview: () -> Void = {}
 
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var thumbnail: NSImage?
     @State private var hovering = false
     @State private var miniCode: NSAttributedString?
@@ -55,7 +56,15 @@ struct ItemCardView: View {
             y: 4
         )
         .animation(.spring(response: 0.25, dampingFraction: 0.7), value: self.isSelected)
-        .onHover { self.hovering = $0 }
+        .onHover { isHovering in
+            if self.reduceMotion {
+                self.hovering = isHovering
+            } else {
+                withAnimation(.easeOut(duration: 0.12)) {
+                    self.hovering = isHovering
+                }
+            }
+        }
         .task(id: self.item.id) {
             await self.loadThumbnailIfNeeded()
         }
@@ -128,7 +137,6 @@ struct ItemCardView: View {
         .padding(5)
         .background(.regularMaterial, in: Capsule())
         .padding(6)
-        .offset(y: 26)
         .transition(.opacity)
     }
 
@@ -176,6 +184,7 @@ struct ItemCardView: View {
                 Text("⌘\(self.index + 1)")
                     .font(.caption2.monospaced())
                     .foregroundStyle(.tertiary)
+                    .accessibilityLabel("Command \(self.index + 1)")
             }
         }
         .padding(.horizontal, 10)
@@ -405,7 +414,7 @@ struct ItemCardView: View {
         if self.item.kind != .image, let text = item.metadataFooter {
             Divider().opacity(0.25)
             Text(text)
-                .font(.caption2)
+                .font(.caption2.monospacedDigit())
                 .foregroundStyle(.tertiary)
                 .lineLimit(1)
                 .padding(.horizontal, 10)

@@ -29,7 +29,7 @@ public struct DrawerView: View {
             }
             .animation(.spring(response: 0.22, dampingFraction: 0.85), value: self.viewModel.isPaletteOpen)
             .padding(14)
-            .glassPanel(cornerRadius: 16)
+            .glassPanel(cornerRadius: PanelRadius.drawer)
             .overlay {
                 if self.viewModel.isPaletteOpen {
                     ActionPalette(viewModel: self.viewModel)
@@ -104,6 +104,7 @@ public struct DrawerView: View {
                 Text("\(self.viewModel.entryCount)")
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.tertiary)
+                    .accessibilityLabel("\(self.viewModel.entryCount) entries")
             }
         }
         .padding(.horizontal, 6)

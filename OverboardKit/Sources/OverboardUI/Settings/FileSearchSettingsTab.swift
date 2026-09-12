@@ -18,7 +18,7 @@ struct FileSearchSettingsTab: View {
             Section {
                 TextEditor(text: self.$roots).font(.body.monospaced()).frame(height: 120)
                     .accessibilityLabel("Included folders, one path per line")
-                Button("Use default locations") {
+                Button("Use Default Locations") {
                     self.roots = FileIndexService.defaultRoots.map(\.path).joined(separator: "\n")
                 }
             } header: { Text("Included folders") } footer: {
