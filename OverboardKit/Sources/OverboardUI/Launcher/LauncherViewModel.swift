@@ -154,6 +154,11 @@ public final class LauncherViewModel {
     /// Bumped by every `scheduleSearch` call; lets a cancelled task's deferred
     /// cleanup recognize it's stale instead of clobbering a newer task's state.
     private var searchGeneration = 0
+    /// True between a keystroke and the first `setResults` for that query.
+    /// The previous list stays on screen for continuity, but it belongs to an
+    /// older query, so `perform` must not act on it — ↩ pressed in that window
+    /// is dropped, exactly as it was when the list used to be blanked.
+    private var resultsAreStale = false
 
     /// Instant providers (apps) answer from memory and render on every
     /// keystroke alongside the calculator; secondary providers (files) run
@@ -206,6 +211,7 @@ public final class LauncherViewModel {
             // Deliberately not clearing `results` here: the stale list stays on
             // screen until the instant pass (`setResults` below) replaces it, so
             // fast typing doesn't flash the empty state between keystrokes.
+            self.resultsAreStale = true
             self.userSelected = false
             self.selectedIndex = 0
             self.isPaletteOpen = false
@@ -385,7 +391,7 @@ public final class LauncherViewModel {
     /// Executes one action against the selected row. The single routing point
     /// for the footer's primary action, the ⌘K palette, and `commit`.
     public func perform(_ action: LauncherAction) {
-        guard self.results.indices.contains(self.selectedIndex) else { return }
+        guard !self.resultsAreStale, self.results.indices.contains(self.selectedIndex) else { return }
         let result = self.results[self.selectedIndex]
         switch (action, result) {
         case let (.copy, .calculation(_, display)):
@@ -560,6 +566,7 @@ public final class LauncherViewModel {
         }
         var seen = Set<String>()
         self.results = combined.filter { seen.insert($0.id).inserted }
+        self.resultsAreStale = false
         if let anchor, let index = self.results.firstIndex(where: { $0.id == anchor }) {
             self.selectedIndex = index
         } else {

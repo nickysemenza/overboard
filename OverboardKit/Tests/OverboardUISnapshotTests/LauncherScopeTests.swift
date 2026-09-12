@@ -159,6 +159,25 @@ struct LauncherScopeTests {
         #expect(opened == 1)
     }
 
+    /// The stale list stays visible for continuity, but it belongs to the old
+    /// query, so ↩ in the window before the instant pass lands must not act
+    /// on it — same outcome as when the list used to be blanked.
+    @Test func aNewQueryImmediatelyClearsAnOldAction() async {
+        let file = LauncherResult.file(name: "hello.txt", url: URL(fileURLWithPath: "/tmp/hello.txt"))
+        let model = LauncherViewModel(secondaryProviders: [DelayedLauncherProvider(rows: [file], delay: .milliseconds(30))])
+        model.query = "hello"
+        model.scheduleSearch()
+        await self.waitForSearch(model)
+        var opened = false
+        model.onOpenFile = { _ in opened = true }
+        model.query = "completely different"
+        model.scheduleSearch()
+        model.commit()
+        #expect(!opened)
+        await self.waitForSearch(model)
+        model.stopObserving()
+    }
+
     /// Regression test for two related bugs in `scheduleSearch`: (1) it used
     /// to blank `results` synchronously on every keystroke, flashing the
     /// "No results" empty state for a fast typist, and (2) a search task
