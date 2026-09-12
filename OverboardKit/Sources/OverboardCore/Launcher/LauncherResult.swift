@@ -6,7 +6,7 @@ public enum LauncherResult: Sendable, Equatable, Identifiable {
     case app(name: String, url: URL)
     case snippet(Snippet)
     case clip(ClipItem)
-    case file(name: String, url: URL)
+    case file(name: String, url: URL, info: FileSearchInfo = FileSearchInfo())
     case webSearch(query: String, url: URL)
     /// A macOS System Settings pane; `url` is its `x-apple.systempreferences:` link.
     case systemSetting(name: String, url: URL)
@@ -31,7 +31,7 @@ public enum LauncherResult: Sendable, Equatable, Identifiable {
         case let .app(_, url): "app:\(url.path)"
         case let .snippet(snippet): "snippet:\(snippet.id)"
         case let .clip(item): "clip:\(item.id)"
-        case let .file(_, url): "file:\(url.path)"
+        case let .file(_, url, _): "file:\(url.path)"
         case let .webSearch(query, _): "web:\(query)"
         case let .systemSetting(_, url): "setting:\(url.absoluteString)"
         case let .command(command, _): "command:\(command.rawValue)"
@@ -47,5 +47,12 @@ public enum LauncherResult: Sendable, Equatable, Identifiable {
 /// Implementations must either be cheap enough to run on every keystroke
 /// (calculator, web) or rely on the caller's debounce (Spotlight).
 public protocol LauncherProvider: Sendable {
+    var searchScopes: Set<LauncherScope> { get }
     func results(for query: String) async -> [LauncherResult]
+}
+
+public extension LauncherProvider {
+    var searchScopes: Set<LauncherScope> {
+        Set(LauncherScope.allCases)
+    }
 }

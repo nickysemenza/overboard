@@ -1,4 +1,5 @@
 import AppKit
+import OverboardCore
 import OverboardUI
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -63,6 +64,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         launcher.setQuery(String(command.dropFirst("launcher-query:".count)))
                         return
                     }
+                    if let command, command.hasPrefix("launcher-scope:"),
+                       let scope = LauncherScope(rawValue: String(command.dropFirst("launcher-scope:".count)))
+                    {
+                        AppServices.shared.launcherViewModel.setScope(scope)
+                        return
+                    }
                     if let command, command.hasPrefix("emoji-query:") {
                         emoji.setQuery(String(command.dropFirst("emoji-query:".count)))
                         return
@@ -82,8 +89,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     case "extend": overlay.extendSelection(1)
                     case "palette": overlay.togglePalette()
                     case "stack": overlay.addSelectedToStack()
+                    case "appearance-light": NSApp.appearance = NSAppearance(named: .aqua)
+                    case "appearance-dark": NSApp.appearance = NSAppearance(named: .darkAqua)
                     case "launcher-toggle": launcher.toggle()
                     case "launcher-show": launcher.show()
+                    case "launcher-browse": launcher.show(scope: .clipboard, query: "")
+                    case "launcher-preview": AppServices.shared.launcherViewModel.togglePreview()
+                    case "launcher-palette": AppServices.shared.launcherViewModel.togglePalette()
                     case "launcher-hide": launcher.hide()
                     case "launcher-commit": launcher.commitSelection()
                     case "launcher-commit-cmd": launcher.commitSelection(modifier: .command)

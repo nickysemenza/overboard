@@ -37,12 +37,12 @@ struct LauncherActionsTests {
 
     @Test func textClip() {
         let result = LauncherResult.clip(self.clip(kind: .text))
-        #expect(LauncherActions.actions(for: result) == [.paste, .copy, .pastePlain])
+        #expect(LauncherActions.actions(for: result) == [.paste, .copy, .pastePlain, .preview, .pin])
     }
 
     @Test func linkClipAddsOpenLink() {
         let result = LauncherResult.clip(self.clip(kind: .link, preview: "https://example.com"))
-        #expect(LauncherActions.actions(for: result) == [.paste, .copy, .pastePlain, .openLink])
+        #expect(LauncherActions.actions(for: result) == [.paste, .copy, .pastePlain, .openLink, .preview, .pin])
     }
 
     @Test func snippet() {
@@ -52,7 +52,7 @@ struct LauncherActionsTests {
 
     @Test func file() {
         let result = LauncherResult.file(name: "doc.txt", url: URL(fileURLWithPath: "/tmp/doc.txt"))
-        #expect(LauncherActions.actions(for: result) == [.open, .revealInFinder, .copyPath])
+        #expect(LauncherActions.actions(for: result) == [.open, .revealInFinder, .copyPath, .preview])
     }
 
     @Test func calculation() {

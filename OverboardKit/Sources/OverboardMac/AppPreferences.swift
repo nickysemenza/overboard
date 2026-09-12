@@ -29,7 +29,7 @@ public nonisolated extension Defaults.Keys {
     /// Fetch page title/description/favicon/preview for copied links over the
     /// network to render rich link cards. User-opt-in; on by default.
     static let richLinkPreviews = Key<Bool>("richLinkPreviews", default: true)
-    /// Spotlight file results in the launcher bar.
+    /// Indexed file results in the launcher bar.
     static let launcherFileResults = Key<Bool>("launcherFileResults", default: true)
     /// Clipboard-history results in the launcher bar.
     static let launcherClipResults = Key<Bool>("launcherClipResults", default: true)
@@ -43,6 +43,12 @@ public nonisolated extension Defaults.Keys {
     static let launcherAppAliases = Key<String>("launcherAppAliases", default: "")
     /// Recent launcher search queries, most-recent last; de-duped and capped.
     static let launcherSearchHistory = Key<[String]>("launcherSearchHistory", default: [])
+    /// Normalized query + result id -> successful uses; bounded by the learner.
+    static let launcherSelectionUsage = Key<[String: Int]>("launcherSelectionUsage", default: [:])
+    static let launcherItemUseCounts = Key<[String: Int]>("launcherItemUseCounts", default: [:])
+    static let launcherItemLastUsed = Key<[String: Double]>("launcherItemLastUsed", default: [:])
+    static let fileSearchRoots = Key<[String]>("fileSearchRoots", default: [])
+    static let fileSearchExclusions = Key<String>("fileSearchExclusions", default: ".git\nnode_modules\n.build\nbuild\ndist\ntarget\nDerivedData\n.cache\n.Trash")
     /// Pinned drawer searches (raw query strings), shown as chips above history.
     static let savedSearches = Key<[String]>("savedSearches", default: [])
     /// Emoji picked in the emoji picker, most-recent first, capped by

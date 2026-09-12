@@ -26,6 +26,9 @@ struct LauncherCommitRoutingTests {
         while viewModel.results.isEmpty {
             try? await Task.sleep(for: .milliseconds(10))
         }
+        if let id = rows.first?.id, let index = viewModel.results.firstIndex(where: { $0.id == id }) {
+            viewModel.select(at: index)
+        }
         return viewModel
     }
 
@@ -384,7 +387,7 @@ struct LauncherCommitRoutingTests {
         viewModel.togglePalette()
         #expect(viewModel.isPaletteOpen)
         // Link clip actions: paste, copy, paste plain, open link.
-        #expect(viewModel.filteredPaletteActions == [.paste, .copy, .pastePlain, .openLink])
+        #expect(viewModel.filteredPaletteActions == [.paste, .copy, .pastePlain, .openLink, .preview, .pin])
 
         // Case-insensitive substring filter over the label.
         viewModel.paletteQuery = "LINK"
@@ -403,12 +406,10 @@ struct LauncherCommitRoutingTests {
     @Test func paletteSelectionClampsToFilteredCount() async {
         let viewModel = await makeViewModel(rows: [.clip(Fixtures.item(preview: "x"))])
         viewModel.togglePalette()
-        // Three actions for a text clip; ↓ past the end clamps to the last.
-        viewModel.movePaletteSelection(1)
-        viewModel.movePaletteSelection(1)
-        viewModel.movePaletteSelection(1)
-        #expect(viewModel.paletteIndex == 2)
-        viewModel.movePaletteSelection(-5)
+        // Navigation clamps including the preview and pin actions.
+        viewModel.movePaletteSelection(100)
+        #expect(viewModel.paletteIndex == 4)
+        viewModel.movePaletteSelection(-100)
         #expect(viewModel.paletteIndex == 0)
     }
 
@@ -546,9 +547,10 @@ struct LauncherCommitRoutingTests {
         viewModel.commit() // selection 0 is the recents row
 
         #expect(viewModel.query == "foo")
-        while viewModel.results.contains(where: { if case .recentSearch = $0 { true } else { false } }) {
+        for _ in 0 ..< 200 where viewModel.isSearching {
             try? await Task.sleep(for: .milliseconds(10))
         }
+        #expect(!viewModel.isSearching)
         #expect(viewModel.results.contains(app))
         #expect(!opened) // re-running a recent must not commit a row
     }

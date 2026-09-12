@@ -100,7 +100,7 @@ final class AppServices {
         let store = self.store
         let launcherViewModel = LauncherViewModel(
             instantProviders: [
-                AppSearchProvider(index: AppIndex(), limit: 5) {
+                AppSearchProvider(index: AppIndex(), limit: 60) {
                     AppMatcher.parseAliases(Defaults[.launcherAppAliases])
                 },
                 ConditionalProvider(SettingsPaneSearchProvider(index: SettingsPaneIndex())) {
@@ -117,7 +117,7 @@ final class AppServices {
                 // Demo screenshots must not leak real home-folder files.
                 Self.isDemo
                     ? DemoSeed.LauncherFiles()
-                    : ConditionalProvider(FileSearchProvider(search: SpotlightFileSearch(), limit: 8)) {
+                    : ConditionalProvider(IndexedFileSearchProvider(service: FileIndexService.shared)) {
                         Defaults[.launcherFileResults]
                     },
             ],
@@ -142,6 +142,7 @@ final class AppServices {
             ),
             // "Ask AI" fallback row — only when the on-device model is ready and
             // the user hasn't turned AI features off.
+            clipboardStore: self.store,
             askAIProvider: AskAIProvider(
                 isAvailable: { AITransformer.isAvailable && Defaults[.aiFeatures] }
             )
@@ -172,6 +173,7 @@ final class AppServices {
             // daily-driver instance.
             Task { await DemoSeed.populate(self.store) }
         } else {
+            FileIndexService.shared.start()
             self.startCapturePipeline()
             self.registerHotkeys()
             self.updates.start()
@@ -352,6 +354,15 @@ final class AppServices {
     }
 
     private func installLauncherCallbacks() {
+        if !Self.isDemo {
+            FileIndexService.shared.onChange = { [weak self] in
+                guard let self, self.launcher.isVisible else { return }
+                self.launcherViewModel.scheduleSearch(preserveSelection: true)
+            }
+        }
+        self.overlay.onBrowseHistory = { [weak self] query, target in
+            self?.launcher.show(scope: .clipboard, query: query, target: target)
+        }
         // Summon-time refresh: reconcile the Spotify now-playing snapshot (its
         // onChange only refreshes an open panel, so a missed track change is
         // caught here) and snapshot running apps for the row indicator dots.
@@ -375,8 +386,23 @@ final class AppServices {
         self.launcher.onPasteText = { [weak self] text, target in
             self?.pasteString(text, into: target)
         }
-        self.launcher.onOpenFile = { url in
-            NSWorkspace.shared.open(url)
+        self.launcher.onOpenFile = { [weak self] url in
+            guard let self else { return }
+            let query = self.launcherViewModel.query
+            let id = self.launcherViewModel.selectedResult?.id
+            Task {
+                do {
+                    let needsDownload = FileAvailability.status(at: url) == .cloud
+                    if needsDownload {
+                        HUDController.shared.flash("Downloading \(url.lastPathComponent)…", duration: .seconds(60))
+                    }
+                    try await FileOpening.open(url)
+                    if needsDownload { HUDController.shared.flash("Opened \(url.lastPathComponent)") }
+                    if let id { self.launcherViewModel.recordSuccessfulSelection(id: id, query: query) }
+                } catch {
+                    HUDController.shared.flash("Couldn’t open \(url.lastPathComponent). Check its location or internet connection and try again.", duration: .seconds(6))
+                }
+            }
         }
         self.launcher.onRevealFile = { url in
             NSWorkspace.shared.activateFileViewerSelecting([url])
@@ -391,7 +417,11 @@ final class AppServices {
             NSWorkspace.shared.open(url)
         }
         self.launcher.onPasteClip = { [weak self] item, mode, target in
-            self?.pasteItem(item, mode: mode, into: target)
+            guard let self else { return }
+            let query = self.launcherViewModel.query
+            self.pasteItem(item, mode: mode, into: target) { [weak self] in
+                self?.launcherViewModel.recordSuccessfulSelection(id: LauncherResult.clip(item).id, query: query)
+            }
         }
         self.launcher.onCopyClip = { [weak self] item in
             guard let self else { return }

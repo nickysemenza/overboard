@@ -1,0 +1,235 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-11T23:30:10.902298Z",
+  "title": "Design System: Overboard",
+  "extensions": {
+    "typographyMeta": {
+      "body": {
+        "displayName": "Native Body",
+        "purpose": "SwiftUI .body for result titles; platform resolves size and metrics."
+      },
+      "caption": {
+        "displayName": "Native Caption",
+        "purpose": "SwiftUI .caption for source metadata, supporting text, and action hints."
+      },
+      "caption-emphasis": {
+        "displayName": "Section Caption",
+        "purpose": "SwiftUI .caption.weight(.semibold) for functional section headings."
+      },
+      "code": {
+        "displayName": "System Monospaced",
+        "purpose": "NSFont.monospacedSystemFont for shared syntax-highlighted code previews."
+      }
+    },
+    "shadows": [
+      {
+        "name": "palette",
+        "value": "0 6px 18px rgb(0 0 0 / 25%)",
+        "purpose": "CSS preview approximation of SwiftUI shadow(color: .black.opacity(0.25), radius: 18, y: 6)."
+      },
+      {
+        "name": "selected-card",
+        "value": "0 4px 9px rgb(0 0 0 / 28%)",
+        "purpose": "CSS preview approximation of SwiftUI shadow(color: .black.opacity(0.28), radius: 9, y: 4); native selected scale is 1.04."
+      }
+    ],
+    "motion": [
+      {
+        "name": "card-entrance",
+        "value": "spring(response: 0.36, dampingFraction: 0.8)",
+        "purpose": "Native card entrance from opacity 0 and y 26; delay min(index, 8) * 0.028 seconds. Reduce Motion bypasses the entrance."
+      },
+      {
+        "name": "card-selection",
+        "value": "spring(response: 0.25, dampingFraction: 0.7)",
+        "purpose": "Native selected-card lift and outline change."
+      },
+      {
+        "name": "drawer-palette",
+        "value": "spring(response: 0.22, dampingFraction: 0.85)",
+        "purpose": "Native palette scale 0.95 plus opacity transition; shared glass disables animations under Reduce Motion."
+      }
+    ],
+    "native": {
+      "platform": "macOS 26+, SwiftUI and AppKit",
+      "units": "Logical macOS points. Browser snippets use one CSS pixel per point for structural comparison; this is not a physical-unit conversion.",
+      "colorPolicy": "Native dynamic color expressions are authoritative. No fixed palette or synthetic tonal ramp is defined. CSS Canvas, CanvasText, GrayText, and AccentColor in snippets are approximate browser counterparts, not replacement application tokens.",
+      "colors": [
+        {
+          "name": "selection",
+          "binding": "Color.accentColor",
+          "uses": {
+            "launcherRowOpacity": 0.2,
+            "paletteRowOpacity": 0.22,
+            "selectedCardBorderOpacity": 1
+          }
+        },
+        {
+          "name": "primaryInk",
+          "binding": ".primary",
+          "purpose": "Result titles and primary actions."
+        },
+        {
+          "name": "supportingInk",
+          "binding": ".secondary",
+          "purpose": "Breadcrumbs, source metadata, scope shortcuts, and caption-sized drawer action hints."
+        },
+        {
+          "name": "quietSurface",
+          "binding": ".background",
+          "uses": {
+            "launcherPreviewOpacity": 0.35,
+            "clipboardCardOpacity": 0.6
+          }
+        },
+        {
+          "name": "subtleControlFill",
+          "binding": ".quaternary.opacity(0.6)",
+          "purpose": "Source badges, saved searches, keyboard keycaps."
+        },
+        {
+          "name": "scopeSelection",
+          "binding": "Color.primary.opacity(0.10)",
+          "purpose": "Neutral active scope."
+        },
+        {
+          "name": "opaquePanel",
+          "binding": "Color(nsColor: .windowBackgroundColor)",
+          "purpose": "Reduce Transparency fallback and the independent Actions menu surface."
+        }
+      ],
+      "materials": {
+        "panel": ".glassEffect(.regular, in: RoundedRectangle(...))",
+        "accessibility": "AccessibleGlassPanel uses windowBackgroundColor for Reduce Transparency and clears animation transactions for Reduce Motion."
+      },
+      "contentColorSources": [
+        "Native app and file icons",
+        "AppIconCache source-derived card-header tint",
+        "Image and color clipboard content",
+        "Highlightr atom-one-dark and xcode themes"
+      ],
+      "layoutSource": "OverboardKit/Sources/OverboardUI/Launcher/LauncherPanelController.swift: frame(forRows:headers:on:)",
+      "sourceFiles": [
+        "OverboardKit/Sources/OverboardUI/Launcher/LauncherView.swift",
+        "OverboardKit/Sources/OverboardUI/Launcher/LauncherPreview.swift",
+        "OverboardKit/Sources/OverboardUI/Overlay/DrawerView.swift",
+        "OverboardKit/Sources/OverboardUI/Overlay/ItemCardView.swift",
+        "OverboardKit/Sources/OverboardUI/Overlay/SnippetCardView.swift",
+        "OverboardKit/Sources/OverboardUI/Overlay/CommandPaletteView.swift",
+        "OverboardKit/Sources/OverboardUI/Overlay/MotionEffects.swift",
+        "OverboardKit/Sources/OverboardUI/Overlay/CodeHighlighter.swift"
+      ],
+      "notCanonized": "Demo content colors, source artwork colors, and screenshot-resolved native colors are content or environment outputs, not brand tokens. Unused legacy provider-header styling is not the current section-heading rule."
+    }
+  },
+  "components": [
+    {
+      "name": "Launcher Query",
+      "kind": "input",
+      "refersTo": "query-field",
+      "description": "A plain query field in the panel; the symbol and text are the focus. CSS system colors approximate the native semantic roles.",
+      "html": "<label class=\"ds-query\"><svg viewBox=\"0 0 24 24\" width=\"20\" height=\"20\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" aria-hidden=\"true\"><circle cx=\"10.5\" cy=\"10.5\" r=\"6.5\"/><path d=\"m15.5 15.5 5 5\"/></svg><input aria-label=\"Search\" placeholder=\"Search apps, files, clipboard, or the web…\"/></label>",
+      "css": ".ds-query{display:flex;align-items:center;gap:12px;height:62px;padding:0 20px;color:GrayText;background:Canvas;color-scheme:light dark}.ds-query input{min-width:0;flex:1;border:0;background:transparent;color:CanvasText;font:400 20px system-ui;caret-color:AccentColor}.ds-query input:hover{background:transparent}.ds-query input:focus-visible{outline:auto;outline-offset:4px}.ds-query input::placeholder{color:GrayText}"
+    },
+    {
+      "name": "Launcher Scopes",
+      "kind": "nav",
+      "refersTo": "scope-control",
+      "description": "Neutral active scope and quiet shortcut; the result selection below carries the accent.",
+      "html": "<nav class=\"ds-scopes\" aria-label=\"Search scope\"><button aria-current=\"page\">All <small>⌘1</small></button><button>Files <small>⌘2</small></button><button>Clipboard <small>⌘3</small></button><button>Apps <small>⌘4</small></button></nav>",
+      "css": ".ds-scopes{display:flex;gap:4px;padding:0 12px 10px;background:Canvas;color-scheme:light dark}.ds-scopes button{border:0;padding:6px 11px;border-radius:7px;background:transparent;color:CanvasText;font:500 12px system-ui}.ds-scopes button[aria-current]{background:color-mix(in srgb,CanvasText 10%,transparent)}.ds-scopes small{margin-left:6px;color:GrayText;font:400 10px system-ui}.ds-scopes button:hover{color:CanvasText}.ds-scopes button:focus-visible{outline:auto;outline-offset:2px}"
+    },
+    {
+      "name": "Selected Result",
+      "kind": "custom",
+      "refersTo": "result-row",
+      "description": "Two-line result with system accent selection. Icon artwork remains native in the app; the snippet uses a neutral inline file symbol.",
+      "html": "<button class=\"ds-result\" aria-pressed=\"true\"><svg viewBox=\"0 0 24 24\" width=\"28\" height=\"28\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.4\" aria-hidden=\"true\"><path d=\"M5 2h9l5 5v15H5zM14 2v6h5M8 12h8M8 16h8\"/></svg><span class=\"ds-result-copy\"><span>release-<strong>notes</strong>.md</span><small>~ › Documents › Overboard</small></span><span class=\"ds-result-kind\">File</span></button>",
+      "css": ".ds-result{display:flex;align-items:center;gap:10px;width:100%;height:52px;padding:3px 8px;border:0;border-radius:8px;background:color-mix(in srgb,AccentColor 20%,transparent);color:CanvasText;font:400 13px system-ui;text-align:left;color-scheme:light dark}.ds-result-copy{display:flex;flex-direction:column;gap:1px;min-width:0}.ds-result-copy>span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ds-result-copy small{color:GrayText;font-size:11px}.ds-result-kind{margin-left:auto;border-radius:999px;padding:2.5px 6px;background:color-mix(in srgb,CanvasText 6%,transparent);color:GrayText;font-size:10px}.ds-result:hover{background:color-mix(in srgb,AccentColor 20%,transparent)}.ds-result:focus-visible{outline:auto;outline-offset:2px}"
+    },
+    {
+      "name": "Footer Action",
+      "kind": "button",
+      "refersTo": "footer-action",
+      "description": "The selected primary action stays beside Return; secondary actions remain visibly available.",
+      "html": "<div class=\"ds-footer\"><span>Overboard</span><div class=\"ds-footer-actions\"><button class=\"ds-footer-primary\">Open</button><span aria-label=\"Return\">↩</span><i></i><button>Actions</button><kbd>⌘K</kbd></div></div>",
+      "css": ".ds-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 20px;background:Canvas;color:GrayText;font:400 11px system-ui;color-scheme:light dark}.ds-footer-actions{display:flex;align-items:center;gap:8px}.ds-footer button{padding:0;border:0;background:transparent;color:GrayText;font:inherit}.ds-footer button.ds-footer-primary{color:CanvasText;font-weight:500}.ds-footer button:hover{color:CanvasText}.ds-footer button:focus-visible{outline:auto;outline-offset:3px}.ds-footer i{height:12px;border-left:1px solid color-mix(in srgb,CanvasText 10%,transparent)}.ds-footer kbd{padding:1px 4px;border-radius:4px;background:color-mix(in srgb,CanvasText 6%,transparent);font:400 10px system-ui}"
+    },
+    {
+      "name": "Source Badge",
+      "kind": "chip",
+      "refersTo": "source-badge",
+      "description": "A quiet informational capsule; this badge has no independent hover or action state.",
+      "html": "<span class=\"ds-source-badge\"><svg viewBox=\"0 0 16 16\" width=\"10\" height=\"10\" fill=\"none\" stroke=\"currentColor\" aria-hidden=\"true\"><rect x=\"2\" y=\"2\" width=\"12\" height=\"12\" rx=\"3\"/></svg>App</span>",
+      "css": ".ds-source-badge{display:inline-flex;align-items:center;gap:3px;padding:2.5px 6px;border-radius:999px;background:color-mix(in srgb,CanvasText 6%,transparent);color:GrayText;font:400 10px system-ui;color-scheme:light dark}"
+    },
+    {
+      "name": "Clipboard Card",
+      "kind": "card",
+      "refersTo": "clipboard-card",
+      "description": "Source header, content, and metadata in an outlined selected card. The native source-derived header tint is intentionally omitted from this content-neutral sample.",
+      "html": "<button class=\"ds-clip-card\" aria-pressed=\"true\"><span class=\"ds-clip-header\">Notes <small>⌘1</small></span><span class=\"ds-clip-body\">Release checklist<br><br>Build the app<br>Check the selected action<br>Review both appearances</span><span class=\"ds-clip-meta\">105 chars</span></button>",
+      "css": ".ds-clip-card{display:flex;flex-direction:column;width:190px;height:180px;padding:0;overflow:hidden;border:2.5px solid AccentColor;border-radius:10px;background:Canvas;color:CanvasText;box-shadow:0 4px 9px rgb(0 0 0 / 28%);font:400 12px system-ui;text-align:left;color-scheme:light dark}.ds-clip-header{display:flex;align-items:center;justify-content:space-between;padding:7px 10px;background:color-mix(in srgb,CanvasText 5%,transparent);color:GrayText;font-size:11px}.ds-clip-header small{font:400 10px ui-monospace}.ds-clip-body{flex:1;padding:10px}.ds-clip-meta{padding:0 10px 7px;color:GrayText;font-size:10px}.ds-clip-card:hover{color:CanvasText}.ds-clip-card:focus-visible{outline:auto;outline-offset:3px}"
+    },
+    {
+      "name": "Action Palette",
+      "kind": "custom",
+      "refersTo": "action-palette",
+      "description": "Shared native palette structure with query and selected action. Both the native menu and the HTML use an independent opaque surface to obscure the host content.",
+      "html": "<section class=\"ds-palette\" aria-label=\"Actions\"><label class=\"ds-palette-query\"><span>⌘</span><input placeholder=\"Type an action…\" aria-label=\"Find action\"/></label><div class=\"ds-palette-rows\"><button aria-pressed=\"true\">Paste <small>↩</small></button><button>Copy</button><button>Paste as Plain Text</button></div></section>",
+      "css": ".ds-palette{width:380px;max-width:100%;border-radius:12px;overflow:hidden;background:Canvas;color:CanvasText;box-shadow:0 6px 18px rgb(0 0 0 / 25%);font:400 13px system-ui;color-scheme:light dark}.ds-palette-query{display:flex;gap:8px;padding:12px;border-bottom:1px solid color-mix(in srgb,CanvasText 10%,transparent);color:GrayText}.ds-palette-query input{min-width:0;flex:1;border:0;background:transparent;color:CanvasText;font:400 15px system-ui}.ds-palette-rows{display:grid;gap:2px;padding:6px}.ds-palette button{display:flex;justify-content:space-between;padding:7px 10px;border:0;border-radius:7px;background:transparent;color:CanvasText;font:inherit;text-align:left}.ds-palette button[aria-pressed=\"true\"]{background:color-mix(in srgb,AccentColor 22%,transparent)}.ds-palette small{color:GrayText;font-size:11px}.ds-palette button:hover{color:CanvasText}.ds-palette button:focus-visible,.ds-palette input:focus-visible{outline:auto;outline-offset:2px}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The native command surface",
+    "overview": "Make the selected result recognizable and its action predictable. Overboard extends its existing macOS vocabulary: system type, native icons, restrained glass, and a single accent for selection. The interface is compact, calm, and useful at a glance. Content supplies the variety; the surrounding controls remain familiar.\n\nKeep filenames, source apps, breadcrumbs, and the selected action legible before adding decoration. The launcher and clipboard drawer share materials and interaction cues while retaining the forms appropriate to searching and scanning recent copies. System appearance and accessibility preferences are part of the visual system.",
+    "keyCharacteristics": [
+      "Native semantic colors and system typography.",
+      "One clear selection with a readable primary action.",
+      "Bounded lists, content-led previews, and compact metadata.",
+      "Restrained glass with an opaque accessibility fallback.",
+      "Source imagery and syntax color belong to content."
+    ],
+    "rules": [
+      {
+        "name": "The Selection Accent Rule",
+        "body": "Use the system accent to identify actionable selection; preserve primary and secondary text hierarchy inside the tint.",
+        "section": "colors"
+      },
+      {
+        "name": "The Native Color Rule",
+        "body": "Keep semantic color bindings live across appearance and accessibility changes. Do not turn screenshot pixel samples into application colors.",
+        "section": "colors"
+      },
+      {
+        "name": "The Recognition Rule",
+        "body": "Give the title the first reading position, then the source or path. Emphasize matched text with weight rather than adding another highlight color.",
+        "section": "typography"
+      },
+      {
+        "name": "The Reserved Footer Rule",
+        "body": "Keep the primary action and Actions affordance outside scrolling content, visible without covering the last result.",
+        "section": "layout"
+      },
+      {
+        "name": "The Accessible Material Rule",
+        "body": "Every shared glass surface must remain understandable with opaque backgrounds and without motion.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "**Do** use native semantic colors, system type, and meaningful platform icons.",
+      "**Do** preserve readable titles, breadcrumbs, source metadata, and action hints in both appearances.",
+      "**Do** keep a selected result and its primary action visually connected.",
+      "**Do** let previews and source imagery provide content-specific color.",
+      "**Do** verify glass, selection, and text with reduced transparency and reduced motion."
+    ],
+    "donts": [
+      "**Don't** replace semantic native colors with fixed screenshot samples.",
+      "**Don't** use faint text to solve density or hierarchy problems for actionable hints.",
+      "**Don't** cover the last result or the primary footer action with an overlay.",
+      "**Don't** promote source artwork, demo content, or syntax colors into brand tokens.",
+      "**Don't** add decorative display typography or ornamental section labels to the compact command surface."
+    ]
+  }
+}

@@ -257,6 +257,10 @@ public actor ClipStore {
 
         var conditions = ["item.deletedAt IS NULL"]
         var arguments: [DatabaseValueConvertible] = []
+        if let literal = SearchMatcher.literalTerm(parsed.text) {
+            conditions.append("instr(LOWER(item.searchText), ?) > 0")
+            arguments.append(literal)
+        }
         if let kind = parsed.kind {
             conditions.append("item.kind = ?")
             arguments.append(kind.rawValue)
@@ -297,6 +301,66 @@ public actor ClipStore {
 
         return try self.dbWriter.read { db in
             try ClipItem.fetchAll(db, sql: sql, arguments: StatementArguments(arguments))
+        }
+    }
+
+    /// Browser filters are applied before LIMIT, including OCR-backed FTS hits.
+    public func browseHistory(_ query: String, filter: ClipboardFilter = ClipboardFilter(), limit: Int = 200) throws -> [ClipItem] {
+        let parsed = ParsedQuery.parse(query)
+        let match = FTSQuery.match(for: parsed.text)
+        var conditions = ["item.deletedAt IS NULL", "item.isSecret = 0"]
+        var arguments: [DatabaseValueConvertible] = []
+        if let literal = SearchMatcher.literalTerm(parsed.text) {
+            conditions.append("instr(LOWER(item.searchText), ?) > 0")
+            arguments.append(literal)
+        }
+        if let kind = filter.kind ?? parsed.kind {
+            conditions.append("item.kind = ?")
+            arguments.append(kind.rawValue)
+        }
+        if let source = filter.source {
+            conditions.append("item.sourceAppName = ?")
+            arguments.append(source)
+        }
+        if let app = parsed.app {
+            conditions.append("(LOWER(item.sourceAppName) LIKE ? OR LOWER(item.sourceBundleID) LIKE ?)")
+            arguments += ["%\(app.lowercased())%", "%\(app.lowercased())%"]
+        }
+        if let category = parsed.category {
+            conditions.append("item.category = ?")
+            arguments.append(category)
+        }
+        if let since = filter.period.cutoff() {
+            conditions.append("item.lastUsedAt >= ?")
+            arguments.append(since)
+        }
+        if filter.pinnedOnly { conditions.append("item.isPinned = 1") }
+        let join: String
+        let order: String
+        if let match {
+            join = "JOIN item_fts ON item_fts.rowid = item.rowid"
+            conditions.insert("item_fts MATCH ?", at: 0)
+            arguments.insert(match, at: 0)
+            order = "bm25(item_fts), item.lastUsedAt DESC"
+        } else {
+            guard parsed.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return [] }
+            join = ""
+            order = "item.lastUsedAt DESC"
+        }
+        arguments.append(limit)
+        return try self.dbWriter.read { db in
+            try ClipItem.fetchAll(db, sql: "SELECT item.* FROM item \(join) WHERE \(conditions.joined(separator: " AND ")) ORDER BY \(order) LIMIT ?", arguments: StatementArguments(arguments))
+        }
+    }
+
+    public func matchExcerpt(itemID: String, query: String) throws -> String? {
+        guard let match = FTSQuery.match(for: ParsedQuery.parse(query).text) else { return nil }
+        return try self.dbWriter.read { db in
+            try String.fetchOne(db, sql: """
+            SELECT snippet(item_fts, 0, '', '', ' … ', 18)
+            FROM item_fts JOIN item ON item.rowid = item_fts.rowid
+            WHERE item_fts MATCH ? AND item.id = ? AND item.isSecret = 0 AND item.deletedAt IS NULL
+            """, arguments: [match, itemID])
         }
     }
 

@@ -2,9 +2,9 @@
 
 [![CI](https://github.com/nickysemenza/overboard/actions/workflows/ci.yml/badge.svg)](https://github.com/nickysemenza/overboard/actions/workflows/ci.yml)
 
-Everything you copy goes overboard. A native macOS clipboard manager — a personal,
-better Paste: clipboard history, a bottom-drawer picker on a hotkey, instant
-full-text search, and paste-back into whatever app you were using.
+A native macOS launcher and clipboard manager. Find files across your Mac and
+iCloud Drive, open apps, search Google, or retrieve something you copied. A fast
+bottom drawer handles recent pastes; the launcher adds a full clipboard browser.
 
 <p align="center">
   <img src="docs/screenshots/drawer.png" width="900" alt="The Overboard drawer: a search bar over a strip of clipboard cards — pinned note, syntax-highlighted code, link, image, JSON, files, color swatch, and a masked secret">
@@ -59,16 +59,29 @@ updates. All clipboard data stays on your machine.
 - **Drawer** (⌘⇧V): bottom overlay over any app that never steals focus.
   Type to search, ←/→ or ⌘1–9 to select, ↩ to paste, ⇧↩ plain text,
   ⌘P pin, ⌘⌫ delete, esc to dismiss. Drag cards out to other apps.
-- **Launcher** (⌥Space): a Spotlight-style bar with results grouped under
-  Apps/Clipboard/Snippets/Files/System Settings headers. Inline calculator
-  (`15% of 80` → ↩ copies, ⌘↩ pastes), app launching with initials and custom
-  aliases (`sm` matches Sublime Merge), clipboard-history and snippet rows
-  (search operators work; ↩ pastes into the app, ⌘↩ copies), Spotlight file
-  search, web-search fallback, and Ask AI row (macOS 26: type an instruction
-  like "make this formal", ↩ runs it over the clipboard, ⌘↩ copies result).
-  Footer action bar shows the primary action; **⌘K** opens per-row actions
-  (reveal in Finder, copy path, quit app, open link…). Running apps have
-  indicator dots; Switch to / Quit App actions.
+- **Launcher** (⌥Space): **All · Files · Clipboard · Apps**, with ⌘1–4 to
+  switch scopes. Exact names and aliases rank above path/word matches and fuzzy
+  matches; successful selections improve ordering within a match tier. The empty
+  launcher suggests apps using successful-launch frequency and recency, with
+  running apps as an initial fallback and recent searches beneath. Enter
+  always activates the selected row, even when results arrive in the background.
+  The explicit Google row handles punctuation such as `c++` correctly.
+- **Files**: a background SQLite filename/path index covers accessible home
+  folders, iCloud Drive (including its Desktop/Documents), and Finder-visible
+  cloud-storage folders. `wedding budget` matches a budget file inside a Wedding
+  folder. Accent-insensitive matching, typo tolerance, readable breadcrumbs,
+  and cloud status; Open, Reveal in Finder, Copy Path, and ⌘Y preview actions.
+  Settings → Files controls roots, exclusions, rebuilding, and indexing status.
+  Indexing reads metadata only. Cloud files download only when **Download & Open**
+  is chosen; selecting or highlighting a result does not read its contents.
+- **Clipboard browser**: choose Clipboard scope or **Browse History** in the
+  existing bottom drawer for a large adjacent content preview. Filter by type,
+  source app, date, or pins; OCR is searchable. Browsing groups by time, search
+  ranks by relevance, and both views use the same history and paste-back service.
+- **Launcher extras**: inline calculator (`15% of 80` → ↩ copies, ⌘↩ pastes),
+  app initials and custom aliases (`sm` matches Sublime Merge), snippets, system
+  settings, now playing, and Ask AI stay available in All. **⌘K** opens per-row
+  actions. Running apps have indicator dots and Switch to / Quit App actions.
 - **Emoji picker** (⌃⌘Space): a Raycast-style searchable emoji grid with
   category sections and a Recently Used row. Type to filter by name or keyword
   ("fire", "shrug"), arrows to move, ↩ pastes into the app you were in, ⌘↩
@@ -136,18 +149,18 @@ updates. All clipboard data stays on your machine.
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/launcher-apps.png" width="640" alt="The launcher bar: typing sm matches Sublime Merge by its initials, with open / reveal / copy path hints">
-  <br><em>Launcher (⌥Space): apps match by name, initials, or your aliases</em>
+  <img src="docs/screenshots/launcher-home.png" width="740" alt="The launcher opens with app suggestions above recent searches, All/Files/Clipboard/Apps scopes, and a selected Switch to action">
+  <br><em>Suggestions learn from successful app launches; running apps provide the initial fallback.</em>
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/launcher-calc.png" width="640" alt="The launcher evaluating 15% of 80 to 12 inline">
-  <br><em>Inline calculator: ↩ copies the result, ⌘↩ pastes it into the app you were in</em>
+  <img src="docs/screenshots/launcher-files.png" width="740" alt="Searching hello selects an exactly named file above weaker matches, with a readable parent path">
+  <br><em>Exact names lead; filenames, breadcrumbs, and the selected action remain clear.</em>
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/launcher-clips.png" width="640" alt="The launcher matching a saved snippet and a clipboard item for the query standup, each marked with a Snippet or Clipboard source badge">
-  <br><em>Clipboard history and snippets in the launcher, marked with source badges</em>
+  <img src="docs/screenshots/launcher-browser.png" width="1020" alt="Clipboard search with type/source/date filters, a selected result beside its full text preview, and a Paste to Messages footer">
+  <br><em>Clipboard history shares the drawer’s history and paste-back service, with more room to browse.</em>
 </p>
 
 ## Architecture
@@ -156,9 +169,10 @@ updates. All clipboard data stays on your machine.
 - `OverboardKit/` — local Swift package with almost all code:
   - `OverboardCore` — models, GRDB persistence, FTS5 search, capture pipeline.
     Foundation + GRDB only; reusable on iOS someday.
-  - `OverboardMac` — the only module allowed to touch `NSPasteboard`,
+  - `OverboardMac` — filesystem metadata enumeration, FSEvents reconciliation,
+    cloud download actions, and the only module allowed to touch `NSPasteboard`,
     `NSWorkspace`, and `CGEvent`. Clipboard monitor, paste-back, permissions.
-  - `OverboardUI` — SwiftUI overlay drawer, settings, onboarding.
+  - `OverboardUI` — SwiftUI launcher, clipboard browser/drawer, settings, onboarding.
 
 Dependencies: [GRDB](https://github.com/groue/GRDB.swift),
 [KeyboardShortcuts](https://github.com/sindresorhus/KeyboardShortcuts),
@@ -188,17 +202,49 @@ upgrades, not just local rebuilds.
 xcodebuild -project Overboard.xcodeproj -scheme Overboard build   # app
 cd OverboardKit && swift test                                     # core tests
 ./scripts/tools.sh lint    # pinned SwiftFormat + SwiftLint, same versions as CI
-./scripts/dogfood.sh   # build Release, install to /Applications, relaunch
+./scripts/dogfood.sh             # incremental Debug build, install, relaunch
+./scripts/dogfood.sh --release   # optimized build for performance checks
+./scripts/dogfood.sh --no-build  # install/relaunch the last Debug build
 ```
 
 `tools.sh` downloads the exact linter releases CI uses into the gitignored
 `.tools/` directory (`format` rewrites, `lint` checks), so a Homebrew upgrade
 can never make local and CI results disagree.
 
-`dogfood.sh` is the daily-driver loop: it signs with the stable Apple
-Development identity so the Accessibility grant survives the rebuild (see the
-signing note above), then swaps the new build into `/Applications` and
-relaunches it.
+`dogfood.sh` defaults to Debug for fast edits, builds only the current Mac's
+architecture, and reuses `build/dogfood` for both configurations. The first
+Debug build compiles its dependencies; subsequent builds are incremental.
+Release remains useful for realistic search-speed, CPU, and memory measurements.
+Both configurations sign with the stable Apple Development identity so the
+Accessibility grant survives the rebuild (see the signing note above), then
+swap the new build into `/Applications` and relaunch it. `--no-build` explicitly
+reuses an existing app; combine it with `--release` to reuse the Release build.
+Build duration is printed, and full diagnostics plus Xcode's timing summary are
+saved to `build/dogfood/dogfood-Debug.log` or `dogfood-Release.log`.
+
+### Filename search performance
+
+Run the reproducible benchmark without concurrent builds or tests:
+
+```sh
+swift run -c release --package-path OverboardKit file-index-benchmark
+```
+
+The fixture contains 100,000 synthetic metadata records on disk: 317 project
+folders under Documents/iCloud Drive, ten repeated filename families, five
+extensions, and mixed local/cloud availability. Ten queries cover broad names,
+path fragments, numeric fragments, and a transposition typo. After a warm-up,
+the benchmark measures 100 searches and fails above 100 ms at p95.
+
+On an Apple M3 running macOS 26.6.2 (2026-09-11), the release build measured
+**57.5 ms p95**, **10.7 seconds initial metadata ingestion**, and **64.4 MB**
+for the SQLite index. Ingestion timing includes database/index writes; it does
+not include walking user folders, cloud-provider metadata latency, or UI rendering.
+Physical enumeration cost depends on folder count, access, and provider state.
+
+The index is rebuilt/reconciled on startup and after missed filesystem events;
+normal changes reconcile affected subtrees after a short debounce. The separate
+`filenames.sqlite` database is rebuildable; clearing it never clears clipboard history.
 
 ### Headless debug hooks (DEBUG builds only)
 
@@ -215,7 +261,8 @@ Commands: `show`, `hide`, `toggle`, `commit`, `commit-plain`, `pin`, `delete`,
 `preview`, `next`, `prev`, `extend`, `palette`, `stack`, plus the launcher's
 `launcher-show`, `launcher-hide`, `launcher-toggle`, `launcher-query:<text>`,
 `launcher-next`, `launcher-prev`, `launcher-commit`, `launcher-commit-cmd`,
-`launcher-commit-opt`, and the emoji picker's `emoji-show`, `emoji-hide`,
+`launcher-commit-opt`, `launcher-scope:All|Files|Clipboard|Apps`,
+`launcher-browse`, `launcher-preview`, `launcher-palette`, and the emoji picker's `emoji-show`, `emoji-hide`,
 `emoji-toggle`, `emoji-query:<text>`, `emoji-next`, `emoji-prev`, `emoji-up`,
 `emoji-down`, `emoji-commit`, `emoji-commit-cmd`.
 Traces append to `/tmp/overboard-trace.log` via `obTrace(_:)`.

@@ -4,7 +4,7 @@ import OverboardCore
 import OverboardMac
 
 /// State machine for the launcher bar: instant calculator/web rows on every
-/// keystroke, Spotlight file rows spliced in after a debounce.
+/// keystroke, indexed file rows merged by relevance as they arrive.
 @Observable
 public final class LauncherViewModel {
     public enum CommitModifier: Sendable {
@@ -20,6 +20,82 @@ public final class LauncherViewModel {
     public var query = ""
     public private(set) var results: [LauncherResult] = []
     public var selectedIndex = 0
+    public var scope: LauncherScope = .all
+    public var clipboardFilter = ClipboardFilter()
+    public private(set) var sources: [String] = []
+    public private(set) var hasMoreClipboard = false
+    private var clipboardLimit = 200
+    public var targetAppName = "previous app"
+    public var isPreviewVisible = false
+    public var statusMessage: String?
+    public private(set) var isSearching = false
+    private var userSelected = false
+    private let clipboardStore: ClipStore?
+    private var observationTask: Task<Void, Never>?
+
+    public var selectedResult: LauncherResult? {
+        self.results.indices.contains(self.selectedIndex) ? self.results[self.selectedIndex] : nil
+    }
+
+    public var showsPreview: Bool {
+        self.scope == .clipboard || self.isPreviewVisible
+    }
+
+    public var primaryActionLabel: String? {
+        guard let action = self.primaryAction else { return nil }
+        if action == .paste { return "Paste to \(self.targetAppName)" }
+        if action == .search { return "Search Google" }
+        return action.label
+    }
+
+    public func setScope(_ scope: LauncherScope) {
+        guard self.scope != scope else { return }
+        self.scope = scope
+        self.isPreviewVisible = false
+        self.closePalette()
+        self.scheduleSearch()
+        self.onLayoutChanged(self.results.count, self.headerCount)
+    }
+
+    public func togglePreview() {
+        guard self.selectedResult != nil else { return }
+        self.userSelected = true
+        self.isPreviewVisible.toggle()
+        self.onLayoutChanged(self.results.count, self.headerCount)
+    }
+
+    public func loadMoreClipboard() {
+        self.clipboardLimit += 200
+        self.scheduleSearch(preserveSelection: true)
+    }
+
+    public func select(at index: Int) {
+        guard self.results.indices.contains(index) else { return }
+        self.userSelected = true
+        self.selectedIndex = index
+    }
+
+    public func startObserving() {
+        guard let clipboardStore else { return }
+        self.observationTask?.cancel()
+        self.observationTask = Task { [weak self] in
+            do {
+                for try await _ in clipboardStore.observeRecent() {
+                    guard !Task.isCancelled, let self else { return }
+                    self.scheduleSearch(preserveSelection: true)
+                }
+            } catch {
+                self?.statusMessage = "Clipboard updates paused. Reopen to try again."
+            }
+        }
+    }
+
+    public func stopObserving() {
+        self.observationTask?.cancel()
+        self.observationTask = nil
+        self.searchTask?.cancel()
+    }
+
     /// Bumped on every summon so the view re-asserts text-field focus
     /// (onAppear only fires once — the hosting view is reused).
     public private(set) var showGeneration = 0
@@ -80,15 +156,17 @@ public final class LauncherViewModel {
 
     /// Instant providers (apps) answer from memory and render on every
     /// keystroke alongside the calculator; secondary providers (files) run
-    /// in the debounced pass and splice in above the web row.
+    /// concurrently and merge without displacing a manual selection.
     public init(
         instantProviders: [any LauncherProvider] = [],
         secondaryProviders: [any LauncherProvider],
         commandProvider: CommandProvider = CommandProvider(),
+        clipboardStore: ClipStore? = nil,
         // The "Ask AI" fallback row (after the web row). Default dark so
         // tests/previews don't light it up; AppServices injects the real gate.
         askAIProvider: AskAIProvider = AskAIProvider(isAvailable: { false })
     ) {
+        self.clipboardStore = clipboardStore
         self.instantRouter = QueryRouter(
             providers: [commandProvider, CalculatorProvider()] + instantProviders
                 + [WebSearchProvider(), askAIProvider]
@@ -113,47 +191,63 @@ public final class LauncherViewModel {
         self.scheduleSearch()
     }
 
-    public func scheduleSearch() {
+    public func scheduleSearch(preserveSelection: Bool = false) {
         self.searchTask?.cancel()
         let query = self.query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else {
-            // Empty field shows recent searches as the result list (most-recent
-            // first); committing a row refills the bar and re-runs it.
+        let scope = self.scope
+        if !preserveSelection {
+            self.clipboardLimit = 200
+            self.hasMoreClipboard = false
+            self.results = []
+            self.userSelected = false
             self.selectedIndex = 0
-            self.setResults(
-                self.history.reversed().prefix(self.maxRecentRows).map { .recentSearch(query: $0) }
-            )
+            self.isPaletteOpen = false
+        }
+        self.statusMessage = nil
+        self.isSearching = true
+        if query.isEmpty, scope == .all {
+            let recents = self.history.reversed().prefix(self.maxRecentRows).map { LauncherResult.recentSearch(query: $0) }
+            self.setResults(recents, preserveSelection: preserveSelection)
+            self.searchTask = Task {
+                let apps = await self.instantRouter.results(for: "", scope: .apps)
+                guard !Task.isCancelled else { return }
+                let counts = Defaults[.launcherItemUseCounts]
+                let candidates = apps.filter { row in
+                    if counts[row.id, default: 0] > 0 { return true }
+                    if case let .app(_, url) = row { return self.runningAppPaths.contains(url.path) }
+                    return false
+                }
+                let suggestions = self.sortByFrecency(candidates).prefix(6)
+                self.setResults(Array(suggestions) + recents, preserveSelection: true)
+                self.isSearching = false
+            }
             return
         }
         self.searchTask = Task {
-            // Calculator + web are effectively synchronous — show them now.
-            let instant = await self.instantRouter.results(for: query)
-            guard !Task.isCancelled else { return }
-            self.selectedIndex = 0
-            self.setResults(instant)
-
-            // Command mode (":…") is instant-only — no clip/file/Spotlight rows.
-            guard !query.hasPrefix(":") else { return }
-
-            let providers = self.secondaryProviders
-            guard !providers.isEmpty else { return }
-            // Debounce Spotlight; per-keystroke metadata queries are wasteful.
-            try? await Task.sleep(for: .milliseconds(250))
-            guard !Task.isCancelled else { return }
-
-            // Splice each provider's rows in as it finishes — apps come back
-            // well before the broad home-folder file query, and waiting for
-            // the slowest provider made the whole bar feel sluggish. The web
-            // row (and, after it, the Ask AI row) are pinned to the bottom of
-            // the instant section, below whatever the secondary providers add.
-            let isTail: (LauncherResult) -> Bool = { result in
-                switch result {
-                case .webSearch, .askAI: true
-                default: false
+            if scope == .clipboard, let store = self.clipboardStore {
+                do {
+                    let items = try await store.browseHistory(query, filter: self.clipboardFilter, limit: self.clipboardLimit + 1)
+                    let stats = try await store.libraryStats(topSources: 100)
+                    guard !Task.isCancelled else { return }
+                    self.sources = stats.bySource.map(\.app).sorted()
+                    self.hasMoreClipboard = items.count > self.clipboardLimit
+                    self.setResults(items.prefix(self.clipboardLimit).map(LauncherResult.clip), preserveSelection: true)
+                } catch {
+                    guard !Task.isCancelled else { return }
+                    self.statusMessage = "Couldn’t search clipboard history. Try again."
+                    self.setResults([])
                 }
+                self.isSearching = false
+                return
             }
-            let head = instant.filter { !isTail($0) }
-            let tail = instant.filter(isTail)
+            let instant = await self.instantRouter.results(for: query, scope: scope)
+            guard !Task.isCancelled else { return }
+            self.setResults(instant, preserveSelection: true)
+            let providers = self.secondaryProviders.filter { $0.searchScopes.contains(scope) }
+            guard !query.hasPrefix(":"), !providers.isEmpty else {
+                self.isSearching = false
+                return
+            }
             var buckets = [[LauncherResult]](repeating: [], count: providers.count)
             await withTaskGroup(of: (Int, [LauncherResult]).self) { group in
                 for (index, provider) in providers.enumerated() {
@@ -161,16 +255,18 @@ public final class LauncherViewModel {
                 }
                 for await (index, rows) in group {
                     guard !Task.isCancelled else { return }
-                    buckets[index] = rows
-                    self.setResults(head + buckets.flatMap(\.self) + tail, preserveSelection: true)
+                    buckets[index] = rows.filter(scope.includes)
+                    self.setResults(instant + buckets.flatMap(\.self), preserveSelection: true)
                 }
             }
+            guard !Task.isCancelled else { return }
+            self.isSearching = false
         }
     }
 
     public func moveSelection(_ delta: Int) {
         guard !self.results.isEmpty else { return }
-        self.selectedIndex = min(max(self.selectedIndex + delta, 0), self.results.count - 1)
+        self.select(at: min(max(self.selectedIndex + delta, 0), self.results.count - 1))
     }
 
     // MARK: - Search history
@@ -204,9 +300,12 @@ public final class LauncherViewModel {
         Defaults[.launcherSearchHistory] = updated
         // Re-render the (still empty-field) recents list; setResults reclamps the
         // selection so it lands on the next row down.
+        let oldIndex = self.selectedIndex
         self.setResults(
-            updated.reversed().prefix(self.maxRecentRows).map { .recentSearch(query: $0) }
+            self.results.filter { if case .app = $0 { true } else { false } }
+                + updated.reversed().prefix(self.maxRecentRows).map { .recentSearch(query: $0) }
         )
+        self.selectedIndex = min(oldIndex, max(self.results.count - 1, 0))
         return true
     }
 
@@ -265,12 +364,22 @@ public final class LauncherViewModel {
             self.onCopyText(display)
         case let (.paste, .calculation(_, display)):
             self.onPasteText(display)
-        case let (.open, .app(_, url)), let (.switchTo, .app(_, url)),
-             let (.open, .file(_, url)):
+        case let (.open, .app(_, url)), let (.switchTo, .app(_, url)):
             self.onOpenFile(url)
-        case let (.revealInFinder, .app(_, url)), let (.revealInFinder, .file(_, url)):
+        case let (.open, .file(_, url, _)), let (.downloadAndOpen, .file(_, url, _)):
+            self.onOpenFile(url)
+        case (.preview, _):
+            self.togglePreview()
+        case let (.pin, .clip(item)), let (.unpin, .clip(item)):
+            Task {
+                try? await self.clipboardStore?.setPinned(id: item.id, !item.isPinned)
+                self.scheduleSearch(preserveSelection: true)
+            }
+        case let (.openSource, .clip(item)):
+            if let source = item.sourceURL, let url = URL(string: source) { self.onOpenClipLink(url) }
+        case let (.revealInFinder, .app(_, url)), let (.revealInFinder, .file(_, url, _)):
             self.onRevealFile(url)
-        case let (.copyPath, .app(_, url)), let (.copyPath, .file(_, url)):
+        case let (.copyPath, .app(_, url)), let (.copyPath, .file(_, url, _)):
             self.onCopyPath(url.path)
         case let (.quitApp, .app(_, url)):
             self.onQuitApp(url)
@@ -344,14 +453,17 @@ public final class LauncherViewModel {
             self.closePalette()
         } else {
             guard !self.selectedActions.isEmpty else { return }
+            self.userSelected = true
             self.paletteQuery = ""
             self.paletteIndex = 0
             self.isPaletteOpen = true
         }
+        self.onLayoutChanged(self.results.count, self.headerCount)
     }
 
     public func closePalette() {
         self.isPaletteOpen = false
+        self.onLayoutChanged(self.results.count, self.headerCount)
     }
 
     public func movePaletteSelection(_ delta: Int) {
@@ -368,33 +480,68 @@ public final class LauncherViewModel {
         self.perform(actions[chosen])
     }
 
-    /// - Parameter preserveSelection: when true, the currently highlighted row is
-    ///   re-located by identity in the new list and the selection follows it.
-    ///   Secondary providers splice their buckets into the *middle* of the list in
-    ///   provider order as each finishes, so a plain index would silently repoint
-    ///   to a different row — and a stray ↩ would commit the wrong action. Callers
-    ///   that intentionally reset (instant pass, empty field) leave this false.
+    public func recordSuccessfulSelection(id: String, query: String) {
+        var counts = Defaults[.launcherItemUseCounts]
+        var lastUsed = Defaults[.launcherItemLastUsed]
+        counts[id] = min(counts[id, default: 0] + 1, 100_000)
+        lastUsed[id] = Date.now.timeIntervalSince1970
+        if counts.count > 2000 {
+            for key in counts.keys.sorted(by: { lastUsed[$0, default: 0] < lastUsed[$1, default: 0] }).prefix(counts.count - 2000) {
+                counts.removeValue(forKey: key)
+                lastUsed.removeValue(forKey: key)
+            }
+        }
+        Defaults[.launcherItemUseCounts] = counts
+        Defaults[.launcherItemLastUsed] = lastUsed
+        let query = AppMatcher.fold(query.trimmingCharacters(in: .whitespacesAndNewlines))
+        guard !query.isEmpty else { return }
+        var usage = Defaults[.launcherSelectionUsage]
+        let key = query + "\u{1F}" + id
+        usage[key] = min(usage[key, default: 0] + 1, 100)
+        if usage.count > 2000 {
+            let oldest = usage.sorted { $0.value < $1.value }.prefix(usage.count - 2000)
+            for entry in oldest {
+                usage.removeValue(forKey: entry.key)
+            }
+        }
+        Defaults[.launcherSelectionUsage] = usage
+    }
+
+    private func sortByFrecency(_ rows: [LauncherResult]) -> [LauncherResult] {
+        LauncherFrecency.sorted(rows, counts: Defaults[.launcherItemUseCounts], lastUsed: Defaults[.launcherItemLastUsed])
+    }
+
     private func setResults(_ newResults: [LauncherResult], preserveSelection: Bool = false) {
-        let anchorID = preserveSelection && self.results.indices.contains(self.selectedIndex)
-            ? self.results[self.selectedIndex].id
-            : nil
-        // Pinned rows (Spotify now-playing) trail every list. Routing all
-        // mutations through here means the footer appears on the empty-query
-        // recents, the instant pass, and the debounced splice alike.
-        let combined = newResults + self.pinnedResults()
-        obTrace("launcher results: \(combined.map(\.id))")
-        // Same annotation the view renders — header rows add panel height too.
-        let headers = LauncherSection.annotate(combined).count { $0.header != nil }
-        let layoutChanged = combined.count != self.results.count || headers != self.headerCount
-        self.results = combined
-        self.headerCount = headers
-        if let anchorID, let index = combined.firstIndex(where: { $0.id == anchorID }) {
+        let anchor = preserveSelection && self.userSelected ? self.selectedResult?.id : nil
+        let prefix = AppMatcher.fold(self.query.trimmingCharacters(in: .whitespacesAndNewlines)) + "\u{1F}"
+        let usage = Dictionary(uniqueKeysWithValues: Defaults[.launcherSelectionUsage].compactMap { key, value in
+            key.hasPrefix(prefix) ? (String(key.dropFirst(prefix.count)), value) : nil
+        })
+        let combined: [LauncherResult] = if self.scope == .clipboard {
+            // The store owns FTS/OCR relevance and chronological browsing.
+            newResults
+        } else if self.query.isEmpty, self.scope == .apps {
+            self.sortByFrecency(newResults)
+        } else if self.query.isEmpty {
+            newResults + (self.scope == .all ? self.pinnedResults() : [])
+        } else {
+            LauncherRanking.sorted(newResults + (self.scope == .all ? self.pinnedResults() : []), query: self.query,
+                                   aliases: AppMatcher.parseAliases(Defaults[.launcherAppAliases]), usage: usage)
+        }
+        var seen = Set<String>()
+        self.results = combined.filter { seen.insert($0.id).inserted }
+        self.headerCount = self.query.isEmpty && self.scope == .all ? Set(self.results.compactMap { row -> String? in
+            switch row {
+            case .app: "suggestions"
+            case .recentSearch: "recent"
+            default: nil
+            }
+        }).count : 0
+        if let anchor, let index = self.results.firstIndex(where: { $0.id == anchor }) {
             self.selectedIndex = index
-        } else if self.selectedIndex >= combined.count {
-            self.selectedIndex = max(combined.count - 1, 0)
+        } else {
+            self.selectedIndex = 0
         }
-        if layoutChanged {
-            self.onLayoutChanged(combined.count, headers)
-        }
+        self.onLayoutChanged(self.results.count, self.headerCount)
     }
 }

@@ -3,6 +3,10 @@ import Foundation
 /// Surfaces clipboard-history hits as launcher rows, reusing the drawer's
 /// FTS search (so `kind:` / `app:` / `category:` operators work here too).
 public struct ClipSearchProvider: LauncherProvider {
+    public var searchScopes: Set<LauncherScope> {
+        [.all, .clipboard]
+    }
+
     private let store: ClipStore
     private let limit: Int
 

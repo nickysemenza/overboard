@@ -8,16 +8,13 @@ public struct DrawerView: View {
     @FocusState private var searchFocused: Bool
     @Environment(\.openSettings) private var openSettings
     @Default(.savedSearches) private var savedSearches
-    /// Shared between the panel's glass shape and the ⌘K palette's so Liquid
-    /// Glass can morph the palette out of the panel instead of cross-fading.
-    @Namespace private var glassNamespace
 
     public init(viewModel: DrawerViewModel) {
         self.viewModel = viewModel
     }
 
     public var body: some View {
-        GlassEffectContainer(spacing: 20) {
+        Group {
             VStack(spacing: 10) {
                 if self.viewModel.previewState == .hidden {
                     self.searchBar
@@ -30,15 +27,15 @@ public struct DrawerView: View {
                     PreviewPane(viewModel: self.viewModel)
                 }
             }
+            .animation(.spring(response: 0.22, dampingFraction: 0.85), value: self.viewModel.isPaletteOpen)
+            .padding(14)
+            .glassPanel(cornerRadius: 16)
             .overlay {
                 if self.viewModel.isPaletteOpen {
-                    ActionPalette(viewModel: self.viewModel, glassNamespace: self.glassNamespace)
+                    ActionPalette(viewModel: self.viewModel)
                         .transition(.scale(scale: 0.95).combined(with: .opacity))
                 }
             }
-            .animation(.spring(response: 0.22, dampingFraction: 0.85), value: self.viewModel.isPaletteOpen)
-            .padding(14)
-            .glassPanel(cornerRadius: 16, id: "panel", in: self.glassNamespace)
             .padding(12)
             .onAppear {
                 self.searchFocused = true
@@ -79,6 +76,9 @@ public struct DrawerView: View {
             .textFieldStyle(.plain)
             .font(.title3)
             .focused(self.$searchFocused)
+
+            Button("Browse History", systemImage: "list.bullet.rectangle", action: self.viewModel.onBrowseHistory)
+                .buttonStyle(.plain).font(.caption).help("Open searchable history with a preview")
 
             if self.canSaveCurrentSearch {
                 Button {
@@ -287,8 +287,8 @@ public struct DrawerView: View {
         Text(self.viewModel.mode == .history
             ? "↩ paste   ⇧↩ plain   space preview   ⌘K actions   ⌘E edit   ⌘↩ stack   ⌘P pin   ⌘/ snippets"
             : "↩ paste snippet   ⌘/ history   esc dismiss")
-            .font(.caption2)
-            .foregroundStyle(.tertiary)
+            .font(.caption)
+            .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .center)
     }
 

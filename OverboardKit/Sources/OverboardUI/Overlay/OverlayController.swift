@@ -27,6 +27,7 @@ public final class OverlayController {
     /// Called when the user pastes edited text from the preview pane.
     public var onCommitEditedText: (String, NSRunningApplication?) -> Void = { _, _ in }
     /// Called when the user runs a clip action on the selection.
+    public var onBrowseHistory: (String, NSRunningApplication?) -> Void = { _, _ in }
     public var onRunAction: (ClipAction, [ClipItem], NSRunningApplication?) -> Void = { _, _, _ in }
 
     public init(store: ClipStore, stack: PasteStack) {
@@ -73,6 +74,13 @@ public final class OverlayController {
             self.onRunAction(action, items, target)
         }
         self.viewModel.onDismiss = { [weak self] in self?.hide() }
+        self.viewModel.onBrowseHistory = { [weak self] in
+            guard let self else { return }
+            let query = self.viewModel.query
+            let target = self.targetApp
+            self.hide()
+            self.onBrowseHistory(query, target)
+        }
     }
 
     public var isVisible: Bool {

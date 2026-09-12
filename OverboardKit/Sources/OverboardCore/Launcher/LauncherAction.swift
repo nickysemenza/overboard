@@ -21,6 +21,11 @@ public enum LauncherAction: String, Sendable, CaseIterable, Identifiable {
     case removeRecent
     case copyLink
     case openInSpotify
+    case downloadAndOpen
+    case preview
+    case pin
+    case unpin
+    case openSource
 
     public var id: String {
         self.rawValue
@@ -44,6 +49,11 @@ public enum LauncherAction: String, Sendable, CaseIterable, Identifiable {
         case .removeRecent: "Remove from Recents"
         case .copyLink: "Copy Link"
         case .openInSpotify: "Open in Spotify"
+        case .downloadAndOpen: "Download & Open"
+        case .preview: "Preview"
+        case .pin: "Pin"
+        case .unpin: "Unpin"
+        case .openSource: "Open Source Page"
         }
     }
 
@@ -64,6 +74,10 @@ public enum LauncherAction: String, Sendable, CaseIterable, Identifiable {
         case .removeRecent: "trash"
         case .copyLink: "link"
         case .openInSpotify: "music.note"
+        case .downloadAndOpen: "icloud.and.arrow.down"
+        case .preview: "eye"
+        case .pin, .unpin: "pin"
+        case .openSource: "globe"
         }
     }
 }
@@ -103,12 +117,14 @@ public enum LauncherActions {
             // ↩ paste, ⌘↩ copy, ⌥↩ paste plain; link clips add Open Link.
             var actions: [LauncherAction] = [.paste, .copy, .pastePlain]
             if item.kind == .link { actions.append(.openLink) }
+            actions += [.preview, item.isPinned ? .unpin : .pin]
+            if item.sourceURL != nil { actions.append(.openSource) }
             return actions
         case .snippet:
             // ↩ paste, ⌘↩ copy (⌥↩ is a no-op alias of ↩ for snippets).
             return [.paste, .copy]
-        case .file:
-            return [.open, .revealInFinder, .copyPath]
+        case let .file(_, _, info):
+            return [info.availability == .cloud ? .downloadAndOpen : .open, .revealInFinder, .copyPath, .preview]
         case .calculation:
             // ↩ copy, ⌘↩ paste.
             return [.copy, .paste]

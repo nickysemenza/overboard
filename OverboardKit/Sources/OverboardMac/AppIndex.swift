@@ -67,6 +67,10 @@ public final class AppIndex {
 /// Instant launcher rows for applications: AppMatcher decides what a query
 /// hits (prefix, initials like "sm", substring, or a user alias).
 public struct AppSearchProvider: LauncherProvider {
+    public var searchScopes: Set<LauncherScope> {
+        [.all, .apps]
+    }
+
     private let index: AppIndex
     private let limit: Int
     private let aliases: @Sendable () -> [String: String]
@@ -78,7 +82,9 @@ public struct AppSearchProvider: LauncherProvider {
     }
 
     public func results(for query: String) async -> [LauncherResult] {
-        guard query.count >= 2 else { return [] }
+        guard !query.isEmpty else {
+            return await self.index.entries().sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }.map { .app(name: $0.name, url: $0.url) }
+        }
         let entries = await self.index.entries()
         let ranked = AppMatcher.rank(
             query: query,
