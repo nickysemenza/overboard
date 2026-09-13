@@ -150,14 +150,25 @@ public enum ClipAction: String, CaseIterable, Identifiable, Sendable {
     public func isApplicable(to items: [ClipItem]) -> Bool {
         guard let first = items.first else { return false }
         let info = self.info
-        switch info.selection {
-        case .single: guard items.count == 1 else { return false }
-        case .multi: guard items.count >= 2 else { return false }
-        case .any: break
-        }
+        guard Self.countMatches(info.selection, count: items.count) else { return false }
         if !info.kinds.isEmpty {
             guard Set(items.map(\.kind)).isSubset(of: info.kinds) else { return false }
         }
+        return self.contentMatches(first: first, items: items)
+    }
+
+    /// The `selection`/count half of `isApplicable`'s structural check.
+    private static func countMatches(_ selection: ClipActionInfo.Selection, count: Int) -> Bool {
+        switch selection {
+        case .single: count == 1
+        case .multi: count >= 2
+        case .any: true
+        }
+    }
+
+    /// The content/secret-heuristic half of `isApplicable`, once selection and
+    /// kind have already passed.
+    private func contentMatches(first: ClipItem, items: [ClipItem]) -> Bool {
         switch self {
         case .openSource:
             return !(first.sourceURL ?? "").isEmpty
@@ -184,6 +195,25 @@ public enum ClipAction: String, CaseIterable, Identifiable, Sendable {
     public func run(_ inputs: [ActionInput]) -> ActionEffect {
         let texts = inputs.compactMap(\.plainText)
         switch self {
+        case .openLink, .openSource, .openAllLinks, .copyAsMarkdownLink:
+            return self.runLinkAction(texts: texts, inputs: inputs)
+        case .revealInFinder:
+            let urls = inputs.first?.fileURLs ?? []
+            return urls.isEmpty ? .showMessage("File no longer available") : .revealFiles(urls)
+        case .saveImageToDownloads, .openImageInPreview:
+            return self.runImageAction(inputs: inputs)
+        case .prettyPrintJSON, .decodeBase64, .wordCount:
+            return self.runTextTransform(texts: texts)
+        case .sumNumbers, .pasteAllJoined, .addAllToStack:
+            return self.runAggregate(inputs: inputs, texts: texts)
+        }
+    }
+
+    /// `run` for the URL-flavored single-item actions. Grouped so `run`'s own
+    /// switch stays a small dispatch table instead of one 13-case, 24-branch
+    /// function.
+    private func runLinkAction(texts: [String], inputs: [ActionInput]) -> ActionEffect {
+        switch self {
         case .openLink:
             guard let text = texts.first,
                   let url = URL(string: text.trimmingCharacters(in: .whitespacesAndNewlines))
@@ -208,10 +238,14 @@ public enum ClipAction: String, CaseIterable, Identifiable, Sendable {
             let title = input.item.aiTitle ?? url.host ?? text
             return .copyText("[\(title)](\(text))", hud: "Markdown link copied")
 
-        case .revealInFinder:
-            let urls = inputs.first?.fileURLs ?? []
-            return urls.isEmpty ? .showMessage("File no longer available") : .revealFiles(urls)
+        default:
+            return .showMessage("") // unreachable — see `run`'s dispatch above.
+        }
+    }
 
+    /// `run` for the two image actions.
+    private func runImageAction(inputs: [ActionInput]) -> ActionEffect {
+        switch self {
         case .saveImageToDownloads:
             guard let item = inputs.first?.item else { return .showMessage("No image") }
             return .saveImage(itemID: item.id)
@@ -220,6 +254,14 @@ public enum ClipAction: String, CaseIterable, Identifiable, Sendable {
             guard let item = inputs.first?.item else { return .showMessage("No image") }
             return .openImage(itemID: item.id)
 
+        default:
+            return .showMessage("") // unreachable — see `run`'s dispatch above.
+        }
+    }
+
+    /// `run` for the single-item text transforms.
+    private func runTextTransform(texts: [String]) -> ActionEffect {
+        switch self {
         case .prettyPrintJSON:
             guard let text = texts.first else { return .showMessage("Empty clip") }
             guard let pretty = TextScraps.prettyPrintedJSON(text) else {
@@ -239,6 +281,14 @@ public enum ClipAction: String, CaseIterable, Identifiable, Sendable {
             let words = text.split(whereSeparator: \.isWhitespace).count
             return .showMessage("\(words) words · \(text.count) characters")
 
+        default:
+            return .showMessage("") // unreachable — see `run`'s dispatch above.
+        }
+    }
+
+    /// `run` for the actions that combine multiple selected items.
+    private func runAggregate(inputs: [ActionInput], texts: [String]) -> ActionEffect {
+        switch self {
         case .sumNumbers:
             let numbers = texts.flatMap(TextScraps.numbers(in:))
             guard numbers.count >= 2 else { return .showMessage("Need at least two numbers") }
@@ -252,6 +302,9 @@ public enum ClipAction: String, CaseIterable, Identifiable, Sendable {
 
         case .addAllToStack:
             return .addToStack(inputs.map(\.item))
+
+        default:
+            return .showMessage("") // unreachable — see `run`'s dispatch above.
         }
     }
 }
