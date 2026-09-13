@@ -46,9 +46,9 @@ struct CaptureClassifierMetadataTests {
         )
     }
 
-    private func fileSnapshot(_ paths: [String]) -> PasteboardSnapshot {
+    private func fileSnapshot(_ paths: [String]) throws -> PasteboardSnapshot {
         let urls = paths.map { URL(fileURLWithPath: $0).absoluteString }
-        let data = try! JSONEncoder().encode(urls)
+        let data = try JSONEncoder().encode(urls)
         return PasteboardSnapshot(
             reps: [.init(uti: WellKnownUTI.fileURLs, data: data)],
             sourceBundleID: "com.apple.finder",
@@ -83,15 +83,15 @@ struct CaptureClassifierMetadataTests {
         #expect(result?.pixelHeight == 48)
     }
 
-    @Test func fileCount() {
-        let result = CaptureClassifier.classify(self.fileSnapshot(["/tmp/a.pdf", "/tmp/b.txt", "/tmp/c.md"]))
+    @Test func fileCount() throws {
+        let result = try CaptureClassifier.classify(self.fileSnapshot(["/tmp/a.pdf", "/tmp/b.txt", "/tmp/c.md"]))
         #expect(result?.kind == .file)
         #expect(result?.fileCount == 3)
     }
 
-    @Test func nonTextKindsHaveNoCharCount() {
+    @Test func nonTextKindsHaveNoCharCount() throws {
         #expect(CaptureClassifier.classify(self.imageSnapshot(width: 10, height: 10))?.charCount == nil)
-        #expect(CaptureClassifier.classify(self.fileSnapshot(["/tmp/x"]))?.charCount == nil)
+        #expect(try CaptureClassifier.classify(self.fileSnapshot(["/tmp/x"]))?.charCount == nil)
     }
 }
 
