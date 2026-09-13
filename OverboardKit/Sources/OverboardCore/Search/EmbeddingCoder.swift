@@ -18,11 +18,11 @@ public enum EmbeddingCoder {
     /// assuming a unit-length input — but via vDSP instead of a scalar loop,
     /// which matters once `semanticSearch`/`relatedItems` score hundreds of
     /// candidates per query.
-    public static func cosineSimilarity(_ a: [Float], _ b: [Float]) -> Float {
-        guard a.count == b.count, !a.isEmpty else { return 0 }
-        let dot = vDSP.dot(a, b)
-        let normA = sqrt(vDSP.sumOfSquares(a))
-        let normB = sqrt(vDSP.sumOfSquares(b))
+    public static func cosineSimilarity(_ lhs: [Float], _ rhs: [Float]) -> Float {
+        guard lhs.count == rhs.count, !lhs.isEmpty else { return 0 }
+        let dot = vDSP.dot(lhs, rhs)
+        let normA = sqrt(vDSP.sumOfSquares(lhs))
+        let normB = sqrt(vDSP.sumOfSquares(rhs))
         let denominator = normA * normB
         return denominator > 0 ? dot / denominator : 0
     }
