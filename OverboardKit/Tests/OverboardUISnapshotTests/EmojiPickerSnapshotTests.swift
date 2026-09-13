@@ -62,7 +62,7 @@ struct EmojiPickerSnapshotTests {
 }
 
 /// Render + commit-routing checks that don't compare pixels; mirrors
-/// LauncherCommitRoutingTests' role for the launcher.
+/// the LauncherCommitRouting suites' role for the launcher.
 @MainActor
 struct EmojiPickerLogicTests {
     private func rendersNonEmpty(_ image: NSImage) -> Bool {
