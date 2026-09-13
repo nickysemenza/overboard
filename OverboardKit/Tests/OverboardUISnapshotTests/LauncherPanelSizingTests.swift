@@ -13,6 +13,16 @@ private struct SizingLauncherProvider: LauncherProvider {
     }
 }
 
+/// What `openingAndTypingKeepTheSameWindowFrame` needs after opening the
+/// panel and waiting for the initial suggestions — factored out purely to
+/// keep that test's own body under SwiftLint's function_body_length.
+private struct PanelSizingFixture {
+    let model: LauncherViewModel
+    let controller: LauncherPanelController
+    let panel: NSWindow
+    let openingFrame: NSRect
+}
+
 @Suite(.serialized)
 @MainActor
 struct LauncherPanelSizingTests {
@@ -21,27 +31,39 @@ struct LauncherPanelSizingTests {
         try #require(!model.isSearching)
     }
 
-    @Test func openingAndTypingKeepTheSameWindowFrame() async throws {
+    /// Opens a panel with six suggested apps, waits for them to land, and
+    /// confirms that arrival alone didn't move or resize the window — the
+    /// baseline every assertion in the test builds on.
+    private func makeSizingFixture() async throws -> PanelSizingFixture {
         let application = NSApplication.shared
         let existingWindows = Set(application.windows.map(\.windowNumber))
-        let oldHistory = Defaults[.launcherSearchHistory]
-        Defaults[.launcherSearchHistory] = []
-        defer { Defaults[.launcherSearchHistory] = oldHistory }
         let model = LauncherViewModel(instantProviders: [SizingLauncherProvider()], secondaryProviders: [])
         model.runningAppPaths = Set((0 ..< 6).map { "/fixture/app-\($0).app" })
         let controller = try LauncherPanelController(store: Fixtures.store(), viewModel: model)
         controller.show()
         let panel = try #require(application.windows
             .first { $0 is OverlayPanel && !existingWindows.contains($0.windowNumber) })
+        let openingFrame = panel.frame
+        try await self.waitForSearch(model)
+        #expect(model.results.count == 6)
+        #expect(panel.frame == openingFrame, "Suggestions arriving must not resize or reposition the window")
+        return PanelSizingFixture(model: model, controller: controller, panel: panel, openingFrame: openingFrame)
+    }
+
+    @Test func openingAndTypingKeepTheSameWindowFrame() async throws {
+        let oldHistory = Defaults[.launcherSearchHistory]
+        Defaults[.launcherSearchHistory] = []
+        defer { Defaults[.launcherSearchHistory] = oldHistory }
+        let fixture = try await self.makeSizingFixture()
+        let model = fixture.model
+        let controller = fixture.controller
+        let panel = fixture.panel
+        let openingFrame = fixture.openingFrame
         defer {
             model.query = ""
             controller.hide()
             panel.close()
         }
-        let openingFrame = panel.frame
-        try await self.waitForSearch(model)
-        #expect(model.results.count == 6)
-        #expect(panel.frame == openingFrame, "Suggestions arriving must not resize or reposition the window")
 
         for (query, count) in [("many", 21), ("one", 2), ("no-match", 1), ("", 6)] {
             controller.setQuery(query)

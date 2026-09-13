@@ -195,48 +195,81 @@ struct LauncherPreview: View {
             }
         }
         do {
-            switch self.result {
-            case let .clip(item):
-                guard !item.isSecret else { self.error = "Protected clipboard item"; return }
-                switch item.kind {
-                case .image:
-                    guard let representation = try await self.store.representations(for: item.id)
-                        .first(where: { $0.uti == WellKnownUTI.png })
-                    else { self.error = "Image data is missing."; return }
-                    let data = try await self.store.payload(for: representation)
-                    guard !Task.isCancelled else { return }
-                    self.image = ItemCardView.thumbnail(from: data, maxPixel: 1400)
-                case .file:
-                    let paths = try await self.store.filePaths(for: item.id)
-                    guard !Task.isCancelled else { return }
-                    self.text = paths.joined(separator: "\n")
-                default:
-                    let text = try await self.store.plainText(for: item.id) ?? item.previewText ?? ""
-                    guard !Task.isCancelled else { return }
-                    self.text = text
-                    if item.category == "code" || CodeHighlighter.looksLikeCode(text) {
-                        let highlighted = await CodeHighlighter.highlight(text, dark: self.colorScheme == .dark)
-                        guard !Task.isCancelled else { return }
-                        self.code = highlighted
-                    }
-                }
-            case let .file(_, url, _):
-                let state = await Task.detached(priority: .utility) { FileAvailability.status(at: url) }.value
-                guard !Task.isCancelled else { return }
-                self.fileState = state
-                if state == .local, FilePreviewEligibility.supports(url) {
-                    self.filePreviewContent = await Task.detached(priority: .utility) {
-                        try? FilePreviewLoader.load(url)
-                    }.value
-                }
-            case let .snippet(item): self.text = item.body
-            case let .calculation(input, display): self.text = "\(input) = \(display)"
-            case let .webSearch(query, _): self.text = query
-            default: break
-            }
+            try await self.loadContent(for: self.result)
         } catch {
             guard !Task.isCancelled else { return }
             self.error = "Couldn’t load this item. Select it again to retry."
+        }
+    }
+
+    /// Dispatches by result kind — split out of `load()` purely to keep that
+    /// function's cyclomatic complexity down; behavior is unchanged from the
+    /// single switch this used to be.
+    private func loadContent(for result: LauncherResult?) async throws {
+        switch result {
+        case let .clip(item):
+            try await self.loadClipContent(item)
+        case let .file(_, url, _):
+            await self.loadFileContent(url)
+        case let .snippet(item):
+            self.text = item.body
+        case let .calculation(input, display):
+            self.text = "\(input) = \(display)"
+        case let .webSearch(query, _):
+            self.text = query
+        default:
+            break
+        }
+    }
+
+    private func loadClipContent(_ item: ClipItem) async throws {
+        guard !item.isSecret else {
+            self.error = "Protected clipboard item"
+            return
+        }
+        switch item.kind {
+        case .image:
+            try await self.loadClipImage(item)
+        case .file:
+            let paths = try await self.store.filePaths(for: item.id)
+            guard !Task.isCancelled else { return }
+            self.text = paths.joined(separator: "\n")
+        default:
+            try await self.loadClipText(item)
+        }
+    }
+
+    private func loadClipImage(_ item: ClipItem) async throws {
+        guard let representation = try await self.store.representations(for: item.id)
+            .first(where: { $0.uti == WellKnownUTI.png })
+        else {
+            self.error = "Image data is missing."
+            return
+        }
+        let data = try await self.store.payload(for: representation)
+        guard !Task.isCancelled else { return }
+        self.image = ItemCardView.thumbnail(from: data, maxPixel: 1400)
+    }
+
+    private func loadClipText(_ item: ClipItem) async throws {
+        let text = try await self.store.plainText(for: item.id) ?? item.previewText ?? ""
+        guard !Task.isCancelled else { return }
+        self.text = text
+        if item.category == "code" || CodeHighlighter.looksLikeCode(text) {
+            let highlighted = await CodeHighlighter.highlight(text, dark: self.colorScheme == .dark)
+            guard !Task.isCancelled else { return }
+            self.code = highlighted
+        }
+    }
+
+    private func loadFileContent(_ url: URL) async {
+        let state = await Task.detached(priority: .utility) { FileAvailability.status(at: url) }.value
+        guard !Task.isCancelled else { return }
+        self.fileState = state
+        if state == .local, FilePreviewEligibility.supports(url) {
+            self.filePreviewContent = await Task.detached(priority: .utility) {
+                try? FilePreviewLoader.load(url)
+            }.value
         }
     }
 }

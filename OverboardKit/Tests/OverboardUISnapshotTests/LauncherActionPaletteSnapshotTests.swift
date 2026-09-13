@@ -10,9 +10,11 @@ struct LauncherActionPaletteSnapshotTests {
     /// open link — the richest launcher action set.
     private func makeViewModel() async -> LauncherViewModel {
         let viewModel = LauncherViewModel(
-            instantProviders: [StubLauncherProvider(rows: [
-                .clip(Fixtures.item(kind: .link, preview: "https://example.com")),
-            ])],
+            instantProviders: [
+                StubLauncherProvider(rows: [
+                    .clip(Fixtures.item(kind: .link, preview: "https://example.com")),
+                ]),
+            ],
             secondaryProviders: []
         )
         viewModel.query = "example"

@@ -15,11 +15,13 @@ struct LauncherSectionSnapshotTests {
     @Test func sectionHeaders() async throws {
         let store = try Fixtures.store()
         let viewModel = LauncherViewModel(
-            instantProviders: [StubLauncherProvider(rows: [
-                .app(name: "Demo App", url: URL(fileURLWithPath: "/Applications/OverboardDemo.app")),
-                .clip(Fixtures.item(preview: "demo deploy checklist")),
-                .file(name: "demo notes.md", url: URL(fileURLWithPath: "/tmp/overboard-missing/notes.md")),
-            ])],
+            instantProviders: [
+                StubLauncherProvider(rows: [
+                    .app(name: "Demo App", url: URL(fileURLWithPath: "/Applications/OverboardDemo.app")),
+                    .clip(Fixtures.item(preview: "demo deploy checklist")),
+                    .file(name: "demo notes.md", url: URL(fileURLWithPath: "/tmp/overboard-missing/notes.md")),
+                ]),
+            ],
             secondaryProviders: []
         )
         viewModel.query = "demo"
