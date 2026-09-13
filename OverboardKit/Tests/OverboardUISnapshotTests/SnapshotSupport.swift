@@ -25,6 +25,14 @@ func snapshotHost(
     host.frame = CGRect(x: 0, y: 0, width: width, height: height)
     host.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
     host.layoutSubtreeIfNeeded()
+    // One run-loop turn before the second layout: a scroll view hosting a
+    // lazy stack finishes settling its content geometry asynchronously, and
+    // capturing straight after the first pass occasionally caught the emoji
+    // picker's grid a few points lower on CI than on the machine that
+    // recorded it. Draining the loop makes the capture land after that
+    // settle on every machine.
+    RunLoop.main.run(until: Date())
+    host.layoutSubtreeIfNeeded()
     return host
 }
 
