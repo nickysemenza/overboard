@@ -7,10 +7,13 @@ import PackageDescription
 let approachableConcurrency: [SwiftSetting] = [
     .enableUpcomingFeature("NonisolatedNonsendingByDefault"),
     .enableUpcomingFeature("InferIsolatedConformances"),
-    // First-party targets only. `swift test -Xswiftc -warnings-as-errors`
-    // would apply to every dependency in the graph too, and a deprecation in
-    // Highlightr or swift-syntax must not be able to turn CI red.
-    .treatAllWarnings(as: .error),
+    // Warnings-as-errors is NOT set here: `.treatAllWarnings(as: .error)`
+    // collides with the `-suppress-warnings` Xcode passes to every package
+    // target ("conflicting options") and breaks the app build. CI passes
+    // `-Xswiftc -warnings-as-errors` to `swift test` instead; SwiftPM already
+    // compiles dependency targets with `-suppress-warnings`, so that flag
+    // only bites first-party code. The Xcode project sets
+    // SWIFT_TREAT_WARNINGS_AS_ERRORS for the app target itself.
 ]
 
 /// UI and AppKit-facing targets are main-actor by default; every type in them

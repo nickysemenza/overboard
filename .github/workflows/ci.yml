@@ -69,11 +69,14 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-spm-${{ steps.toolchain.outputs.id }}-
 
-      # Warnings are errors for first-party targets via Package.swift
-      # (`.treatAllWarnings(as: .error)`), not a global -Xswiftc flag, so a
-      # dependency's deprecation warning can't fail this job.
+      # -warnings-as-errors reaches first-party targets only: SwiftPM builds
+      # dependency targets with -suppress-warnings, so a deprecation in GRDB
+      # or swift-syntax can't fail this job. (A per-target
+      # `.treatAllWarnings` in Package.swift would, but it conflicts with the
+      # -suppress-warnings Xcode adds to package targets and breaks the app
+      # build — see the comment in Package.swift.)
       - name: Run tests
-        run: swift test --package-path OverboardKit
+        run: swift test --package-path OverboardKit -Xswiftc -warnings-as-errors
 
       # Informational only, never a gate: prints the file-name index's warm
       # query timings (p95 in particular) into the job summary so a
