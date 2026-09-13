@@ -128,7 +128,10 @@ public final class EmojiPickerViewModel {
     /// emoji can appear both in Recently Used and its home category.
     public var selectedCellID: String? {
         guard let position = self.position(of: self.selectedIndex) else { return nil }
-        return Self.cellID(section: position.section, character: self.sections[position.section].emoji[position.offset].character)
+        return Self.cellID(
+            section: position.section,
+            character: self.sections[position.section].emoji[position.offset].character
+        )
     }
 
     public static func cellID(section: Int, character: String) -> String {

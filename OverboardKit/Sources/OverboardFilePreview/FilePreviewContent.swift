@@ -15,7 +15,20 @@ public nonisolated enum FilePreviewEligibility {
         "env", "editorconfig", "xcconfig", "plist", "xml", "gradle", "makefile", "cmake",
         "dockerfile", "gitignore", "gitattributes", "gitmodules",
     ]
-    public static let markupExtensions: Set<String> = ["md", "markdown", "mdown", "mkdn", "rst", "html", "htm", "xhtml", "css", "scss", "sass", "less"]
+    public static let markupExtensions: Set<String> = [
+        "md",
+        "markdown",
+        "mdown",
+        "mkdn",
+        "rst",
+        "html",
+        "htm",
+        "xhtml",
+        "css",
+        "scss",
+        "sass",
+        "less",
+    ]
     public static let textExtensions: Set<String> = ["txt", "text", "log", "csv", "tsv"]
 
     public static let supportedExtensions = sourceExtensions
@@ -97,8 +110,11 @@ public nonisolated enum FilePreviewLoader {
         let readWasCapped = data.count > FilePreviewContent.maximumReadBytes
         let bounded = readWasCapped ? data.prefix(FilePreviewContent.maximumReadBytes) : data
         let previewData = Data(bounded)
-        guard !MagicBytes.looksBinary(previewData), let decoded = self.decode(previewData) else { throw FilePreviewLoadError.binary }
-        guard !decoded.unicodeScalars.contains(where: { $0.value == 0 || ($0.value < 8 && $0.value != 9 && $0.value != 10 && $0.value != 13) }) else {
+        guard !MagicBytes.looksBinary(previewData),
+              let decoded = self.decode(previewData) else { throw FilePreviewLoadError.binary }
+        guard !decoded.unicodeScalars
+            .contains(where: { $0.value == 0 || ($0.value < 8 && $0.value != 9 && $0.value != 10 && $0.value != 13) })
+        else {
             throw FilePreviewLoadError.binary
         }
         let characterCapped = decoded.count > FilePreviewContent.maximumDisplayedCharacters
@@ -114,35 +130,48 @@ public nonisolated enum FilePreviewLoader {
     }
 
     private static func decode(_ data: Data) -> String? {
-        if data.starts(with: [0xFF, 0xFE]) { return String(data: data, encoding: .utf16LittleEndian) }
-        if data.starts(with: [0xFE, 0xFF]) { return String(data: data, encoding: .utf16BigEndian) }
-        if let utf8 = String(data: data, encoding: .utf8) { return utf8 }
+        if data.starts(with: [0xFF, 0xFE]) {
+            return String(data: data, encoding: .utf16LittleEndian)
+        }
+        if data.starts(with: [0xFE, 0xFF]) {
+            return String(data: data, encoding: .utf16BigEndian)
+        }
+        if let utf8 = String(data: data, encoding: .utf8) {
+            return utf8
+        }
         let bytes = [UInt8](data.prefix(128))
         let evenNulls = stride(from: 0, to: bytes.count, by: 2).count(where: { bytes[$0] == 0 })
         let oddNulls = stride(from: 1, to: bytes.count, by: 2).count(where: { bytes[$0] == 0 })
-        if oddNulls > bytes.count / 8 { return String(data: data, encoding: .utf16LittleEndian) }
-        if evenNulls > bytes.count / 8 { return String(data: data, encoding: .utf16BigEndian) }
+        if oddNulls > bytes.count / 8 {
+            return String(data: data, encoding: .utf16LittleEndian)
+        }
+        if evenNulls > bytes.count / 8 {
+            return String(data: data, encoding: .utf16BigEndian)
+        }
         return nil
     }
 
+    /// Extension → highlight.js language name. A table rather than a switch:
+    /// every entry is an independent fact, not a branch worth reasoning about.
+    private static let languageByExtension: [String: String] = [
+        "swift": "swift",
+        "py": "python",
+        "rb": "ruby",
+        "rs": "rust",
+        "js": "javascript", "jsx": "javascript",
+        "ts": "typescript", "tsx": "typescript",
+        "json": "json", "jsonc": "json",
+        "yaml": "yaml", "yml": "yaml",
+        "toml": "toml",
+        "xml": "xml", "plist": "xml",
+        "html": "html", "htm": "html", "xhtml": "html",
+        "css": "css", "scss": "css", "sass": "css", "less": "css",
+        "sh": "bash", "bash": "bash", "zsh": "bash", "fish": "bash",
+        "sql": "sql",
+        "c": "cpp", "h": "cpp", "cc": "cpp", "cpp": "cpp", "cxx": "cpp", "hpp": "cpp",
+    ]
+
     private static func language(for url: URL) -> String? {
-        switch url.pathExtension.lowercased() {
-        case "swift": "swift"
-        case "py": "python"
-        case "rb": "ruby"
-        case "rs": "rust"
-        case "js", "jsx": "javascript"
-        case "ts", "tsx": "typescript"
-        case "json", "jsonc": "json"
-        case "yaml", "yml": "yaml"
-        case "toml": "toml"
-        case "xml", "plist": "xml"
-        case "html", "htm", "xhtml": "html"
-        case "css", "scss", "sass", "less": "css"
-        case "sh", "bash", "zsh", "fish": "bash"
-        case "sql": "sql"
-        case "c", "h", "cc", "cpp", "cxx", "hpp": "cpp"
-        default: nil
-        }
+        self.languageByExtension[url.pathExtension.lowercased()]
     }
 }

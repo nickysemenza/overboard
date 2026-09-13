@@ -8,12 +8,17 @@ import UniformTypeIdentifiers
 /// a link works fine without a preview. Networking is user-opt-in and gated by
 /// the caller; this type assumes it's allowed to run.
 public struct LinkMetadataFetcher: Sendable {
-    private let session: URLSession
-    private let timeout: TimeInterval
+    /// Internal (not `private`) so `fetchHTML` can reach it from
+    /// LinkMetadataFetcher+Decoding.swift.
+    let session: URLSession
+    /// Internal (not `private`) so `fetchHTML` can reach it from
+    /// LinkMetadataFetcher+Decoding.swift.
+    let timeout: TimeInterval
 
     /// Cap on streamed HTML — enough for any real `<head>`, small enough that a
-    /// pathological page can't exhaust memory.
-    private static let htmlByteCap = 512 * 1024
+    /// pathological page can't exhaust memory. Internal (not `private`) so
+    /// `fetchHTML` can reach it from LinkMetadataFetcher+Decoding.swift.
+    static let htmlByteCap = 512 * 1024
     private static let faviconByteCap = 256 * 1024
     private static let previewImageByteCap = 2 * 1024 * 1024
 
@@ -63,20 +68,32 @@ public struct LinkMetadataFetcher: Sendable {
             host = String(host.dropFirst().dropLast())
         }
 
-        if host == "localhost" || host.hasSuffix(".localhost") { return true }
-        if host == "local" || host.hasSuffix(".local") { return true }
+        if host == "localhost" || host.hasSuffix(".localhost") {
+            return true
+        }
+        if host == "local" || host.hasSuffix(".local") {
+            return true
+        }
 
         // IPv6 loopback / unspecified.
-        if host == "::1" || host == "::" { return true }
+        if host == "::1" || host == "::" {
+            return true
+        }
         // IPv4-mapped IPv6 loopback, e.g. ::ffff:127.0.0.1.
-        if host.hasPrefix("::ffff:"), self.isPrivateIPv4(String(host.dropFirst(7))) { return true }
+        if host.hasPrefix("::ffff:"), self.isPrivateIPv4(String(host.dropFirst(7))) {
+            return true
+        }
         // IPv6 link-local (fe80::/10) and unique-local (fc00::/7).
         if host.hasPrefix("fe8") || host.hasPrefix("fe9") || host.hasPrefix("fea") || host.hasPrefix("feb") {
             return true
         }
-        if host.hasPrefix("fc") || host.hasPrefix("fd") { return true }
+        if host.hasPrefix("fc") || host.hasPrefix("fd") {
+            return true
+        }
 
-        if self.isPrivateIPv4(host) { return true }
+        if self.isPrivateIPv4(host) {
+            return true
+        }
 
         return false
     }
@@ -121,7 +138,9 @@ public struct LinkMetadataFetcher: Sendable {
                     // getnameinfo can append a scope id to link-local addrs (fe80::1%en0).
                     let numeric = buffer.withUnsafeBufferPointer { String(cString: $0.baseAddress!) }
                     let bare = numeric.split(separator: "%").first.map(String.init) ?? numeric
-                    if self.isPrivateHost(bare) { return true }
+                    if self.isPrivateHost(bare) {
+                        return true
+                    }
                 }
                 node = current.pointee.ai_next
             }
@@ -144,6 +163,8 @@ public struct LinkMetadataFetcher: Sendable {
     /// The full connect-time gate: cheap string checks (`isFetchable`) plus a DNS
     /// resolution check. Applied at every outbound-connection boundary, including
     /// redirects, so a name that resolves to an internal address is never dialed.
+    /// Internal (not `private`) so `fetchHTML` can reach it from
+    /// LinkMetadataFetcher+Decoding.swift.
     static func isConnectPermitted(_ url: URL) async -> Bool {
         guard self.isFetchable(url), let host = url.host else { return false }
         return await !self.hostResolvesToPrivate(host)
@@ -196,76 +217,6 @@ public struct LinkMetadataFetcher: Sendable {
             faviconPNG: faviconPNG,
             previewImagePNG: previewPNG
         )
-    }
-
-    // MARK: - HTML streaming
-
-    /// Streams the response, decodes as UTF-8 (isoLatin1 fallback), and stops
-    /// at `</head>` or the byte cap — whichever comes first. Returns the HTML
-    /// and the final (post-redirect) URL to resolve relative links against.
-    private func fetchHTML(_ url: URL) async -> (html: String, finalURL: URL)? {
-        guard await Self.isConnectPermitted(url) else { return nil }
-        var request = URLRequest(url: url)
-        request.timeoutInterval = self.timeout
-        request.setValue(
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Overboard link preview",
-            forHTTPHeaderField: "User-Agent"
-        )
-        request.setValue("text/html,application/xhtml+xml", forHTTPHeaderField: "Accept")
-
-        do {
-            let (bytes, response) = try await self.session.bytes(for: request)
-            let finalURL = response.url ?? url
-            if let http = response as? HTTPURLResponse {
-                guard (200 ..< 300).contains(http.statusCode) else {
-                    bytes.task.cancel()
-                    return nil
-                }
-                // Skip obviously-non-HTML payloads early.
-                if let type = http.value(forHTTPHeaderField: "Content-Type")?.lowercased(),
-                   !type.isEmpty,
-                   !type.contains("html"), !type.contains("xml"), !type.contains("text/plain")
-                {
-                    bytes.task.cancel()
-                    return nil
-                }
-            }
-
-            var data = Data()
-            data.reserveCapacity(min(Self.htmlByteCap, 64 * 1024))
-            let closeTag = Array("</head>".utf8)
-            for try await byte in bytes {
-                data.append(byte)
-                if data.count >= Self.htmlByteCap { break }
-                if data.count >= closeTag.count, Self.hasSuffix(data, closeTag) { break }
-            }
-            bytes.task.cancel()
-
-            guard !data.isEmpty else { return nil }
-            let html = String(data: data, encoding: .utf8)
-                ?? String(data: data, encoding: .isoLatin1)
-            guard let html else { return nil }
-            return (html, finalURL)
-        } catch {
-            return nil
-        }
-    }
-
-    /// Case-sensitive suffix check on raw bytes (for `</head>`, which is ASCII;
-    /// callers pass a lowercase tag and we match either case).
-    private static func hasSuffix(_ data: Data, _ suffix: [UInt8]) -> Bool {
-        guard data.count >= suffix.count else { return false }
-        let start = data.index(data.endIndex, offsetBy: -suffix.count)
-        var i = start
-        for expected in suffix {
-            let actual = data[i]
-            // Match ASCII case-insensitively.
-            let lower = (actual >= 65 && actual <= 90) ? actual + 32 : actual
-            let expectedLower = (expected >= 65 && expected <= 90) ? expected + 32 : expected
-            if lower != expectedLower { return false }
-            i = data.index(after: i)
-        }
-        return true
     }
 
     // MARK: - Image fetch + downscale

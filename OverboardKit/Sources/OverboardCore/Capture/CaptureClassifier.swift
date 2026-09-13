@@ -61,7 +61,12 @@ public enum CaptureClassifier {
            let url = URL(string: text.trimmingCharacters(in: .whitespacesAndNewlines)),
            URLSensitivity.isSensitive(url)
         {
-            return self.secretClassified(kind: kind, primary: primary, label: "Link with credentials", bytes: totalBytes)
+            return self.secretClassified(
+                kind: kind,
+                primary: primary,
+                label: "Link with credentials",
+                bytes: totalBytes
+            )
         }
 
         // Compute the image size once and reuse it for both the preview string
@@ -108,10 +113,18 @@ public enum CaptureClassifier {
     // MARK: - Kind
 
     private static func kind(byUTI: [String: Data], plainText: String?) -> ItemKind {
-        if byUTI[WellKnownUTI.fileURLs] != nil { return .file }
-        if byUTI[WellKnownUTI.color] != nil { return .color }
-        if byUTI[WellKnownUTI.png] != nil || byUTI[WellKnownUTI.tiff] != nil { return .image }
-        if let text = plainText, isSingleURL(text) { return .link }
+        if byUTI[WellKnownUTI.fileURLs] != nil {
+            return .file
+        }
+        if byUTI[WellKnownUTI.color] != nil {
+            return .color
+        }
+        if byUTI[WellKnownUTI.png] != nil || byUTI[WellKnownUTI.tiff] != nil {
+            return .image
+        }
+        if let text = plainText, isSingleURL(text) {
+            return .link
+        }
         return .text
     }
 
@@ -218,7 +231,9 @@ public enum CaptureClassifier {
             sourceBundleID: "com.apple.Safari",
             sourceAppName: "Safari"
         )
-        let fileURLs = try! JSONEncoder().encode(["file:///Users/nicky/Desktop/notes.txt"])
+        // Precomputed JSON for `["file:///Users/nicky/Desktop/notes.txt"]` — avoids
+        // a force-tried JSONEncoder call for a string literal that can't fail.
+        let fileURLs = Data(#"["file:///Users/nicky/Desktop/notes.txt"]"#.utf8)
         let file = PasteboardSnapshot(
             reps: [.init(uti: WellKnownUTI.fileURLs, data: fileURLs)],
             sourceBundleID: "com.apple.finder",

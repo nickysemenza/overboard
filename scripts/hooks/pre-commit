@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
-# Git pre-commit hook: runs the same lint check CI does, so a formatting or
-# SwiftLint violation is caught before it leaves your machine instead of
-# after a round trip through CI. Not installed automatically — run
-# scripts/hooks/install.sh once to symlink this in.
+# Runs the same lint check CI does before each commit. Enable once with:
+#   git config core.hooksPath scripts/hooks
 set -euo pipefail
-
-ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-exec "$ROOT/scripts/tools.sh" lint
+cd "$(git rev-parse --show-toplevel)"
+swiftformat --lint .
+swiftlint --strict

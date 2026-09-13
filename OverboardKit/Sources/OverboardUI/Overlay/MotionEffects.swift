@@ -16,7 +16,9 @@ struct CardEntrance: ViewModifier {
             .opacity(self.shown ? 1 : 0)
             .offset(y: self.shown ? 0 : 26)
             .onAppear {
-                if self.reduceMotion { self.shown = true; return }
+                if self.reduceMotion {
+                    self.shown = true; return
+                }
                 withAnimation(
                     .spring(response: 0.36, dampingFraction: 0.8)
                         .delay(Double(min(self.index, 8)) * 0.028)
@@ -96,7 +98,11 @@ extension View {
     /// adjacent shapes. Floating menus use their own opaque surface: overlapping
     /// glass shapes merge behind the host content. Leave both nil for standalone glass.
     func glassPanel(cornerRadius: CGFloat, id: String? = nil, in namespace: Namespace.ID? = nil) -> some View {
-        modifier(AccessibleGlassPanel(shape: RoundedRectangle(cornerRadius: cornerRadius), id: id, namespace: namespace))
+        modifier(AccessibleGlassPanel(
+            shape: RoundedRectangle(cornerRadius: cornerRadius),
+            id: id,
+            namespace: namespace
+        ))
     }
 
     /// Same shared glass chrome, for shells that aren't a rounded rectangle
@@ -154,8 +160,12 @@ struct LauncherRowButtonStyle: ButtonStyle {
             if self.isSelected {
                 return self.configuration.isPressed ? Color.accentColor.opacity(0.28) : Color.accentColor.opacity(0.20)
             }
-            if self.configuration.isPressed { return Color.primary.opacity(0.10) }
-            if self.isHovering { return Color.primary.opacity(0.06) }
+            if self.configuration.isPressed {
+                return Color.primary.opacity(0.10)
+            }
+            if self.isHovering {
+                return Color.primary.opacity(0.06)
+            }
             return .clear
         }
     }
@@ -188,7 +198,11 @@ private struct AccessibleGlassPanel<S: Shape>: ViewModifier {
                 content.glassEffect(.regular, in: self.shape)
             }
         }
-        .transaction { if self.reduceMotion { $0.animation = nil } }
+        .transaction {
+            if self.reduceMotion {
+                $0.animation = nil
+            }
+        }
     }
 }
 
@@ -201,12 +215,12 @@ struct BobbingBoat: View {
             Image(systemName: "sailboat").font(.largeTitle).foregroundStyle(.secondary)
         } else {
             TimelineView(.animation(minimumInterval: 1 / 30)) { context in
-                let t = context.date.timeIntervalSinceReferenceDate
+                let time = context.date.timeIntervalSinceReferenceDate
                 Image(systemName: "sailboat")
                     .font(.largeTitle)
                     .foregroundStyle(.secondary)
-                    .offset(y: sin(t * 1.6) * 3)
-                    .rotationEffect(.degrees(sin(t * 1.1) * 4))
+                    .offset(y: sin(time * 1.6) * 3)
+                    .rotationEffect(.degrees(sin(time * 1.1) * 4))
             }
         }
     }
@@ -220,7 +234,7 @@ struct BobbingBoat: View {
 
     #Preview("Card entrance") {
         let item = Fixtures.item(preview: "Cards ripple up into place when the drawer is summoned.")
-        ItemCardView(item: item, index: 0, isSelected: false, store: try! Fixtures.store())
+        ItemCardView(item: item, index: 0, isSelected: false, store: Fixtures.previewStore())
             .cardEntrance(index: 0)
             .padding()
     }

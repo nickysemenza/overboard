@@ -49,7 +49,9 @@ public final nonisolated class HighlightrCache: @unchecked Sendable {
 
     /// Always runs on `queue` — never call directly from outside it.
     private func instance(dark: Bool) -> Highlightr? {
-        if let cached, self.cachedThemeIsDark == dark { return cached }
+        if let cached, self.cachedThemeIsDark == dark {
+            return cached
+        }
         guard let highlightr = self.cached ?? Highlightr() else { return nil }
         highlightr.setTheme(to: dark ? "atom-one-dark" : "xcode")
         highlightr.theme.codeFont = .monospacedSystemFont(ofSize: 12, weight: .regular)

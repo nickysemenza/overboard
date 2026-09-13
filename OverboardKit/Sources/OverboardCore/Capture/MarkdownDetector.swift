@@ -29,42 +29,61 @@ public enum MarkdownDetector {
         var markers: Set<Marker> = []
         for line in lines.prefix(200) {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
-
-            let hashes = trimmed.prefix(while: { $0 == "#" }).count
-            if (1 ... 6).contains(hashes), trimmed.dropFirst(hashes).first == " " {
-                markers.insert(.heading)
+            markers.formUnion(self.markers(in: trimmed))
+            if markers.count >= 2 {
+                return true
             }
-            if let first = trimmed.first, "-*+".contains(first),
-               trimmed.dropFirst().first == " ", trimmed.count >= 3
-            {
-                markers.insert(.bullet)
-            }
-            if let dot = trimmed.firstIndex(of: "."),
-               !trimmed[..<dot].isEmpty, trimmed[..<dot].count <= 3,
-               trimmed[..<dot].allSatisfy(\.isNumber),
-               trimmed[trimmed.index(after: dot)...].first == " "
-            {
-                markers.insert(.orderedList)
-            }
-            if trimmed.first == ">", trimmed.dropFirst().first == " " {
-                markers.insert(.blockquote)
-            }
-            if trimmed.hasPrefix("```") {
-                markers.insert(.fence)
-            }
-            if trimmed.contains("["), trimmed.contains("](") {
-                markers.insert(.link)
-            }
-            if trimmed.components(separatedBy: "**").count >= 3 {
-                markers.insert(.bold)
-            }
-            if trimmed.first == "|", trimmed.dropFirst().contains("|") {
-                markers.insert(.tableRow)
-            }
-
-            if markers.count >= 2 { return true }
         }
         return false
+    }
+
+    /// Every marker kind a single (already-trimmed) line matches.
+    private static func markers(in trimmed: String) -> Set<Marker> {
+        var markers: Set<Marker> = []
+        if self.isHeading(trimmed) {
+            markers.insert(.heading)
+        }
+        if self.isBullet(trimmed) {
+            markers.insert(.bullet)
+        }
+        if self.isOrderedListItem(trimmed) {
+            markers.insert(.orderedList)
+        }
+        if trimmed.first == ">", trimmed.dropFirst().first == " " {
+            markers.insert(.blockquote)
+        }
+        if trimmed.hasPrefix("```") {
+            markers.insert(.fence)
+        }
+        if trimmed.contains("["), trimmed.contains("](") {
+            markers.insert(.link)
+        }
+        if trimmed.components(separatedBy: "**").count >= 3 {
+            markers.insert(.bold)
+        }
+        if trimmed.first == "|", trimmed.dropFirst().contains("|") {
+            markers.insert(.tableRow)
+        }
+        return markers
+    }
+
+    private static func isHeading(_ trimmed: String) -> Bool {
+        let hashes = trimmed.prefix(while: { $0 == "#" }).count
+        return (1 ... 6).contains(hashes) && trimmed.dropFirst(hashes).first == " "
+    }
+
+    private static func isBullet(_ trimmed: String) -> Bool {
+        guard let first = trimmed.first, "-*+".contains(first) else { return false }
+        return trimmed.dropFirst().first == " " && trimmed.count >= 3
+    }
+
+    private static func isOrderedListItem(_ trimmed: String) -> Bool {
+        guard let dot = trimmed.firstIndex(of: ".") else { return false }
+        let digits = trimmed[..<dot]
+        return !digits.isEmpty
+            && digits.count <= 3
+            && digits.allSatisfy(\.isNumber)
+            && trimmed[trimmed.index(after: dot)...].first == " "
     }
 }
 

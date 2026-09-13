@@ -121,7 +121,8 @@ public final class ClipActionExecutor {
             self.flash("Couldn't save image")
             return nil
         }
-        let stamp = Date().formatted(.iso8601.year().month().day().timeSeparator(.omitted).time(includingFractionalSeconds: false))
+        let stamp = Date()
+            .formatted(.iso8601.year().month().day().timeSeparator(.omitted).time(includingFractionalSeconds: false))
         let url = downloads.appendingPathComponent("Overboard \(stamp).png")
         do {
             try data.write(to: url)

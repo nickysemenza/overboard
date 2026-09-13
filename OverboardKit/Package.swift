@@ -17,8 +17,8 @@ let approachableConcurrency: [SwiftSetting] = [
 ]
 
 /// UI and AppKit-facing targets are main-actor by default; every type in them
-/// was already annotated `@MainActor`. Core (data layer, actors) and the CLI
-/// stay nonisolated.
+/// was already annotated `@MainActor`. Core (data layer, actors) stays
+/// nonisolated.
 let mainActorByDefault: [SwiftSetting] = approachableConcurrency + [
     .defaultIsolation(MainActor.self),
 ]
@@ -33,7 +33,6 @@ let package = Package(
         .library(name: "OverboardMac", targets: ["OverboardMac"]),
         .library(name: "OverboardUI", targets: ["OverboardUI"]),
         .library(name: "OverboardFilePreview", targets: ["OverboardFilePreview"]),
-        .executable(name: "overboard", targets: ["OverboardCLI"]),
         .executable(name: "file-index-benchmark", targets: ["FileIndexBenchmark"]),
     ],
     dependencies: [
@@ -45,7 +44,6 @@ let package = Package(
         .package(url: "https://github.com/gonzalezreal/swift-markdown-ui", from: "2.4.0"),
         .package(url: "https://github.com/apple/swift-collections.git", .upToNextMinor(from: "1.6.0")),
         .package(url: "https://github.com/pointfreeco/swift-snapshot-testing", from: "1.18.0"),
-        .package(url: "https://github.com/apple/swift-argument-parser", from: "1.5.0"),
     ],
     targets: [
         .target(
@@ -94,14 +92,6 @@ let package = Package(
             swiftSettings: mainActorByDefault
         ),
         .executableTarget(
-            name: "OverboardCLI",
-            dependencies: [
-                "OverboardCore",
-                .product(name: "ArgumentParser", package: "swift-argument-parser"),
-            ],
-            swiftSettings: approachableConcurrency
-        ),
-        .executableTarget(
             name: "FileIndexBenchmark",
             dependencies: ["OverboardCore"],
             path: "Benchmarks/FileIndexBenchmark",
@@ -115,14 +105,6 @@ let package = Package(
         .testTarget(
             name: "OverboardMacTests",
             dependencies: ["OverboardMac", "OverboardCore"],
-            swiftSettings: approachableConcurrency
-        ),
-        .testTarget(
-            name: "OverboardCLITests",
-            dependencies: [
-                "OverboardCLI",
-                .product(name: "ArgumentParser", package: "swift-argument-parser"),
-            ],
             swiftSettings: approachableConcurrency
         ),
         .testTarget(

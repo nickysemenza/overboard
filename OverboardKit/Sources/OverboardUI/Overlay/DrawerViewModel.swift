@@ -17,16 +17,19 @@ public enum PreviewState: Sendable {
 
 @Observable
 public final class DrawerViewModel {
-    public private(set) var items: [ClipItem] = []
+    /// `internal(set)`: mutated from `deleteSelected()` in the actions
+    /// extension in another file, in addition to `refresh` in this file.
+    public internal(set) var items: [ClipItem] = []
     public private(set) var snippets: [Snippet] = []
     public private(set) var mode: DrawerMode = .history
     public var query: String = ""
     public var selectedIndex: Int = 0
-    /// Extra selected indices beyond the anchor (⇧arrows / ⌘-click).
-    /// Empty means plain single selection.
-    public private(set) var multiSelection: Set<Int> = []
+    /// Extra selected indices beyond the anchor (⇧arrows / ⌘-click). Empty
+    /// means plain single selection. `internal(set)`: mutated from the
+    /// multi-selection and paste-action extensions in other files.
+    public internal(set) var multiSelection: Set<Int> = []
 
-    private let logger = Logger(subsystem: "com.nickysemenza.overboard", category: "drawer")
+    let logger = Logger(subsystem: "com.nickysemenza.overboard", category: "drawer")
 
     public let stack: PasteStack
 
@@ -42,183 +45,27 @@ public final class DrawerViewModel {
     /// Runs a clip action against the selected items.
     public var onRunAction: (ClipAction, [ClipItem]) -> Void = { _, _ in }
 
-    // MARK: Multi-selection
+    // MARK: - ⌘K palette state (behavior in DrawerViewModel+Palette.swift)
 
-    /// All selected items, anchor included, in display order.
-    public var selectedItems: [ClipItem] {
-        guard self.mode == .history else { return [] }
-        let indices = self.multiSelection.union([self.selectedIndex])
-            .filter { self.items.indices.contains($0) }
-            .sorted()
-        return indices.map { self.items[$0] }
-    }
-
-    public func isIndexSelected(_ index: Int) -> Bool {
-        index == self.selectedIndex || self.multiSelection.contains(index)
-    }
-
-    /// ⇧←/⇧→: grow the selection from the anchor.
-    public func extendSelection(_ delta: Int) {
-        guard self.mode == .history, !self.items.isEmpty else { return }
-        let next = min(max(self.selectedIndex + delta, 0), self.items.count - 1)
-        guard next != self.selectedIndex else { return }
-        self.multiSelection.insert(self.selectedIndex)
-        self.multiSelection.insert(next)
-        self.selectedIndex = next
-    }
-
-    /// ⌘-click: toggle one card's membership.
-    public func toggleSelection(at index: Int) {
-        guard self.mode == .history, self.items.indices.contains(index) else { return }
-        if index == self.selectedIndex {
-            // Re-anchor on some other selected card, if any.
-            if let replacement = self.multiSelection.sorted().first {
-                self.selectedIndex = replacement
-                self.multiSelection.remove(replacement)
-            }
-        } else if self.multiSelection.contains(index) {
-            self.multiSelection.remove(index)
-        } else {
-            self.multiSelection.insert(index)
-        }
-    }
-
-    public func collapseMultiSelection() {
-        self.multiSelection.removeAll()
-    }
-
-    /// Navigate to a specific item (e.g. from the Related strip). If it is
-    /// already in the current list, just select it; otherwise clear the query
-    /// and refetch so it appears. Preview state is left untouched — the pane
-    /// reloads itself via `task(id:)`.
-    public func jump(toItemID id: String) {
-        if let index = self.items.firstIndex(where: { $0.id == id }) {
-            self.collapseMultiSelection()
-            self.selectedIndex = index
-            return
-        }
-        self.query = ""
-        self.searchTask?.cancel()
-        self.searchTask = Task { await self.refresh(resetSelection: false, followItemID: id) }
-    }
-
-    /// Actions applicable to the current selection.
-    public var applicableActions: [ClipAction] {
-        ClipAction.applicable(to: self.selectedItems)
-    }
-
-    public func runAction(_ action: ClipAction) {
-        let items = self.selectedItems
-        guard !items.isEmpty else { return }
-        self.onRunAction(action, items)
-    }
-
-    // MARK: ⌘K palette
-
-    public private(set) var isPaletteOpen = false
+    /// `internal(set)`: mutated from the palette extension in another file.
+    public internal(set) var isPaletteOpen = false
     public var paletteQuery: String = ""
     public var paletteIndex: Int = 0
 
-    public var filteredPaletteActions: [ClipAction] {
-        let all = self.applicableActions
-        let needle = self.paletteQuery.trimmingCharacters(in: .whitespaces).lowercased()
-        guard !needle.isEmpty else { return all }
-        // Subsequence "fuzzy" match on the label.
-        return all.filter { action in
-            var remaining = Substring(needle)
-            for char in action.label.lowercased() where char == remaining.first {
-                remaining = remaining.dropFirst()
-                if remaining.isEmpty { return true }
-            }
-            return remaining.isEmpty
-        }
-    }
+    // MARK: - Preview / edit state (behavior in DrawerViewModel+Preview.swift)
 
-    public func togglePalette() {
-        guard self.mode == .history else { return }
-        if self.isPaletteOpen {
-            self.closePalette()
-        } else {
-            guard !self.selectedItems.isEmpty else { return }
-            self.paletteQuery = ""
-            self.paletteIndex = 0
-            self.isPaletteOpen = true
-        }
-    }
-
-    public func closePalette() {
-        self.isPaletteOpen = false
-    }
-
-    public func movePaletteSelection(_ delta: Int) {
-        let count = self.filteredPaletteActions.count
-        guard count > 0 else { return }
-        self.paletteIndex = min(max(self.paletteIndex + delta, 0), count - 1)
-    }
-
-    public func runPaletteAction(at index: Int? = nil) {
-        let actions = self.filteredPaletteActions
-        let chosen = index ?? self.paletteIndex
-        guard actions.indices.contains(chosen) else { return }
-        self.closePalette()
-        self.runAction(actions[chosen])
-    }
-
-    // MARK: Preview / edit
-
-    public private(set) var previewState: PreviewState = .hidden
+    /// `internal(set)`: mutated from the preview/edit extension in another file.
+    public internal(set) var previewState: PreviewState = .hidden
     public var editText: String = ""
     /// Pastes user-edited text instead of the original item.
     public var onCommitEditedText: (String) -> Void = { _ in }
     /// The controller resizes the panel when the preview pane opens/closes.
     public var onPreviewVisibilityChanged: (Bool) -> Void = { _ in }
 
-    public var selectedItem: ClipItem? {
-        self.mode == .history && self.items.indices.contains(self.selectedIndex)
-            ? self.items[self.selectedIndex] : nil
-    }
-
-    public func togglePreview() {
-        switch self.previewState {
-        case .hidden:
-            guard self.selectedItem != nil else { return }
-            self.previewState = .viewing
-            self.onPreviewVisibilityChanged(true)
-        case .viewing, .editing:
-            self.closePreview()
-        }
-    }
-
-    public func closePreview() {
-        guard self.previewState != .hidden else { return }
-        self.previewState = .hidden
-        self.onPreviewVisibilityChanged(false)
-    }
-
-    public func beginEdit() {
-        guard let item = self.selectedItem,
-              item.kind == .text || item.kind == .link
-        else { return }
-        let wasHidden = self.previewState == .hidden
-        Task {
-            self.editText = await (try? self.store.plainText(for: item.id))
-                ?? item.previewText ?? ""
-            self.previewState = .editing
-            if wasHidden {
-                self.onPreviewVisibilityChanged(true)
-            }
-        }
-    }
-
-    public func commitEdit() {
-        guard self.previewState == .editing else { return }
-        let text = self.editText
-        self.closePreview()
-        self.onCommitEditedText(text)
-    }
-
-    private let store: ClipStore
-    private var searchTask: Task<Void, Never>?
+    let store: ClipStore
+    /// `internal`: cancelled and restarted from `jump(toItemID:)` in the
+    /// multi-selection extension, in addition to this file.
+    var searchTask: Task<Void, Never>?
     private var liveUpdateTask: Task<Void, Never>?
     /// Keystrokes funnel through here; one long-lived consumer debounces them.
     private let searchChannel = AsyncChannel<Void>()
@@ -310,7 +157,10 @@ public final class DrawerViewModel {
         Task { [searchChannel] in await searchChannel.send(()) }
     }
 
-    private func refresh(resetSelection: Bool = true, followItemID: String? = nil) async {
+    /// Re-runs the current query. `internal`: also called from the
+    /// multi-selection (`jump(toItemID:)`) and paste-action
+    /// (`togglePinSelected`/`deleteSelected`) extensions in other files.
+    func refresh(resetSelection: Bool = true, followItemID: String? = nil) async {
         // Capture the multi-selected rows' identities before the list is
         // replaced, so a live update that inserts/removes rows moves the
         // selection with its items instead of leaving stale indices that would
@@ -363,94 +213,6 @@ public final class DrawerViewModel {
         } catch {
             self.items = []
             self.snippets = []
-        }
-    }
-
-    public func moveSelection(_ delta: Int) {
-        guard self.entryCount > 0 else { return }
-        self.collapseMultiSelection()
-        self.selectedIndex = min(max(self.selectedIndex + delta, 0), self.entryCount - 1)
-    }
-
-    public func select(at index: Int, mode pasteMode: PasteMode = .full) {
-        switch self.mode {
-        case .history:
-            guard self.items.indices.contains(index) else { return }
-            self.selectedIndex = index
-            self.onCommit(self.items[index], pasteMode)
-        case .snippets:
-            guard self.snippets.indices.contains(index) else { return }
-            self.selectedIndex = index
-            self.onCommitSnippet(self.snippets[index])
-        }
-    }
-
-    public func selectCurrent(mode pasteMode: PasteMode = .full) {
-        self.select(at: self.selectedIndex, mode: pasteMode)
-    }
-
-    public func selectTransformed(at index: Int, transform: ClipTransform) {
-        guard self.mode == .history, self.items.indices.contains(index) else { return }
-        self.selectedIndex = index
-        self.onCommitTransform(self.items[index], transform)
-    }
-
-    public func selectAITransformed(at index: Int, transform: AITransform) {
-        guard self.mode == .history, self.items.indices.contains(index) else { return }
-        self.selectedIndex = index
-        self.onCommitAITransform(self.items[index], transform)
-    }
-
-    /// Queue the selected item onto the paste stack and advance selection so
-    /// repeated ⌘↩ presses queue a run of items.
-    public func addSelectedToStack() {
-        guard self.mode == .history, self.items.indices.contains(self.selectedIndex) else { return }
-        self.stack.push(self.items[self.selectedIndex])
-        if self.selectedIndex < self.items.count - 1 {
-            self.selectedIndex += 1
-        }
-    }
-
-    /// Re-derives multi-selection indices from the identities held before a
-    /// refresh, dropping ids that no longer exist — the same identity-follow
-    /// treatment `selectedIndex` gets via `followItemID`.
-    private func remapSelection(to ids: Set<String>) -> Set<Int> {
-        guard !ids.isEmpty else { return [] }
-        return Set(self.items.enumerated().compactMap { ids.contains($1.id) ? $0 : nil })
-    }
-
-    /// Pin/unpin the selected item; selection follows it to its new position.
-    public func togglePinSelected() {
-        guard self.mode == .history, self.items.indices.contains(self.selectedIndex) else { return }
-        let item = self.items[self.selectedIndex]
-        Task {
-            do {
-                try await self.store.setPinned(id: item.id, !item.isPinned)
-            } catch {
-                self.logger.error("pin toggle failed: \(String(describing: error), privacy: .public)")
-            }
-            await self.refresh(resetSelection: false, followItemID: item.id)
-        }
-    }
-
-    /// Remove the selected item from history (drawer stays open).
-    public func deleteSelected() {
-        guard self.mode == .history, self.items.indices.contains(self.selectedIndex) else { return }
-        let item = self.items[self.selectedIndex]
-        let survivingMultiIDs = Set(self.selectedItems.map(\.id)).subtracting([item.id])
-        // Optimistically drop the row before the async delete so a rapid repeat
-        // (⌘⌫ key-repeat) doesn't re-read the same stale index and delete the
-        // same item twice; refresh() reconciles with the store afterwards.
-        self.items.remove(at: self.selectedIndex)
-        self.selectedIndex = min(self.selectedIndex, max(self.entryCount - 1, 0))
-        self.multiSelection = self.remapSelection(to: survivingMultiIDs)
-        Task {
-            do {
-                try await self.store.delete(id: item.id)
-            } catch {
-                self.logger.error("delete failed: \(String(describing: error), privacy: .public)")
-            }
-            await self.refresh(resetSelection: false)
         }
     }
 }

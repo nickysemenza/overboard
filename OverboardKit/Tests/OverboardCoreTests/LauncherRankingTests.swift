@@ -4,7 +4,10 @@ import Testing
 
 struct LauncherRankingTests {
     @Test func exactFileBeatsWeakAppRegardlessOfProviderOrder() {
-        let app = LauncherResult.app(name: "Say Hello Utility", url: URL(fileURLWithPath: "/Applications/Say Hello Utility.app"))
+        let app = LauncherResult.app(
+            name: "Say Hello Utility",
+            url: URL(fileURLWithPath: "/Applications/Say Hello Utility.app")
+        )
         let file = LauncherResult.file(name: "hello", url: URL(fileURLWithPath: "/tmp/hello"))
         #expect(LauncherRanking.sorted([app, file], query: "hello").first == file)
     }
@@ -18,7 +21,11 @@ struct LauncherRankingTests {
     }
 
     @Test func pathWordsAndTyposMatch() {
-        #expect(SearchMatcher.match(query: "wedding budget", title: "2026 budget.xlsx", context: "/iCloud Drive/Wedding")?.tier == .words)
+        #expect(SearchMatcher.match(
+            query: "wedding budget",
+            title: "2026 budget.xlsx",
+            context: "/iCloud Drive/Wedding"
+        )?.tier == .words)
         #expect(SearchMatcher.match(query: "budegt", title: "budget.xlsx")?.tier == .fuzzy)
         #expect(SearchMatcher.match(query: "hello", title: "Hide All Apps Except Frontmost") == nil)
         #expect(SearchMatcher.match(query: "zz", title: "fuzz-test.swift") == nil)
@@ -32,7 +39,10 @@ struct LauncherRankingTests {
     }
 
     @Test func aliasesAreExactAndScopesAreExplicit() {
-        let app = LauncherResult.app(name: "Sublime Merge", url: URL(fileURLWithPath: "/Applications/Sublime Merge.app"))
+        let app = LauncherResult.app(
+            name: "Sublime Merge",
+            url: URL(fileURLWithPath: "/Applications/Sublime Merge.app")
+        )
         #expect(LauncherRanking.match(for: app, query: "sm", aliases: ["sm": "Sublime Merge"]).tier == .exact)
         #expect(LauncherScope.apps.includes(app))
         #expect(!LauncherScope.files.includes(app))

@@ -1,7 +1,7 @@
 name: Build, sign, and notarize
 description: >
   Builds Overboard.app with a Developer ID Application signature, then
-  notarizes and staples it via scripts/sign-and-notarize.sh. Shared by
+  notarizes and staples it via scripts/notarize.sh. Shared by
   release.yml (tag pushes) and ci.yml (every push/PR/workflow_dispatch run
   where the signing secrets are available) so the signing steps live in one
   place instead of being duplicated across both workflows.
@@ -36,12 +36,6 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Select newest Xcode 26
-      shell: bash
-      run: |
-        sudo xcode-select -s "$(ls -d /Applications/Xcode_26*.app | sort -V | tail -n 1)/Contents/Developer"
-        xcodebuild -version
-
     # Imports the Developer ID Application cert+key into a temporary
     # keychain for this run; the action deletes that keychain in its
     # post-step regardless of how the job ends. Pinned to a full commit SHA
@@ -98,7 +92,7 @@ runs:
     - name: Notarize and staple
       shell: bash
       run: |
-        scripts/sign-and-notarize.sh \
+        scripts/notarize.sh \
           build/Build/Products/Release/Overboard.app \
           "$OUTPUT_ZIP"
       env:

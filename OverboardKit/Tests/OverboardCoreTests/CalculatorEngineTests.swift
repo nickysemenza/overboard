@@ -106,9 +106,10 @@ struct CalculatorEngineTests {
     }
 
     @Test func malformedInputNeverTraps() {
-        for junk in ["", "2+", "(2", "++", "2 2", "()", "%", "of of", "1..2+1", "🦀+1",
-                     "^2", "2^", "^", "2^^3", "^^"]
-        {
+        for junk in [
+            "", "2+", "(2", "++", "2 2", "()", "%", "of of", "1..2+1", "🦀+1",
+            "^2", "2^", "^", "2^^3", "^^",
+        ] {
             #expect(CalculatorEngine.evaluate(junk) == nil, "expected nil for \(junk)")
         }
     }

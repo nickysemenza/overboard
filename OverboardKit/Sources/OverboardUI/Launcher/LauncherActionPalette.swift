@@ -9,7 +9,12 @@ struct LauncherActionPalette: View {
     var body: some View {
         CommandPaletteView(
             items: self.viewModel.filteredPaletteActions.enumerated().map { index, action in
-                CommandPaletteItem(id: action.id, label: action.label, systemImage: action.systemImage, hint: LauncherActions.hint(at: index))
+                CommandPaletteItem(
+                    id: action.id,
+                    label: action.label,
+                    systemImage: action.systemImage,
+                    hint: LauncherActions.hint(at: index)
+                )
             },
             query: self.$viewModel.paletteQuery,
             index: self.$viewModel.paletteIndex,
@@ -41,9 +46,11 @@ struct LauncherActionPalette: View {
             }
             .task {
                 let model = LauncherViewModel(
-                    instantProviders: [StubLauncherProvider(rows: [
-                        .clip(Fixtures.item(kind: .link, preview: "https://example.com")),
-                    ])],
+                    instantProviders: [
+                        StubLauncherProvider(rows: [
+                            .clip(Fixtures.item(kind: .link, preview: "https://example.com")),
+                        ]),
+                    ],
                     secondaryProviders: []
                 )
                 model.query = "zzz"

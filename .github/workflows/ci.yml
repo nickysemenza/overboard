@@ -19,14 +19,14 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      # Versions are pinned in scripts/tools.sh, which local dev uses too, so
-      # a linter can't silently upgrade and fail --strict on a new rule.
-      - name: Install pinned tools
-        run: |
-          scripts/tools.sh install
-          echo "$PWD/.tools/bin" >> "$GITHUB_PATH"
+      # SwiftFormat ships on the macos-26 image; SwiftLint is a bottled brew
+      # install. Locally both come from Homebrew. A point-release drift
+      # between the two just means fixing whatever new rule fires — nothing
+      # is disabled or pinned.
+      - name: Install SwiftLint
+        run: brew install swiftlint
 
-      - name: Verify pinned versions
+      - name: Tool versions
         run: |
           swiftformat --version
           swiftlint version
@@ -43,10 +43,8 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Select newest Xcode 26
-        run: |
-          sudo xcode-select -s "$(ls -d /Applications/Xcode_26*.app | sort -V | tail -n 1)/Contents/Developer"
-          xcodebuild -version
+      # The macos-26 image's default Xcode is its newest one.
+      - run: xcodebuild -version
 
       # The cache key includes the selected toolchain: .swiftmodules from one
       # Swift version don't load in the next, and the macos-26 image swaps
@@ -173,12 +171,6 @@ jobs:
       # sign with, so this is unsigned by necessity here (not by choice —
       # same-repo runs take the signed path above). Still a useful smoke
       # check that the app builds; not meant for distribution.
-      - name: Select newest Xcode 26 (unsigned fallback)
-        if: steps.secrets.outputs.available != 'true'
-        run: |
-          sudo xcode-select -s "$(ls -d /Applications/Xcode_26*.app | sort -V | tail -n 1)/Contents/Developer"
-          xcodebuild -version
-
       - name: Build (Release, unsigned fallback)
         if: steps.secrets.outputs.available != 'true'
         run: |

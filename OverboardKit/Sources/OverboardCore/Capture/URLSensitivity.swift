@@ -37,13 +37,18 @@ public enum URLSensitivity {
 
     /// Whether a copied URL should be masked, kept unindexed, and never fetched.
     public static func isSensitive(_ url: URL) -> Bool {
-        if url.user != nil || url.password != nil { return true }
+        if url.user != nil || url.password != nil {
+            return true
+        }
 
         let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
 
         for item in components?.queryItems ?? [] {
             if self.credentialKeys.contains(item.name.lowercased()),
-               let value = item.value, !value.isEmpty { return true }
+               let value = item.value, !value.isEmpty
+            {
+                return true
+            }
         }
 
         if let fragment = components?.fragment?.lowercased() {
@@ -57,10 +62,15 @@ public enum URLSensitivity {
             .map { String($0).lowercased() }
         if segments.contains(where: { self.oneTimePathHints.contains($0) }) {
             // A one-time path plus a token — opaque path segment or token query.
-            if segments.contains(where: self.looksLikeToken) { return true }
+            if segments.contains(where: self.looksLikeToken) {
+                return true
+            }
             for item in components?.queryItems ?? [] {
                 if self.oneTimeTokenKeys.contains(item.name.lowercased()),
-                   let value = item.value, !value.isEmpty { return true }
+                   let value = item.value, !value.isEmpty
+                {
+                    return true
+                }
             }
         }
 

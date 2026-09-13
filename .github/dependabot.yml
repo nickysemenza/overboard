@@ -1,10 +1,15 @@
 version: 2
 updates:
   # Actions pinned to commit SHAs (see .github/actions/build-signed/action.yml)
-  # still need a bot to notice upstream releases and open the bump PR — this
-  # is that. SPM dependencies aren't a Dependabot-supported ecosystem, so
-  # those are covered separately by .github/workflows/dependency-check.yml.
+  # still need a bot to notice upstream releases and open the bump PR.
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
       interval: weekly
+
+  # OverboardKit/Package.resolved. Dependabot's Swift updater builds against
+  # Swift 6.2 since Dec 2025 (dependabot-core#13485).
+  - package-ecosystem: swift
+    directory: "/OverboardKit"
+    schedule:
+      interval: monthly

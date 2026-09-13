@@ -19,8 +19,10 @@ struct MetadataMigrationTests {
                               updatedAt, lamport)
             VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, 0)
             """,
-            arguments: [id, "hash-\(id)", kind, previewText, searchText,
-                        byteSize, isSecret, now, now, now]
+            arguments: [
+                id, "hash-\(id)", kind, previewText, searchText,
+                byteSize, isSecret, now, now, now,
+            ]
         )
     }
 
@@ -38,73 +40,78 @@ struct MetadataMigrationTests {
     @Test func backfillsCountsForEachKind() throws {
         let queue = try DatabaseQueue()
         try Migrations.migrator.migrate(queue, upTo: "v1")
-
-        try queue.write { db in
-            let body = "line one\nline two\nline three" // 28 chars, 3 lines
-            try self.insertItem(db, id: "text", kind: "text", searchText: body)
-            try self.insertPlainText(db, itemID: "text", body)
-
-            try self.insertItem(db, id: "link", kind: "link",
-                                searchText: "https://example.com")
-            try self.insertPlainText(db, itemID: "link", "https://example.com")
-
-            try self.insertItem(db, id: "image", kind: "image",
-                                previewText: "Image 1920×1080")
-
-            try self.insertItem(db, id: "secret", kind: "text",
-                                searchText: nil, isSecret: true)
-            try self.insertPlainText(db, itemID: "secret", "super secret value")
-
-            // Inline file rep: JSON array of two URLs.
-            try self.insertItem(db, id: "file", kind: "file", byteSize: 4096)
-            let urls = try JSONEncoder().encode([
-                URL(fileURLWithPath: "/tmp/a.pdf").absoluteString,
-                URL(fileURLWithPath: "/tmp/b.txt").absoluteString,
-            ])
-            try db.execute(
-                sql: """
-                INSERT INTO representation (id, itemID, uti, data, byteSize)
-                VALUES (?, ?, ?, ?, ?)
-                """,
-                arguments: ["rep-file", "file", WellKnownUTI.fileURLs, urls, urls.count]
-            )
-
-            // Blob-backed file rep (data IS NULL) must stay NULL.
-            try self.insertItem(db, id: "blobfile", kind: "file")
-            try db.execute(
-                sql: """
-                INSERT INTO representation (id, itemID, uti, data, blobHash, byteSize)
-                VALUES (?, ?, ?, NULL, ?, ?)
-                """,
-                arguments: ["rep-blob", "blobfile", WellKnownUTI.fileURLs, "deadbeef", 99999]
-            )
-        }
-
+        try queue.write { db in try self.seedKindFixtures(db) }
         try Migrations.migrator.migrate(queue)
+        try queue.read { db in try self.assertKindFixtures(db) }
+    }
 
-        try queue.read { db in
-            let text = try #require(try ClipItem.fetchOne(db, key: "text"))
-            #expect(text.charCount == 28)
-            #expect(text.lineCount == 3)
+    /// Seeds one pre-migration row per kind for ``backfillsCountsForEachKind``.
+    /// Split out to keep that test within the function-length limit.
+    private func seedKindFixtures(_ db: Database) throws {
+        let body = "line one\nline two\nline three" // 28 chars, 3 lines
+        try self.insertItem(db, id: "text", kind: "text", searchText: body)
+        try self.insertPlainText(db, itemID: "text", body)
 
-            let link = try #require(try ClipItem.fetchOne(db, key: "link"))
-            #expect(link.charCount == 19)
-            #expect(link.lineCount == 1)
+        try self.insertItem(db, id: "link", kind: "link",
+                            searchText: "https://example.com")
+        try self.insertPlainText(db, itemID: "link", "https://example.com")
 
-            let image = try #require(try ClipItem.fetchOne(db, key: "image"))
-            #expect(image.pixelWidth == 1920)
-            #expect(image.pixelHeight == 1080)
+        try self.insertItem(db, id: "image", kind: "image",
+                            previewText: "Image 1920×1080")
 
-            let secret = try #require(try ClipItem.fetchOne(db, key: "secret"))
-            #expect(secret.charCount == nil)
-            #expect(secret.lineCount == nil)
+        try self.insertItem(db, id: "secret", kind: "text",
+                            searchText: nil, isSecret: true)
+        try self.insertPlainText(db, itemID: "secret", "super secret value")
 
-            let file = try #require(try ClipItem.fetchOne(db, key: "file"))
-            #expect(file.fileCount == 2)
+        // Inline file rep: JSON array of two URLs.
+        try self.insertItem(db, id: "file", kind: "file", byteSize: 4096)
+        let urls = try JSONEncoder().encode([
+            URL(fileURLWithPath: "/tmp/a.pdf").absoluteString,
+            URL(fileURLWithPath: "/tmp/b.txt").absoluteString,
+        ])
+        try db.execute(
+            sql: """
+            INSERT INTO representation (id, itemID, uti, data, byteSize)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            arguments: ["rep-file", "file", WellKnownUTI.fileURLs, urls, urls.count]
+        )
 
-            let blobfile = try #require(try ClipItem.fetchOne(db, key: "blobfile"))
-            #expect(blobfile.fileCount == nil)
-        }
+        // Blob-backed file rep (data IS NULL) must stay NULL.
+        try self.insertItem(db, id: "blobfile", kind: "file")
+        try db.execute(
+            sql: """
+            INSERT INTO representation (id, itemID, uti, data, blobHash, byteSize)
+            VALUES (?, ?, ?, NULL, ?, ?)
+            """,
+            arguments: ["rep-blob", "blobfile", WellKnownUTI.fileURLs, "deadbeef", 99999]
+        )
+    }
+
+    /// Assertions for ``backfillsCountsForEachKind``, split out for the same
+    /// reason as ``seedKindFixtures(_:)``.
+    private func assertKindFixtures(_ db: Database) throws {
+        let text = try #require(try ClipItem.fetchOne(db, key: "text"))
+        #expect(text.charCount == 28)
+        #expect(text.lineCount == 3)
+
+        let link = try #require(try ClipItem.fetchOne(db, key: "link"))
+        #expect(link.charCount == 19)
+        #expect(link.lineCount == 1)
+
+        let image = try #require(try ClipItem.fetchOne(db, key: "image"))
+        #expect(image.pixelWidth == 1920)
+        #expect(image.pixelHeight == 1080)
+
+        let secret = try #require(try ClipItem.fetchOne(db, key: "secret"))
+        #expect(secret.charCount == nil)
+        #expect(secret.lineCount == nil)
+
+        let file = try #require(try ClipItem.fetchOne(db, key: "file"))
+        #expect(file.fileCount == 2)
+
+        let blobfile = try #require(try ClipItem.fetchOne(db, key: "blobfile"))
+        #expect(blobfile.fileCount == nil)
     }
 
     /// Enrichment appends AI titles/summaries into searchText, so the backfill

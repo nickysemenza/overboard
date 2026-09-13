@@ -15,10 +15,18 @@ public enum SavedSearch {
             return query.trimmingCharacters(in: .whitespaces)
         }
         var parts: [String] = []
-        if let kind = parsed.kind { parts.append(self.pluralKind(kind)) }
-        if let category = parsed.category { parts.append(category.capitalized) }
-        if !parsed.text.isEmpty { parts.append("“\(parsed.text)”") }
-        if let app = parsed.app { parts.append("in \(app.capitalized)") }
+        if let kind = parsed.kind {
+            parts.append(self.pluralKind(kind))
+        }
+        if let category = parsed.category {
+            parts.append(category.capitalized)
+        }
+        if !parsed.text.isEmpty {
+            parts.append("“\(parsed.text)”")
+        }
+        if let app = parsed.app {
+            parts.append("in \(app.capitalized)")
+        }
         let label = parts.joined(separator: " ").trimmingCharacters(in: .whitespaces)
         return label.isEmpty ? query : label
     }

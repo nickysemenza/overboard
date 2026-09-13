@@ -1,23 +1,19 @@
-# SwiftFormat owns formatting; SwiftLint only catches smells.
+# SwiftFormat owns formatting. The only settings here make SwiftLint accept
+# SwiftFormat's output instead of fighting it; no rule is disabled and the
+# source tree carries no `swiftlint:disable` comments.
 included:
   - Overboard
   - OverboardKit/Sources
   - OverboardKit/Tests
+  - OverboardQuickLook
 excluded:
   - OverboardKit/.build
   - build
-  - .build-xcode
-disabled_rules:
-  - todo
-  - line_length              # prose strings (footers, hints) intentionally run long
-  - function_body_length     # DemoSeed.populate, SettingsView bodies
-  - file_length
-  - type_body_length         # SwiftUI view structs run long by nature
-  - cyclomatic_complexity
-  - trailing_comma           # codebase uses trailing commas (SwiftFormat default style)
-  - opening_brace            # SwiftFormat owns brace placement (newline after multiline conditions)
-  - force_try                # test and preview fixtures only
-  - void_function_in_ternary
-  - large_tuple
+trailing_comma:
+  mandatory_comma: true # .swiftformat --trailingcommas collections-only
+opening_brace:
+  ignore_multiline_statement_conditions: true # SwiftFormat puts `{` on its own line after a wrapped condition
+  ignore_multiline_function_signatures: true
+  ignore_multiline_type_headers: true
 identifier_name:
-  min_length: 1              # i, t, a/b/c in tests and math are idiomatic here
+  min_length: 2 # GRDB's `{ db in … }` convention

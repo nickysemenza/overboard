@@ -58,8 +58,10 @@ struct LauncherRow: View {
                     Image(systemName: "pin.fill").font(.caption).foregroundStyle(.secondary)
                 }
                 if case let .file(_, _, info) = self.result, info.availability != .local {
-                    Image(systemName: info.availability == .unavailable ? "exclamationmark.icloud" : "icloud.and.arrow.down")
-                        .foregroundStyle(.secondary).help(info.availability == .unavailable ? "Unavailable" : "In the cloud")
+                    Image(systemName: info
+                        .availability == .unavailable ? "exclamationmark.icloud" : "icloud.and.arrow.down")
+                        .foregroundStyle(.secondary)
+                        .help(info.availability == .unavailable ? "Unavailable" : "In the cloud")
                 }
                 if self.showsSourceBadge, let badge = self.sourceBadge {
                     HStack(spacing: 3) {
@@ -107,7 +109,7 @@ struct LauncherRow: View {
         case let .app(_, url), let .file(_, url, _):
             Image(nsImage: Self.fileIcon(for: url))
                 .resizable()
-                .aspectRatio(contentMode: .fit)
+                .scaledToFit()
         case .snippet:
             Image(systemName: "text.badge.star")
                 .font(.title2)
@@ -116,7 +118,7 @@ struct LauncherRow: View {
             if let thumbnail {
                 Image(nsImage: thumbnail)
                     .resizable()
-                    .aspectRatio(contentMode: .fill)
+                    .scaledToFill()
                     // Constrain to the icon slot *before* clipping — without the
                     // explicit frame the full-size thumbnail briefly painted
                     // outside the row (the lower-left ghost cards).
@@ -125,7 +127,7 @@ struct LauncherRow: View {
             } else if let appIcon = AppIconCache.shared.icon(forBundleID: item.sourceBundleID) {
                 Image(nsImage: appIcon)
                     .resizable()
-                    .aspectRatio(contentMode: .fit)
+                    .scaledToFit()
             } else {
                 Image(systemName: item.kind.symbolName)
                     .font(.title2)
@@ -191,12 +193,19 @@ struct LauncherRow: View {
     }
 
     private var titleWeight: Font.Weight {
-        if case .calculation = self.result { .semibold } else { .regular }
+        if case .calculation = self.result {
+            .semibold
+        } else {
+            .regular
+        }
     }
 
     private var subtitle: String {
         switch self.result {
-        case let .calculation(input, _): String(localized: "\(input.trimmingCharacters(in: .whitespaces)) =", bundle: .module)
+        case let .calculation(input, _): String(
+                localized: "\(input.trimmingCharacters(in: .whitespaces)) =",
+                bundle: .module
+            )
         case .app: "Application"
         case let .snippet(snippet): Self.firstLine(of: snippet.body) ?? "Snippet"
         case let .clip(item): Self.clipSubtitle(for: item)
@@ -233,7 +242,9 @@ struct LauncherRow: View {
     private static func fileIcon(for url: URL) -> NSImage {
         // Generic type icons are metadata-only; probing a dataless file or
         // requesting a Quick Look thumbnail here can trigger a download.
-        if url.pathExtension == "app" { return NSWorkspace.shared.icon(forFile: url.path) }
+        if url.pathExtension == "app" {
+            return NSWorkspace.shared.icon(forFile: url.path)
+        }
         let type = UTType(filenameExtension: url.pathExtension) ?? .data
         return NSWorkspace.shared.icon(for: type)
     }
@@ -271,131 +282,3 @@ struct LauncherRow: View {
         return (line?.isEmpty ?? true) ? nil : line
     }
 }
-
-#if DEBUG
-    #Preview("Row: Calculation") {
-        LauncherRow(
-            result: .calculation(input: "12*4", display: "48"),
-            store: try! Fixtures.store(),
-            isSelected: false,
-            runningAppPaths: []
-        )
-        .padding()
-        .frame(width: 400)
-    }
-
-    #Preview("Row: App") {
-        LauncherRow(
-            result: .app(name: "Demo App", url: URL(fileURLWithPath: "/Applications/OverboardDemo.app")),
-            store: try! Fixtures.store(),
-            isSelected: false,
-            runningAppPaths: []
-        )
-        .padding()
-        .frame(width: 400)
-    }
-
-    #Preview("Row: Snippet") {
-        LauncherRow(
-            result: .snippet(Snippet(title: "Standup update", body: "Yesterday: shipped X.")),
-            store: try! Fixtures.store(),
-            isSelected: false,
-            runningAppPaths: []
-        )
-        .padding()
-        .frame(width: 400)
-    }
-
-    #Preview("Row: Clip") {
-        LauncherRow(
-            result: .clip(Fixtures.item(preview: "deploy checklist")),
-            store: try! Fixtures.store(),
-            isSelected: true,
-            runningAppPaths: []
-        )
-        .padding()
-        .frame(width: 400)
-    }
-
-    #Preview("Row: File") {
-        LauncherRow(
-            result: .file(name: "notes.md", url: URL(fileURLWithPath: "/tmp/overboard-missing/notes.md")),
-            store: try! Fixtures.store(),
-            isSelected: false,
-            runningAppPaths: []
-        )
-        .padding()
-        .frame(width: 400)
-    }
-
-    #Preview("Row: Web search") {
-        LauncherRow(
-            result: .webSearch(query: "swiftui previews", url: URL(string: "https://www.google.com/search?q=swiftui+previews")!),
-            store: try! Fixtures.store(),
-            isSelected: false,
-            runningAppPaths: []
-        )
-        .padding()
-        .frame(width: 400)
-    }
-
-    #Preview("Row: System setting") {
-        LauncherRow(
-            result: .systemSetting(
-                name: "Displays",
-                url: URL(string: "x-apple.systempreferences:com.apple.preference.displays")!
-            ),
-            store: try! Fixtures.store(),
-            isSelected: false,
-            runningAppPaths: []
-        )
-        .padding()
-        .frame(width: 400)
-    }
-
-    #Preview("Row: Command") {
-        LauncherRow(
-            result: .command(.stats, subtitle: "128 items"),
-            store: try! Fixtures.store(),
-            isSelected: false,
-            runningAppPaths: []
-        )
-        .padding()
-        .frame(width: 400)
-    }
-
-    #Preview("Row: Recent search") {
-        LauncherRow(
-            result: .recentSearch(query: "deploy checklist"),
-            store: try! Fixtures.store(),
-            isSelected: false,
-            runningAppPaths: []
-        )
-        .padding()
-        .frame(width: 400)
-    }
-
-    #Preview("Row: Now playing") {
-        LauncherRow(
-            result: .nowPlaying(
-                NowPlayingTrack(title: "Song Title", artist: "The Artist", trackID: "spotify:track:6rqhFgbbKwnb9MLmUQDhG6", state: .playing)
-            ),
-            store: try! Fixtures.store(),
-            isSelected: false,
-            runningAppPaths: []
-        )
-        .padding()
-        .frame(width: 400)
-    }
-
-    #Preview("Row: Ask AI") {
-        LauncherRow(
-            result: .askAI(prompt: "Summarize this"),
-            store: try! Fixtures.store(),
-            isSelected: false,
-            runningAppPaths: []
-        )
-        .padding()
-        .frame(width: 400)
-    }
-#endif

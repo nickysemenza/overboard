@@ -3,8 +3,16 @@ import Foundation
 import Testing
 
 struct FileNameIndexTests {
-    private func entry(_ path: String, generation: String = "one", availability: FileSearchInfo.Availability = .local) -> IndexedFile {
-        IndexedFile(path: path, name: (path as NSString).lastPathComponent, root: "/fixture", generation: generation, availability: availability)
+    private func entry(_ path: String, generation: String = "one",
+                       availability: FileSearchInfo.Availability = .local) -> IndexedFile
+    {
+        IndexedFile(
+            path: path,
+            name: (path as NSString).lastPathComponent,
+            root: "/fixture",
+            generation: generation,
+            availability: availability
+        )
     }
 
     @Test func searchesNamesPathsTyposAndCloudMetadata() async throws {

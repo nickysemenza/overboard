@@ -4,11 +4,15 @@ import SwiftUI
 
 /// Owns the overlay panel lifecycle: summon, position, key handling, dismiss.
 public final class OverlayController {
-    private let viewModel: DrawerViewModel
-    private var panel: OverlayPanel?
-    private var keyMonitor: Any?
-    private var clickMonitor: Any?
-    private var resignObserver: NSObjectProtocol?
+    /// `internal`: read from OverlayController+Panel.swift and
+    /// OverlayController+Keyboard.swift.
+    let viewModel: DrawerViewModel
+    /// `internal`: read/set from OverlayController+Panel.swift and
+    /// OverlayController+Keyboard.swift.
+    var panel: OverlayPanel?
+    var keyMonitor: Any?
+    var clickMonitor: Any?
+    var resignObserver: NSObjectProtocol?
 
     /// The app that was frontmost when the drawer was summoned — i.e. where a
     /// paste should land. Recorded before the panel appears.
@@ -126,7 +130,11 @@ public final class OverlayController {
     }
 
     public func toggle() {
-        if self.isVisible { self.hide() } else { self.show() }
+        if self.isVisible {
+            self.hide()
+        } else {
+            self.show()
+        }
     }
 
     public func show() {
@@ -155,207 +163,5 @@ public final class OverlayController {
         self.removeMonitors()
         self.panel?.orderOut(nil)
         self.targetApp = nil
-    }
-
-    // MARK: - Setup
-
-    private func makePanel() -> OverlayPanel {
-        let panel = OverlayPanel(contentRect: NSRect(x: 0, y: 0, width: 800, height: CardMetrics.collapsedPanelHeight))
-        let hosting = NSHostingView(
-            rootView: DrawerView(viewModel: self.viewModel)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-        )
-        panel.contentView = hosting
-        return panel
-    }
-
-    /// Grows the panel for the preview pane and shrinks it back, bottom-anchored.
-    private func resizePanel(expanded: Bool) {
-        guard let panel, panel.isVisible else { return }
-        let screen = panel.screen ?? self.screenWithMouse()
-        let visible = screen.visibleFrame
-        let height = expanded ? CardMetrics.expandedPanelHeight : CardMetrics.collapsedPanelHeight
-        panel.setFrame(
-            NSRect(x: visible.minX, y: visible.minY, width: visible.width, height: height),
-            display: true,
-            animate: true
-        )
-    }
-
-    private func screenWithMouse() -> NSScreen {
-        let mouse = NSEvent.mouseLocation
-        return NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) }
-            ?? NSScreen.main
-            ?? NSScreen.screens[0]
-    }
-
-    // MARK: - Event monitors
-
-    private func installMonitors() {
-        // Keyboard model. Everything not handled here falls through to the
-        // search field, so typing always filters.
-        self.keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self, let panel = self.panel, event.window === panel else { return event }
-
-            // The palette owns the keyboard above everything else.
-            if self.viewModel.isPaletteOpen {
-                switch KeyCode(rawValue: event.keyCode) {
-                case .escape: // closes the palette, not the drawer
-                    self.viewModel.closePalette()
-                    return nil
-                case .returnKey, .keypadEnter: // runs the highlighted action
-                    self.viewModel.runPaletteAction()
-                    return nil
-                case .upArrow:
-                    self.viewModel.movePaletteSelection(-1)
-                    return nil
-                case .downArrow:
-                    self.viewModel.movePaletteSelection(1)
-                    return nil
-                default: // typing filters
-                    return event
-                }
-            }
-
-            // Preview/edit modes own the keyboard before the normal model.
-            switch self.viewModel.previewState {
-            case .editing:
-                switch KeyCode(rawValue: event.keyCode) {
-                case .escape: // cancels the edit, back to the card strip
-                    self.viewModel.closePreview()
-                    return nil
-                case .returnKey where event.modifierFlags.contains(.command): // ⌘↩ paste edited
-                    self.viewModel.commitEdit()
-                    return nil
-                default: // everything else belongs to the text editor
-                    return event
-                }
-            case .viewing:
-                switch KeyCode(rawValue: event.keyCode) {
-                case .escape, .space: // close
-                    self.viewModel.closePreview()
-                    return nil
-                case .y where event.modifierFlags.contains(.command): // ⌘Y closes too
-                    self.viewModel.closePreview()
-                    return nil
-                case .returnKey, .keypadEnter: // pastes (⇧ plain)
-                    let mode: PasteMode = event.modifierFlags.contains(.shift) ? .plainText : .full
-                    self.viewModel.selectCurrent(mode: mode)
-                    return nil
-                case .leftArrow: // browse while previewing
-                    self.viewModel.moveSelection(-1)
-                    return nil
-                case .rightArrow:
-                    self.viewModel.moveSelection(1)
-                    return nil
-                case .e where event.modifierFlags.contains(.command): // ⌘E edit
-                    self.viewModel.beginEdit()
-                    return nil
-                default:
-                    return nil // swallow stray typing while previewing
-                }
-            case .hidden:
-                break
-            }
-
-            switch KeyCode(rawValue: event.keyCode) {
-            case .escape:
-                // Two-stage Esc (matches EmojiPanelController/LauncherPanelController):
-                // a non-empty query is cleared first; the drawer only dismisses
-                // once Esc is pressed again with an already-empty query.
-                if !self.viewModel.query.isEmpty {
-                    self.viewModel.query = ""
-                    self.viewModel.scheduleSearch()
-                    return nil
-                }
-                self.hide()
-                return nil
-            case .space where self.viewModel.query.isEmpty && self.viewModel.mode == .history: // previews
-                self.viewModel.togglePreview()
-                return nil
-            case .y where event.modifierFlags.contains(.command): // ⌘Y previews even mid-search
-                self.viewModel.togglePreview()
-                return nil
-            case .e where event.modifierFlags.contains(.command): // ⌘E edit before paste
-                self.viewModel.beginEdit()
-                return nil
-            case .k where event.modifierFlags.contains(.command): // ⌘K action palette
-                self.viewModel.togglePalette()
-                return nil
-            case .returnKey, .keypadEnter: // ⇧ plain text, ⌘ queue on stack
-                if event.modifierFlags.contains(.command) {
-                    self.viewModel.addSelectedToStack()
-                } else {
-                    let mode: PasteMode = event.modifierFlags.contains(.shift) ? .plainText : .full
-                    self.viewModel.selectCurrent(mode: mode)
-                }
-                return nil
-            case .slash where event.modifierFlags.contains(.command): // ⌘/ history ⇄ snippets
-                self.viewModel.toggleMode()
-                return nil
-            case .comma where event.modifierFlags.contains(.command): // ⌘, settings
-                self.hide()
-                self.viewModel.onOpenSettings()
-                return nil
-            case .leftArrow: // ⇧ extends the selection
-                if event.modifierFlags.contains(.shift) {
-                    self.viewModel.extendSelection(-1)
-                } else {
-                    self.viewModel.moveSelection(-1)
-                }
-                return nil
-            case .rightArrow: // ⇧ extends the selection
-                if event.modifierFlags.contains(.shift) {
-                    self.viewModel.extendSelection(1)
-                } else {
-                    self.viewModel.moveSelection(1)
-                }
-                return nil
-            case .p where event.modifierFlags.contains(.command): // ⌘P pin/unpin
-                self.viewModel.togglePinSelected()
-                return nil
-            case .delete where event.modifierFlags.contains(.command): // ⌘⌫ delete item
-                self.viewModel.deleteSelected()
-                return nil
-            default:
-                if event.modifierFlags.contains(.command),
-                   let digit = event.charactersIgnoringModifiers.flatMap(Int.init),
-                   (1 ... 9).contains(digit)
-                {
-                    self.viewModel.select(at: digit - 1)
-                    return nil
-                }
-                return event
-            }
-        }
-
-        // Click anywhere outside the panel dismisses.
-        self.clickMonitor = NSEvent.addGlobalMonitorForEvents(
-            matching: [.leftMouseDown, .rightMouseDown]
-        ) { [weak self] _ in
-            MainActor.assumeIsolated {
-                self?.hide()
-            }
-        }
-
-        // Covers ⌘-tab, clicking another of our windows, etc.
-        self.resignObserver = NotificationCenter.default.addObserver(
-            forName: NSWindow.didResignKeyNotification,
-            object: self.panel,
-            queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated {
-                self?.hide()
-            }
-        }
-    }
-
-    private func removeMonitors() {
-        if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
-        if let clickMonitor { NSEvent.removeMonitor(clickMonitor) }
-        if let resignObserver { NotificationCenter.default.removeObserver(resignObserver) }
-        self.keyMonitor = nil
-        self.clickMonitor = nil
-        self.resignObserver = nil
     }
 }

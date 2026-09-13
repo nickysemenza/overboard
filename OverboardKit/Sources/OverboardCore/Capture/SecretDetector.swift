@@ -98,7 +98,9 @@ public enum SecretDetector {
         let digits = stripped.reversed().compactMap(\.wholeNumberValue)
         let sum = digits.enumerated().reduce(0) { total, pair in
             let (index, digit) = pair
-            if index.isMultiple(of: 2) { return total + digit }
+            if index.isMultiple(of: 2) {
+                return total + digit
+            }
             let doubled = digit * 2
             return total + (doubled > 9 ? doubled - 9 : doubled)
         }

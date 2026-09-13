@@ -6,10 +6,19 @@ public nonisolated enum FileAvailability {
     public static func status(at url: URL, values: URLResourceValues? = nil) -> FileSearchInfo.Availability {
         var attributes = stat()
         guard lstat(url.path, &attributes) == 0 else { return .unavailable }
-        if attributes.st_flags & UInt32(SF_DATALESS) != 0 { return .cloud }
-        let values = values ?? (try? url.resourceValues(forKeys: [.ubiquitousItemDownloadingStatusKey, .ubiquitousItemIsDownloadingKey]))
-        if values?.ubiquitousItemIsDownloading == true { return .downloading }
-        if values?.ubiquitousItemDownloadingStatus == .notDownloaded { return .cloud }
+        if attributes.st_flags & UInt32(SF_DATALESS) != 0 {
+            return .cloud
+        }
+        let values = values ?? (try? url.resourceValues(forKeys: [
+            .ubiquitousItemDownloadingStatusKey,
+            .ubiquitousItemIsDownloadingKey,
+        ]))
+        if values?.ubiquitousItemIsDownloading == true {
+            return .downloading
+        }
+        if values?.ubiquitousItemDownloadingStatus == .notDownloaded {
+            return .cloud
+        }
         return .local
     }
 }
@@ -19,7 +28,9 @@ public enum FileOpening {
     /// evicted, moved or downloaded since its metadata was indexed.
     public static func open(_ url: URL) async throws {
         let state = await Task.detached(priority: .userInitiated) { FileAvailability.status(at: url) }.value
-        if state == .unavailable { throw CocoaError(.fileNoSuchFile) }
+        if state == .unavailable {
+            throw CocoaError(.fileNoSuchFile)
+        }
         if state == .cloud {
             let ubiquitous = try url.resourceValues(forKeys: [.isUbiquitousItemKey]).isUbiquitousItem == true
             if ubiquitous {
@@ -28,8 +39,12 @@ public enum FileOpening {
                     try Task.checkCancellation()
                     try await Task.sleep(for: .milliseconds(500))
                     let values = try url.resourceValues(forKeys: [.ubiquitousItemDownloadingErrorKey])
-                    if let error = values.ubiquitousItemDownloadingError { throw error }
-                    if FileAvailability.status(at: url) == .local { break }
+                    if let error = values.ubiquitousItemDownloadingError {
+                        throw error
+                    }
+                    if FileAvailability.status(at: url) == .local {
+                        break
+                    }
                 }
                 guard FileAvailability.status(at: url) == .local else { throw URLError(.timedOut) }
             }

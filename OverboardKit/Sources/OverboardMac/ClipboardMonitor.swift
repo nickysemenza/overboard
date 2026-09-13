@@ -82,53 +82,29 @@ public final class ClipboardMonitor {
         let types = pasteboard.types ?? []
 
         // Privacy gates — checked before reading any payload.
-        if Self.skippedTypes.contains(where: types.contains) { return nil }
-        if IsSecureEventInputEnabled() { return nil }
+        if Self.skippedTypes.contains(where: types.contains) {
+            return nil
+        }
+        if IsSecureEventInputEnabled() {
+            return nil
+        }
 
         let frontmost = NSWorkspace.shared.frontmostApplication
         if let bundleID = frontmost?.bundleIdentifier, self.excludedBundleIDs().contains(bundleID) {
             return nil
         }
 
-        var reps: [PasteboardSnapshot.Rep] = []
-
-        if let urls = pasteboard.readObjects(
-            forClasses: [NSURL.self],
-            options: [.urlReadingFileURLsOnly: true]
-        ) as? [URL], !urls.isEmpty {
-            if let data = try? JSONEncoder().encode(urls.map(\.absoluteString)) {
-                reps.append(.init(uti: WellKnownUTI.fileURLs, data: data))
-            }
-        }
-
-        if let png = capped(pasteboard.data(forType: .png)) {
-            reps.append(.init(uti: WellKnownUTI.png, data: png))
-        } else if let tiff = capped(pasteboard.data(forType: .tiff)) {
-            // TIFF pasteboard data is enormous; store PNG instead.
-            if let png = NSBitmapImageRep(data: tiff)?
-                .representation(using: .png, properties: [:])
-            {
-                reps.append(.init(uti: WellKnownUTI.png, data: png))
-            }
-        }
-
-        let colorType = NSPasteboard.PasteboardType(WellKnownUTI.color)
-        if types.contains(colorType), let data = capped(pasteboard.data(forType: colorType)) {
-            reps.append(.init(uti: WellKnownUTI.color, data: data))
-        }
-
-        if let rtf = capped(pasteboard.data(forType: .rtf)) {
-            reps.append(.init(uti: WellKnownUTI.rtf, data: rtf))
-        }
-        if let html = capped(pasteboard.data(forType: .html)) {
-            reps.append(.init(uti: WellKnownUTI.html, data: html))
-        }
-        if let string = pasteboard.string(forType: .string),
-           let data = capped(string.data(using: .utf8))
-        {
-            reps.append(.init(uti: WellKnownUTI.plainText, data: data))
-        }
-
+        // Each representation kind is classified independently so this method
+        // stays a flat dispatch table instead of one long branchy function.
+        let repExtractors: [(NSPasteboard) -> PasteboardSnapshot.Rep?] = [
+            self.fileURLRep(from:),
+            self.imageRep(from:),
+            self.colorRep(from:),
+            self.rtfRep(from:),
+            self.htmlRep(from:),
+            self.plainTextRep(from:),
+        ]
+        let reps = repExtractors.compactMap { $0(pasteboard) }
         guard !reps.isEmpty else { return nil }
 
         return PasteboardSnapshot(
@@ -136,6 +112,51 @@ public final class ClipboardMonitor {
             sourceBundleID: frontmost?.bundleIdentifier,
             sourceAppName: frontmost?.localizedName
         )
+    }
+
+    private func fileURLRep(from pasteboard: NSPasteboard) -> PasteboardSnapshot.Rep? {
+        guard let urls = pasteboard.readObjects(
+            forClasses: [NSURL.self],
+            options: [.urlReadingFileURLsOnly: true]
+        ) as? [URL], !urls.isEmpty else { return nil }
+        guard let data = try? JSONEncoder().encode(urls.map(\.absoluteString)) else { return nil }
+        return .init(uti: WellKnownUTI.fileURLs, data: data)
+    }
+
+    private func imageRep(from pasteboard: NSPasteboard) -> PasteboardSnapshot.Rep? {
+        if let png = capped(pasteboard.data(forType: .png)) {
+            return .init(uti: WellKnownUTI.png, data: png)
+        }
+        // TIFF pasteboard data is enormous; store PNG instead.
+        guard let tiff = capped(pasteboard.data(forType: .tiff)),
+              let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:])
+        else { return nil }
+        return .init(uti: WellKnownUTI.png, data: png)
+    }
+
+    private func colorRep(from pasteboard: NSPasteboard) -> PasteboardSnapshot.Rep? {
+        let colorType = NSPasteboard.PasteboardType(WellKnownUTI.color)
+        guard pasteboard.types?.contains(colorType) == true,
+              let data = capped(pasteboard.data(forType: colorType))
+        else { return nil }
+        return .init(uti: WellKnownUTI.color, data: data)
+    }
+
+    private func rtfRep(from pasteboard: NSPasteboard) -> PasteboardSnapshot.Rep? {
+        guard let rtf = capped(pasteboard.data(forType: .rtf)) else { return nil }
+        return .init(uti: WellKnownUTI.rtf, data: rtf)
+    }
+
+    private func htmlRep(from pasteboard: NSPasteboard) -> PasteboardSnapshot.Rep? {
+        guard let html = capped(pasteboard.data(forType: .html)) else { return nil }
+        return .init(uti: WellKnownUTI.html, data: html)
+    }
+
+    private func plainTextRep(from pasteboard: NSPasteboard) -> PasteboardSnapshot.Rep? {
+        guard let string = pasteboard.string(forType: .string),
+              let data = capped(string.data(using: .utf8))
+        else { return nil }
+        return .init(uti: WellKnownUTI.plainText, data: data)
     }
 
     private func capped(_ data: Data?) -> Data? {

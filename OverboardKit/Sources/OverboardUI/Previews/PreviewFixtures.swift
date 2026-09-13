@@ -90,6 +90,18 @@
             return try ClipStore(dbWriter: queue, blobs: BlobStore(directory: dir))
         }
 
+        /// `store()` for `#Preview` bodies, which can't `try`. An in-memory
+        /// store only fails if SQLite itself is broken, so a crash is the
+        /// right response — but one `fatalError` here instead of `try!` at
+        /// every preview site.
+        static func previewStore() -> ClipStore {
+            do {
+                return try self.store()
+            } catch {
+                fatalError("preview fixture store failed: \(error)")
+            }
+        }
+
         static func textSnapshot(_ text: String) -> PasteboardSnapshot {
             PasteboardSnapshot(
                 reps: [.init(uti: WellKnownUTI.plainText, data: Data(text.utf8))],
@@ -106,7 +118,9 @@
         /// whichever Apple Color Emoji revision the rendering Mac has. Nonisolated
         /// so the view model's `@Sendable` catalog closure can call it.
         nonisolated static func emojiCatalog() -> EmojiCatalog {
-            func emoji(_ character: String, _ name: String, _ category: EmojiCategory, keywords: [String] = []) -> Emoji {
+            func emoji(_ character: String, _ name: String, _ category: EmojiCategory,
+                       keywords: [String] = []) -> Emoji
+            {
                 Emoji(character: character, name: name, keywords: keywords, category: category, version: 0.6)
             }
             return EmojiCatalog(all: [

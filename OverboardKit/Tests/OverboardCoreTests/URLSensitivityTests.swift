@@ -41,10 +41,12 @@ struct URLSensitivityTests {
 
     @Test func sensitiveLinkClipIsClassifiedSecret() throws {
         let snapshot = PasteboardSnapshot(
-            reps: [.init(
-                uti: WellKnownUTI.plainText,
-                data: Data("https://bucket.s3.amazonaws.com/k?X-Amz-Signature=abc".utf8)
-            )],
+            reps: [
+                .init(
+                    uti: WellKnownUTI.plainText,
+                    data: Data("https://bucket.s3.amazonaws.com/k?X-Amz-Signature=abc".utf8)
+                ),
+            ],
             sourceBundleID: "com.apple.Safari",
             sourceAppName: "Safari"
         )
@@ -57,10 +59,12 @@ struct URLSensitivityTests {
 
     @Test func ordinaryLinkClipIsNotSecret() throws {
         let snapshot = PasteboardSnapshot(
-            reps: [.init(
-                uti: WellKnownUTI.plainText,
-                data: Data("https://example.com/article".utf8)
-            )],
+            reps: [
+                .init(
+                    uti: WellKnownUTI.plainText,
+                    data: Data("https://example.com/article".utf8)
+                ),
+            ],
             sourceBundleID: "com.apple.Safari",
             sourceAppName: "Safari"
         )

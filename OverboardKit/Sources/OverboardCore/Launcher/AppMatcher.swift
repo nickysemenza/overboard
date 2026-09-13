@@ -23,15 +23,21 @@ public enum AppMatcher {
     /// How `query` matches an app `name`, ignoring user aliases.
     /// "sm" matches "Sublime Merge" via initials without any configuration.
     public static func score(query: String, name: String) -> Match? {
-        let q = self.fold(query)
-        let n = self.fold(name)
-        guard !q.isEmpty, !n.isEmpty else { return nil }
-        if n.hasPrefix(q) { return .namePrefix }
+        let foldedQuery = self.fold(query)
+        let foldedName = self.fold(name)
+        guard !foldedQuery.isEmpty, !foldedName.isEmpty else { return nil }
+        if foldedName.hasPrefix(foldedQuery) {
+            return .namePrefix
+        }
         let initials = String(
-            n.split(whereSeparator: { $0 == " " || $0 == "-" }).compactMap(\.first)
+            foldedName.split(whereSeparator: { $0 == " " || $0 == "-" }).compactMap(\.first)
         )
-        if initials.hasPrefix(q), initials.count > 1 { return .initials }
-        if n.contains(q) { return .substring }
+        if initials.hasPrefix(foldedQuery), initials.count > 1 {
+            return .initials
+        }
+        if foldedName.contains(foldedQuery) {
+            return .substring
+        }
         return nil
     }
 
@@ -43,24 +49,28 @@ public enum AppMatcher {
         aliases: [String: String] = [:],
         limit: Int = 5
     ) -> [Int] {
-        let q = self.fold(query.trimmingCharacters(in: .whitespaces))
-        guard !q.isEmpty else { return [] }
-        let aliasTarget = aliases[q].map(self.fold)
+        let foldedQuery = self.fold(query.trimmingCharacters(in: .whitespaces))
+        guard !foldedQuery.isEmpty else { return [] }
+        let aliasTarget = aliases[foldedQuery].map(self.fold)
 
         let scored: [(index: Int, match: Match)] = names.enumerated().compactMap { index, name in
             if let target = aliasTarget, self.fold(name).hasPrefix(target) {
                 return (index, .alias)
             }
-            guard let match = score(query: q, name: name) else { return nil }
+            guard let match = score(query: foldedQuery, name: name) else { return nil }
             return (index, match)
         }
 
         return scored
             .sorted { lhs, rhs in
-                if lhs.match != rhs.match { return lhs.match > rhs.match }
-                let l = names[lhs.index], r = names[rhs.index]
-                if l.count != r.count { return l.count < r.count }
-                return l.localizedCaseInsensitiveCompare(r) == .orderedAscending
+                if lhs.match != rhs.match {
+                    return lhs.match > rhs.match
+                }
+                let leftName = names[lhs.index], rightName = names[rhs.index]
+                if leftName.count != rightName.count {
+                    return leftName.count < rightName.count
+                }
+                return leftName.localizedCaseInsensitiveCompare(rightName) == .orderedAscending
             }
             .prefix(limit)
             .map(\.index)

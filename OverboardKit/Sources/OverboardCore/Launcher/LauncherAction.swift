@@ -105,43 +105,72 @@ public enum LauncherActions {
     ) -> [LauncherAction] {
         switch result {
         case .app:
-            // ↩ open/switch, ⌘↩ reveal, ⌥↩ copy path; quit only when running.
-            var actions: [LauncherAction] = [
-                context.isAppRunning ? .switchTo : .open,
-                .revealInFinder,
-                .copyPath,
-            ]
-            if context.isAppRunning { actions.append(.quitApp) }
-            return actions
+            self.appActions(context: context)
         case let .clip(item):
-            // ↩ paste, ⌘↩ copy, ⌥↩ paste plain; link clips add Open Link.
-            var actions: [LauncherAction] = [.paste, .copy, .pastePlain]
-            if item.kind == .link { actions.append(.openLink) }
-            actions += [.preview, item.isPinned ? .unpin : .pin]
-            if item.sourceURL != nil { actions.append(.openSource) }
-            return actions
+            self.clipActions(for: item)
+        case let .file(_, _, info):
+            [info.availability == .cloud ? .downloadAndOpen : .open, .revealInFinder, .copyPath, .preview]
+        default:
+            // Every other result's action list is a static function of the
+            // case alone — split out so this switch's data-dependent cases
+            // (app/clip/file, above) don't share a complexity budget with them.
+            self.staticActions(for: result)
+        }
+    }
+
+    /// ↩ open/switch, ⌘↩ reveal, ⌥↩ copy path; quit only when running.
+    private static func appActions(context: LauncherActionContext) -> [LauncherAction] {
+        var actions: [LauncherAction] = [
+            context.isAppRunning ? .switchTo : .open,
+            .revealInFinder,
+            .copyPath,
+        ]
+        if context.isAppRunning {
+            actions.append(.quitApp)
+        }
+        return actions
+    }
+
+    /// ↩ paste, ⌘↩ copy, ⌥↩ paste plain; link clips add Open Link.
+    private static func clipActions(for item: ClipItem) -> [LauncherAction] {
+        var actions: [LauncherAction] = [.paste, .copy, .pastePlain]
+        if item.kind == .link {
+            actions.append(.openLink)
+        }
+        actions += [.preview, item.isPinned ? .unpin : .pin]
+        if item.sourceURL != nil {
+            actions.append(.openSource)
+        }
+        return actions
+    }
+
+    /// Action lists for results whose actions depend only on which case they
+    /// are, never on associated data (unlike app/clip/file, handled above).
+    private static func staticActions(for result: LauncherResult) -> [LauncherAction] {
+        switch result {
         case .snippet:
             // ↩ paste, ⌘↩ copy (⌥↩ is a no-op alias of ↩ for snippets).
-            return [.paste, .copy]
-        case let .file(_, _, info):
-            return [info.availability == .cloud ? .downloadAndOpen : .open, .revealInFinder, .copyPath, .preview]
+            [.paste, .copy]
         case .calculation:
             // ↩ copy, ⌘↩ paste.
-            return [.copy, .paste]
+            [.copy, .paste]
         case .webSearch:
-            return [.search]
+            [.search]
         case .systemSetting:
-            return [.openSetting]
+            [.openSetting]
         case .command:
-            return [.runCommand]
+            [.runCommand]
         case .recentSearch:
-            return [.rerunSearch, .removeRecent]
+            [.rerunSearch, .removeRecent]
         case .nowPlaying:
             // ↩ copy link, ⌘↩ open Spotify.
-            return [.copyLink, .openInSpotify]
+            [.copyLink, .openInSpotify]
         case .askAI:
             // ↩ run + paste the result, ⌘↩ run + copy it.
-            return [.paste, .copy]
+            [.paste, .copy]
+        case .app, .clip, .file:
+            // Unreachable: `actions(for:context:)` handles these itself.
+            []
         }
     }
 

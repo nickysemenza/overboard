@@ -100,7 +100,9 @@ public enum ArithmeticParser {
                     tokens.append(token)
                 } else if character.isLetter || character == "_" {
                     var end = index
-                    while end < characters.count, characters[end].isLetter || characters[end].isNumber || characters[end] == "_" {
+                    while end < characters.count,
+                          characters[end].isLetter || characters[end].isNumber || characters[end] == "_"
+                    {
                         end += 1
                     }
                     tokens.append(.identifier(String(characters[index ..< end])))
@@ -227,7 +229,9 @@ public enum ArithmeticParser {
                 return value
             case let .identifier(name):
                 self.index += 1
-                if self.match("(") { return self.finishCall(name: name, depth: depth) }
+                if self.match("(") {
+                    return self.finishCall(name: name, depth: depth)
+                }
                 return ArithmeticParser.constants[name]
             case .symbol("("):
                 self.index += 1

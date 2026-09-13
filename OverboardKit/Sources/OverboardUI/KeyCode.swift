@@ -7,14 +7,14 @@ import Foundation
 /// across keyboard layouts — exactly why the controllers match on `keyCode`
 /// instead of `charactersIgnoringModifiers` for shortcuts.
 enum KeyCode: UInt16 {
-    case e = 14
-    case y = 16
+    case letterE = 14
+    case letterY = 16
     case one = 18
     case two = 19
     case three = 20
     case four = 21
-    case p = 35
-    case k = 40
+    case letterP = 35
+    case letterK = 40
     case comma = 43
     case slash = 44
     case space = 49
