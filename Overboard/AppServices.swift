@@ -689,11 +689,9 @@ final class AppServices {
         NSApp.windows.first { $0.identifier?.rawValue == self.settingsWindowID }
     }
 
-    /// Surfaces a database open/migration failure the way the CLI already
-    /// does for a reader that hits a bad database (see
-    /// `OverboardDatabase.ReadOnlyOpenError` and `OverboardCLI.Main`'s
-    /// read-error handling): plain-language recovery guidance plus a way to
-    /// get at the file, rather than the silent crash a `fatalError` gave. The
+    /// Surfaces a database open/migration failure as plain-language recovery
+    /// guidance plus a way to get at the file, rather than the silent crash a
+    /// `fatalError` gave. The
     /// app is already running on the in-memory fallback store by the time
     /// this shows, so there's nothing to lose by explaining and quitting.
     private static func presentDatabaseOpenFailureAlert(_ error: Error) {

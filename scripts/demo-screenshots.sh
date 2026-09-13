@@ -104,16 +104,10 @@ shot drawer 0.2
 shot preview 1.5 next preview
 shot palette 1.0 next next next next palette
 shot multiselect 1.0 stack stack extend extend
-shot markdown 1.5 next next next next next next next next next preview
-# Launcher shots: calculator, app search via initials, demo-seeded files
-# (demo mode swaps the Spotlight file provider for DemoSeed.LauncherFiles,
-# so no real home-folder paths can appear; app rows scan /Applications).
-lshot launcher-calc 0.8 "15% of 80"
-lshot launcher-apps 1.2 "sm"
+# Demo mode swaps the Spotlight file provider for DemoSeed.LauncherFiles, so
+# no real home-folder paths can appear. launcher-home.png and
+# launcher-browser.png are captured by hand.
 lshot launcher-files 1.2 "release"
-# "standup" matches both a seeded snippet and a seeded clip, so one frame
-# shows both row kinds with their Clipboard/Snippet source badges.
-lshot launcher-clips 1.2 "standup"
 
 echo "Wrote:"
 ls -la "$OUT"/*.png

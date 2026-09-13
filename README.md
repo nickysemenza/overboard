@@ -118,9 +118,6 @@ is cached to disk.
 - **Launcher commands**: `:stats` (word/char/line stats), `:pause` / `:resume`
   (toggles clipboard capture; menu-bar indicator), `:clear` (clears history,
   keeps pins), `:settings`, `:version`. Plus `:` to open the commands palette.
-- **CLI**: `overboard history|search|get|copy|export` with `--json` for scripts
-  and agents; read-only against the app's database, copy goes through the
-  clipboard so the app captures it. Install via `scripts/install-cli.sh`.
 - **Backup**: Settings → History exports the library to a folder of NDJSON plus
   the large payloads it references, and imports one back (skipping clips you
   already have, by content hash). Detected secrets are left out unless asked
@@ -220,8 +217,7 @@ Dependencies: [GRDB](https://github.com/groue/GRDB.swift),
 [Highlightr](https://github.com/raspu/Highlightr),
 [Defaults](https://github.com/sindresorhus/Defaults),
 [MarkdownUI](https://github.com/gonzalezreal/swift-markdown-ui),
-[swift-async-algorithms](https://github.com/apple/swift-async-algorithms), and
-[swift-argument-parser](https://github.com/apple/swift-argument-parser) (CLI only).
+and [swift-async-algorithms](https://github.com/apple/swift-async-algorithms).
 The calculator's expression parser and the file preview's binary-signature
 table are in-tree rather than dependencies.
 Dev/test only: [swift-snapshot-testing](https://github.com/pointfreeco/swift-snapshot-testing),
@@ -254,31 +250,22 @@ sandboxed process on the machine can read it.
 
 ```sh
 xcodebuild -project Overboard.xcodeproj -scheme Overboard build   # app
-cd OverboardKit && swift test                                     # core tests
-./scripts/tools.sh lint    # pinned SwiftFormat + SwiftLint, same versions as CI
-./scripts/dogfood.sh             # incremental Debug build, install, relaunch
-./scripts/dogfood.sh --release   # optimized build for performance checks
-./scripts/dogfood.sh --no-build  # install/relaunch the last Debug build
+swift test --package-path OverboardKit                            # tests
+./scripts/dogfood.sh     # incremental Debug build → /Applications, relaunch
+brew install swiftformat swiftlint
+swiftformat --lint . && swiftlint --strict   # what CI runs; `swiftformat .` rewrites
+git config core.hooksPath scripts/hooks      # optional: lint before every commit
 ```
 
-`tools.sh` downloads the exact linter releases CI uses into the gitignored
-`.tools/` directory (`format` rewrites, `lint` checks), so a Homebrew upgrade
-can never make local and CI results disagree.
+`dogfood.sh` builds only the current Mac's architecture into `build/dogfood`,
+signs with the stable Apple Development identity so the Accessibility grant
+survives the rebuild (see the signing note above), swaps the build into
+`/Applications`, re-registers the Quick Look extension, and relaunches.
 
-Run `./scripts/hooks/install.sh` once to add a pre-commit hook that runs
-`scripts/tools.sh lint` before every commit — catches formatting/lint issues
-locally instead of on the next CI run. Not installed by default.
-
-`dogfood.sh` defaults to Debug for fast edits, builds only the current Mac's
-architecture, and reuses `build/dogfood` for both configurations. The first
-Debug build compiles its dependencies; subsequent builds are incremental.
-Release remains useful for realistic search-speed, CPU, and memory measurements.
-Both configurations sign with the stable Apple Development identity so the
-Accessibility grant survives the rebuild (see the signing note above), then
-swap the new build into `/Applications` and relaunch it. `--no-build` explicitly
-reuses an existing app; combine it with `--release` to reuse the Release build.
-Build duration is printed, and full diagnostics plus Xcode's timing summary are
-saved to `build/dogfood/dogfood-Debug.log` or `dogfood-Release.log`.
+Lint is strict and nothing is disabled: `.swiftlint.yml` only holds the
+options that make SwiftLint accept SwiftFormat's output. CI uses the linters
+preinstalled on the GitHub runner; if a newer release adds a rule, fix the
+code rather than silence it.
 
 ### Snapshot tests
 
@@ -373,13 +360,12 @@ Screen Recording permission.
 git tag v1.0.0 && git push --tags
 ```
 
-The Release workflow builds a Developer-ID-signed, notarized zip and attaches
-it to a GitHub Release. `./scripts/release.sh 1.0.0` produces the same zip
-locally into `dist/` (see below for what it needs to sign and notarize).
-
-The release job also prints the zip's `version`/`sha256` lines into its job
-summary; paste them into `Casks/overboard.rb` by hand. That step deliberately
-doesn't commit, so a tagged release never pushes back to the branch.
+The Release workflow builds a Developer-ID-signed, notarized zip, attaches
+it to a GitHub Release, and commits the new `version`/`sha256` to
+`Casks/overboard.rb` on `main` so the Homebrew tap upgrades on its own. There
+is no local release path — CI is it. Every push also uploads a notarized
+`Overboard.zip` artifact (`gh run download`) when the signing secrets are
+available.
 
 CI also signs and notarizes on every push, pull request, and
 `workflow_dispatch` run (not just tags) — `ci.yml`'s `build` job and
@@ -432,11 +418,6 @@ secrets carry the credentials:
    ```sh
    xcrun notarytool history --key AuthKey.p8 --key-id <key-id> --issuer <issuer-id>
    ```
-
-`scripts/release.sh` does the same signing-and-notarizing locally when a
-Developer ID Application certificate is in your keychain and
-`NOTARY_KEY_PATH`, `NOTARY_KEY_ID`, and `NOTARY_ISSUER_ID` are set in your
-environment.
 
 ## License
 

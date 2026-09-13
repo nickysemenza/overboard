@@ -73,9 +73,10 @@ if [ "$highest" = "$version" ]; then
     set_key CFBundleShortVersionString "$version"
 fi
 
-# App extensions are copied before this app-target phase runs. Keep their
-# release version identical to the containing app so signing/notarization and
-# Quick Look registration never observe a mismatched bundle pair.
+# Embedded app extensions are copied before this phase runs and have no
+# phase of their own — this is the only place their release version is set.
+# It must match the containing app so signing/notarization and Quick Look
+# registration never observe a mismatched bundle pair.
 final_version=$(get_key CFBundleShortVersionString)
 for extension_plist in "$TARGET_BUILD_DIR/$WRAPPER_NAME/Contents/PlugIns/"*.appex/Contents/Info.plist; do
     [ -f "$extension_plist" ] || continue

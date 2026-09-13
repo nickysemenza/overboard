@@ -5,4 +5,4 @@
 --trailingcommas collections-only
 # Would rewrite every camelCase @Test name as a backticked sentence.
 --disable swiftTestingTestCaseNames
---exclude .build,**/.build,DerivedData,build,.build-xcode
+--exclude .build,**/.build,DerivedData,build
