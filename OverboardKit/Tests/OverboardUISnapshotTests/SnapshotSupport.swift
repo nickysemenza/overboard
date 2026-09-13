@@ -1,10 +1,19 @@
 import AppKit
+@testable import OverboardUI
 import SnapshotTesting
 import SwiftUI
 import Testing
 
 /// Lays a SwiftUI view out in an `NSHostingView` at a fixed size. Appearance is
 /// set per-host: there's no `NSApp` under `swift test` to inherit one from.
+///
+/// `.glassPanel` is flattened to its `windowBackgroundColor` fallback (the
+/// Reduce Transparency branch). Liquid Glass is composited by the GPU and
+/// draws nothing like itself through `cacheDisplay` on a CI VM without a
+/// display driver — every pixel of a glass-backed panel differed there, so the
+/// launcher and emoji-picker suites could only ever pass on a real Mac. The
+/// flat chrome is a real product state, and what these suites assert is
+/// layout, not the glass.
 @MainActor
 func snapshotHost(
     _ view: some View,
@@ -12,7 +21,7 @@ func snapshotHost(
     height: CGFloat,
     dark: Bool = false
 ) -> NSView {
-    let host = NSHostingView(rootView: view)
+    let host = NSHostingView(rootView: view.environment(\.flattensGlassPanels, true))
     host.frame = CGRect(x: 0, y: 0, width: width, height: height)
     host.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
     host.layoutSubtreeIfNeeded()

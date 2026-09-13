@@ -161,16 +161,26 @@ struct LauncherRowButtonStyle: ButtonStyle {
     }
 }
 
+extension EnvironmentValues {
+    /// Forces `.glassPanel` onto the flat `windowBackgroundColor` fallback
+    /// that Reduce Transparency also selects. Snapshot tests set it: Liquid
+    /// Glass is GPU-composited and doesn't survive an offscreen `cacheDisplay`
+    /// on a CI VM, whereas the flat chrome renders identically everywhere.
+    /// (`accessibilityReduceTransparency` itself is get-only.)
+    @Entry var flattensGlassPanels = false
+}
+
 private struct AccessibleGlassPanel<S: Shape>: ViewModifier {
     let shape: S
     let id: String?
     let namespace: Namespace.ID?
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.flattensGlassPanels) private var flattensGlassPanels
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func body(content: Content) -> some View {
         Group {
-            if self.reduceTransparency {
+            if self.reduceTransparency || self.flattensGlassPanels {
                 content.background(Color(nsColor: .windowBackgroundColor), in: self.shape)
             } else if let id, let namespace {
                 content.glassEffect(.regular, in: self.shape).glassEffectID(id, in: namespace)

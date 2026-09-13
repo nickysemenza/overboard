@@ -75,8 +75,22 @@ jobs:
       # `.treatAllWarnings` in Package.swift would, but it conflicts with the
       # -suppress-warnings Xcode adds to package targets and breaks the app
       # build — see the comment in Package.swift.)
+      # SnapshotTesting writes the image it *took* for every failed pixel
+      # assertion under SNAPSHOT_ARTIFACTS; uploading that directory turns a
+      # "percentage of pixels that match 0.13" line into something you can
+      # actually diff against the checked-in reference.
       - name: Run tests
         run: swift test --package-path OverboardKit -Xswiftc -warnings-as-errors
+        env:
+          SNAPSHOT_ARTIFACTS: ${{ runner.temp }}/snapshot-artifacts
+
+      - name: Upload failed snapshots
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: failed-snapshots
+          path: ${{ runner.temp }}/snapshot-artifacts
+          if-no-files-found: ignore
 
       # Informational only, never a gate: prints the file-name index's warm
       # query timings (p95 in particular) into the job summary so a
