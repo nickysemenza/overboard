@@ -1,4 +1,3 @@
-import FileType
 import Foundation
 import UniformTypeIdentifiers
 
@@ -98,7 +97,7 @@ public nonisolated enum FilePreviewLoader {
         let readWasCapped = data.count > FilePreviewContent.maximumReadBytes
         let bounded = readWasCapped ? data.prefix(FilePreviewContent.maximumReadBytes) : data
         let previewData = Data(bounded)
-        guard !self.isKnownBinary(previewData), let decoded = self.decode(previewData) else { throw FilePreviewLoadError.binary }
+        guard !MagicBytes.looksBinary(previewData), let decoded = self.decode(previewData) else { throw FilePreviewLoadError.binary }
         guard !decoded.unicodeScalars.contains(where: { $0.value == 0 || ($0.value < 8 && $0.value != 9 && $0.value != 10 && $0.value != 13) }) else {
             throw FilePreviewLoadError.binary
         }
@@ -124,13 +123,6 @@ public nonisolated enum FilePreviewLoader {
         if oddNulls > bytes.count / 8 { return String(data: data, encoding: .utf16LittleEndian) }
         if evenNulls > bytes.count / 8 { return String(data: data, encoding: .utf16BigEndian) }
         return nil
-    }
-
-    /// FileType only sees our already-bounded sample; it never receives a URL
-    /// or file handle, so archive/container inspection cannot expand the read.
-    private static func isKnownBinary(_ data: Data) -> Bool {
-        guard let detected = FileType.detect(in: data) else { return false }
-        return detected.mimeGroup != .text
     }
 
     private static func language(for url: URL) -> String? {

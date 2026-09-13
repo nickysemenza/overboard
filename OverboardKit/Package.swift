@@ -31,22 +31,20 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.0.0"),
-        .package(url: "https://github.com/sindresorhus/KeyboardShortcuts", from: "2.0.0"),
+        .package(url: "https://github.com/sindresorhus/KeyboardShortcuts", from: "3.1.0"),
         .package(url: "https://github.com/raspu/Highlightr", from: "2.1.0"),
-        .package(url: "https://github.com/nicklockwood/Expression", from: "0.13.0"),
         .package(url: "https://github.com/sindresorhus/Defaults", from: "9.0.0"),
         .package(url: "https://github.com/apple/swift-async-algorithms", from: "1.0.0"),
         .package(url: "https://github.com/gonzalezreal/swift-markdown-ui", from: "2.4.0"),
         .package(url: "https://github.com/apple/swift-collections.git", .upToNextMinor(from: "1.6.0")),
-        .package(url: "https://github.com/velocityzen/FileType", from: "2.2.1"),
         .package(url: "https://github.com/pointfreeco/swift-snapshot-testing", from: "1.18.0"),
+        .package(url: "https://github.com/apple/swift-argument-parser", from: "1.5.0"),
     ],
     targets: [
         .target(
             name: "OverboardCore",
             dependencies: [
                 .product(name: "GRDB", package: "GRDB.swift"),
-                .product(name: "Expression", package: "Expression"),
                 .product(name: "OrderedCollections", package: "swift-collections"),
             ],
             resources: [
@@ -85,13 +83,15 @@ let package = Package(
             dependencies: [
                 .product(name: "Highlightr", package: "Highlightr"),
                 .product(name: "MarkdownUI", package: "swift-markdown-ui"),
-                .product(name: "FileType", package: "FileType"),
             ],
             swiftSettings: mainActorByDefault
         ),
         .executableTarget(
             name: "OverboardCLI",
-            dependencies: ["OverboardCore"],
+            dependencies: [
+                "OverboardCore",
+                .product(name: "ArgumentParser", package: "swift-argument-parser"),
+            ],
             swiftSettings: approachableConcurrency
         ),
         .executableTarget(
@@ -112,7 +112,10 @@ let package = Package(
         ),
         .testTarget(
             name: "OverboardCLITests",
-            dependencies: ["OverboardCLI"],
+            dependencies: [
+                "OverboardCLI",
+                .product(name: "ArgumentParser", package: "swift-argument-parser"),
+            ],
             swiftSettings: approachableConcurrency
         ),
         .testTarget(

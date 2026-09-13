@@ -61,3 +61,22 @@ jobs:
             "Overboard-${GITHUB_REF_NAME#v}.zip"
         env:
           GH_TOKEN: ${{ github.token }}
+
+      # Casks/overboard.rb ships `sha256 :no_check` so a local checkout stays
+      # installable; the real checksum only exists once this zip is uploaded.
+      # Print it into the job summary and update the cask by hand — deliberately
+      # not auto-committed, so a release never pushes to the tagged branch.
+      - name: Print the cask's sha256 for Casks/overboard.rb
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          checksum="$(shasum -a 256 "Overboard-${version}.zip" | cut -d' ' -f1)"
+          {
+            echo "## Homebrew cask"
+            echo
+            echo "Update \`Casks/overboard.rb\` with:"
+            echo
+            echo '```ruby'
+            echo "  version \"${version}\""
+            echo "  sha256 \"${checksum}\""
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

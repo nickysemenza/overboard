@@ -18,7 +18,10 @@ person's workflow and taste.
 
 ## Install
 
-Grab the zip from
+**Homebrew:** `brew install --cask ./Casks/overboard.rb` from a checkout — the
+cask lives in this repo until there's a tap to point at.
+
+Or grab the zip from
 [Releases](https://github.com/nickysemenza/overboard/releases) — releases are
 signed with a Developer ID certificate and notarized by Apple, so a plain
 double-click works, no right-click → Open dance needed. Or build from source
@@ -204,10 +207,12 @@ is cached to disk.
 Dependencies: [GRDB](https://github.com/groue/GRDB.swift),
 [KeyboardShortcuts](https://github.com/sindresorhus/KeyboardShortcuts),
 [Highlightr](https://github.com/raspu/Highlightr),
-[Expression](https://github.com/nicklockwood/Expression),
 [Defaults](https://github.com/sindresorhus/Defaults),
-[MarkdownUI](https://github.com/gonzalezreal/swift-markdown-ui), and
-[swift-async-algorithms](https://github.com/apple/swift-async-algorithms).
+[MarkdownUI](https://github.com/gonzalezreal/swift-markdown-ui),
+[swift-async-algorithms](https://github.com/apple/swift-async-algorithms), and
+[swift-argument-parser](https://github.com/apple/swift-argument-parser) (CLI only).
+The calculator's expression parser and the file preview's binary-signature
+table are in-tree rather than dependencies.
 Dev/test only: [swift-snapshot-testing](https://github.com/pointfreeco/swift-snapshot-testing),
 SwiftFormat, and SwiftLint.
 
@@ -345,6 +350,10 @@ git tag v1.0.0 && git push --tags
 The Release workflow builds a Developer-ID-signed, notarized zip and attaches
 it to a GitHub Release. `./scripts/release.sh 1.0.0` produces the same zip
 locally into `dist/` (see below for what it needs to sign and notarize).
+
+The release job also prints the zip's `version`/`sha256` lines into its job
+summary; paste them into `Casks/overboard.rb` by hand. That step deliberately
+doesn't commit, so a tagged release never pushes back to the branch.
 
 CI also signs and notarizes on every push, pull request, and
 `workflow_dispatch` run (not just tags) — `ci.yml`'s `build` job and
