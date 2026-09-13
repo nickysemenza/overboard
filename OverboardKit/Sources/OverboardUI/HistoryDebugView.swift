@@ -14,7 +14,7 @@ public struct HistoryDebugView: View {
     public var body: some View {
         List(self.items) { item in
             HStack(spacing: 10) {
-                Image(systemName: self.icon(for: item.kind))
+                Image(systemName: item.kind.symbolName)
                     .frame(width: 20)
                     .foregroundStyle(.secondary)
                 VStack(alignment: .leading, spacing: 2) {
@@ -44,16 +44,6 @@ public struct HistoryDebugView: View {
             } catch {
                 // Observation only fails if the database is gone; nothing to show.
             }
-        }
-    }
-
-    private func icon(for kind: ItemKind) -> String {
-        switch kind {
-        case .text: "text.alignleft"
-        case .link: "link"
-        case .image: "photo"
-        case .file: "doc"
-        case .color: "paintpalette"
         }
     }
 

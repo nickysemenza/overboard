@@ -29,8 +29,8 @@ struct CopySnippetIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<String> {
-        let services = AppServices.shared
-        guard let full = try await services.store.snippets().first(where: { $0.id == self.snippet.id })
+        let deps = IntentDependencies.current
+        guard let full = try await deps.store.snippets().first(where: { $0.id == self.snippet.id })
         else {
             throw CopySnippetIntentError.notFound
         }
@@ -40,7 +40,7 @@ struct CopySnippetIntent: AppIntent {
         // shared marker-tagged copy helper.
         let clipboard = NSPasteboard.general.string(forType: .string)
         let expanded = SnippetTemplate.expand(full.body, clipboard: clipboard)
-        services.copyString(expanded, hud: "Snippet copied — ⌘V to paste")
+        deps.copyString(expanded, "Snippet copied — ⌘V to paste")
         return .result(value: expanded)
     }
 }

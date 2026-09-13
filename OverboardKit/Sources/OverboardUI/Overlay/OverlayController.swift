@@ -1,5 +1,4 @@
 import AppKit
-import os
 import OverboardCore
 import SwiftUI
 
@@ -10,7 +9,6 @@ public final class OverlayController {
     private var keyMonitor: Any?
     private var clickMonitor: Any?
     private var resignObserver: NSObjectProtocol?
-    private let logger = Logger(subsystem: "com.nickysemenza.overboard", category: "overlay")
 
     /// The app that was frontmost when the drawer was summoned — i.e. where a
     /// paste should land. Recorded before the panel appears.
@@ -140,7 +138,7 @@ public final class OverlayController {
 
         let screen = self.screenWithMouse()
         let visible = screen.visibleFrame
-        let height: CGFloat = 282
+        let height = CardMetrics.collapsedPanelHeight
         panel.setFrame(
             NSRect(x: visible.minX, y: visible.minY, width: visible.width, height: height),
             display: false
@@ -162,7 +160,7 @@ public final class OverlayController {
     // MARK: - Setup
 
     private func makePanel() -> OverlayPanel {
-        let panel = OverlayPanel(contentRect: NSRect(x: 0, y: 0, width: 800, height: 282))
+        let panel = OverlayPanel(contentRect: NSRect(x: 0, y: 0, width: 800, height: CardMetrics.collapsedPanelHeight))
         let hosting = NSHostingView(
             rootView: DrawerView(viewModel: self.viewModel)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
@@ -176,7 +174,7 @@ public final class OverlayController {
         guard let panel, panel.isVisible else { return }
         let screen = panel.screen ?? self.screenWithMouse()
         let visible = screen.visibleFrame
-        let height: CGFloat = expanded ? 540 : 282
+        let height = expanded ? CardMetrics.expandedPanelHeight : CardMetrics.collapsedPanelHeight
         panel.setFrame(
             NSRect(x: visible.minX, y: visible.minY, width: visible.width, height: height),
             display: true,
@@ -201,17 +199,17 @@ public final class OverlayController {
 
             // The palette owns the keyboard above everything else.
             if self.viewModel.isPaletteOpen {
-                switch event.keyCode {
-                case 53: // esc closes the palette, not the drawer
+                switch KeyCode(rawValue: event.keyCode) {
+                case .escape: // closes the palette, not the drawer
                     self.viewModel.closePalette()
                     return nil
-                case 36, 76: // return runs the highlighted action
+                case .returnKey, .keypadEnter: // runs the highlighted action
                     self.viewModel.runPaletteAction()
                     return nil
-                case 126: // up
+                case .upArrow:
                     self.viewModel.movePaletteSelection(-1)
                     return nil
-                case 125: // down
+                case .downArrow:
                     self.viewModel.movePaletteSelection(1)
                     return nil
                 default: // typing filters
@@ -222,35 +220,35 @@ public final class OverlayController {
             // Preview/edit modes own the keyboard before the normal model.
             switch self.viewModel.previewState {
             case .editing:
-                switch event.keyCode {
-                case 53: // esc cancels the edit, back to the card strip
+                switch KeyCode(rawValue: event.keyCode) {
+                case .escape: // cancels the edit, back to the card strip
                     self.viewModel.closePreview()
                     return nil
-                case 36 where event.modifierFlags.contains(.command): // ⌘↩ paste edited
+                case .returnKey where event.modifierFlags.contains(.command): // ⌘↩ paste edited
                     self.viewModel.commitEdit()
                     return nil
                 default: // everything else belongs to the text editor
                     return event
                 }
             case .viewing:
-                switch event.keyCode {
-                case 53, 49: // esc, space close
+                switch KeyCode(rawValue: event.keyCode) {
+                case .escape, .space: // close
                     self.viewModel.closePreview()
                     return nil
-                case 16 where event.modifierFlags.contains(.command): // ⌘Y closes too
+                case .y where event.modifierFlags.contains(.command): // ⌘Y closes too
                     self.viewModel.closePreview()
                     return nil
-                case 36, 76: // return pastes (⇧ plain)
+                case .returnKey, .keypadEnter: // pastes (⇧ plain)
                     let mode: PasteMode = event.modifierFlags.contains(.shift) ? .plainText : .full
                     self.viewModel.selectCurrent(mode: mode)
                     return nil
-                case 123: // browse while previewing
+                case .leftArrow: // browse while previewing
                     self.viewModel.moveSelection(-1)
                     return nil
-                case 124:
+                case .rightArrow:
                     self.viewModel.moveSelection(1)
                     return nil
-                case 14 where event.modifierFlags.contains(.command): // ⌘E edit
+                case .e where event.modifierFlags.contains(.command): // ⌘E edit
                     self.viewModel.beginEdit()
                     return nil
                 default:
@@ -260,23 +258,31 @@ public final class OverlayController {
                 break
             }
 
-            switch event.keyCode {
-            case 53: // esc
+            switch KeyCode(rawValue: event.keyCode) {
+            case .escape:
+                // Two-stage Esc (matches EmojiPanelController/LauncherPanelController):
+                // a non-empty query is cleared first; the drawer only dismisses
+                // once Esc is pressed again with an already-empty query.
+                if !self.viewModel.query.isEmpty {
+                    self.viewModel.query = ""
+                    self.viewModel.scheduleSearch()
+                    return nil
+                }
                 self.hide()
                 return nil
-            case 49 where self.viewModel.query.isEmpty && self.viewModel.mode == .history: // space previews
+            case .space where self.viewModel.query.isEmpty && self.viewModel.mode == .history: // previews
                 self.viewModel.togglePreview()
                 return nil
-            case 16 where event.modifierFlags.contains(.command): // ⌘Y previews even mid-search
+            case .y where event.modifierFlags.contains(.command): // ⌘Y previews even mid-search
                 self.viewModel.togglePreview()
                 return nil
-            case 14 where event.modifierFlags.contains(.command): // ⌘E edit before paste
+            case .e where event.modifierFlags.contains(.command): // ⌘E edit before paste
                 self.viewModel.beginEdit()
                 return nil
-            case 40 where event.modifierFlags.contains(.command): // ⌘K action palette
+            case .k where event.modifierFlags.contains(.command): // ⌘K action palette
                 self.viewModel.togglePalette()
                 return nil
-            case 36, 76: // return, keypad enter — ⇧ plain text, ⌘ queue on stack
+            case .returnKey, .keypadEnter: // ⇧ plain text, ⌘ queue on stack
                 if event.modifierFlags.contains(.command) {
                     self.viewModel.addSelectedToStack()
                 } else {
@@ -284,31 +290,31 @@ public final class OverlayController {
                     self.viewModel.selectCurrent(mode: mode)
                 }
                 return nil
-            case 44 where event.modifierFlags.contains(.command): // ⌘/ history ⇄ snippets
+            case .slash where event.modifierFlags.contains(.command): // ⌘/ history ⇄ snippets
                 self.viewModel.toggleMode()
                 return nil
-            case 43 where event.modifierFlags.contains(.command): // ⌘, settings
+            case .comma where event.modifierFlags.contains(.command): // ⌘, settings
                 self.hide()
                 self.viewModel.onOpenSettings()
                 return nil
-            case 123: // left arrow — ⇧ extends the selection
+            case .leftArrow: // ⇧ extends the selection
                 if event.modifierFlags.contains(.shift) {
                     self.viewModel.extendSelection(-1)
                 } else {
                     self.viewModel.moveSelection(-1)
                 }
                 return nil
-            case 124: // right arrow — ⇧ extends the selection
+            case .rightArrow: // ⇧ extends the selection
                 if event.modifierFlags.contains(.shift) {
                     self.viewModel.extendSelection(1)
                 } else {
                     self.viewModel.moveSelection(1)
                 }
                 return nil
-            case 35 where event.modifierFlags.contains(.command): // ⌘P pin/unpin
+            case .p where event.modifierFlags.contains(.command): // ⌘P pin/unpin
                 self.viewModel.togglePinSelected()
                 return nil
-            case 51 where event.modifierFlags.contains(.command): // ⌘⌫ delete item
+            case .delete where event.modifierFlags.contains(.command): // ⌘⌫ delete item
                 self.viewModel.deleteSelected()
                 return nil
             default:

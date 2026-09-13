@@ -36,6 +36,10 @@ struct PreviewPane: View {
         .task(id: self.item?.id) {
             await self.load()
         }
+        .onChange(of: self.colorScheme) {
+            guard self.highlightedCode != nil, let text = self.fullText else { return }
+            Task { self.highlightedCode = await CodeHighlighter.highlight(text, dark: self.colorScheme == .dark) }
+        }
         .onChange(of: self.viewModel.previewState) {
             self.editorFocused = self.viewModel.previewState == .editing
         }
@@ -102,6 +106,7 @@ struct PreviewPane: View {
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: "globe")
+                    .accessibilityHidden(true)
                 Text(label)
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -163,7 +168,7 @@ struct PreviewPane: View {
             case .color:
                 Image(systemName: "paintpalette.fill")
                     .font(.largeTitle)
-                    .foregroundStyle(.quaternary)
+                    .contrastAwareForeground(.quaternary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
@@ -210,8 +215,8 @@ struct PreviewPane: View {
         Text(self.viewModel.previewState == .editing
             ? "⌘↩ paste edited text   esc cancel"
             : "↩ paste   ⌘E edit   ←/→ browse   space or esc close")
-            .font(.caption2)
-            .foregroundStyle(.tertiary)
+            .font(.caption)
+            .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .center)
     }
 
@@ -238,14 +243,18 @@ struct PreviewPane: View {
             self.fullText = text
             if let text, item.kind == .text, !item.isSecret {
                 if item.category == "code" {
-                    self.highlightedCode = CodeHighlighter.highlight(text, dark: self.colorScheme == .dark)
+                    let highlighted = await CodeHighlighter.highlight(text, dark: self.colorScheme == .dark)
+                    guard !Task.isCancelled else { return }
+                    self.highlightedCode = highlighted
                 } else if MarkdownDetector.looksLikeMarkdown(text) {
                     // Checked before looksLikeCode: a README's fenced block
                     // trips the code heuristic, and the clip would never
                     // render as markdown.
                     self.markdownSource = text
                 } else if CodeHighlighter.looksLikeCode(text) {
-                    self.highlightedCode = CodeHighlighter.highlight(text, dark: self.colorScheme == .dark)
+                    let highlighted = await CodeHighlighter.highlight(text, dark: self.colorScheme == .dark)
+                    guard !Task.isCancelled else { return }
+                    self.highlightedCode = highlighted
                 }
             }
         case .file:
@@ -275,16 +284,16 @@ struct PreviewPane: View {
             PreviewPaneDemo(store: store, editing: false)
         }
         // Matches OverlayController's expanded panel frame (full screen width,
-        // 540pt tall while previewing); a fixed 900pt stands in for the screen
+        // while previewing); a fixed 900pt stands in for the screen
         // width in previews.
-        .frame(width: 900, height: 540)
+        .frame(width: 900, height: CardMetrics.expandedPanelHeight)
     }
 
     #Preview("Editing") {
         SeededPreview { store in
             PreviewPaneDemo(store: store, editing: true)
         }
-        .frame(width: 900, height: 540)
+        .frame(width: 900, height: CardMetrics.expandedPanelHeight)
     }
 
     /// Waits for the seeded store's initial search to land, selects the plain-text

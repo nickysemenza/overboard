@@ -17,9 +17,7 @@ private struct SizingLauncherProvider: LauncherProvider {
 @MainActor
 struct LauncherPanelSizingTests {
     private func waitForSearch(_ model: LauncherViewModel) async throws {
-        for _ in 0 ..< 300 where model.isSearching {
-            try await Task.sleep(for: .milliseconds(5))
-        }
+        await model.settle()
         try #require(!model.isSearching)
     }
 

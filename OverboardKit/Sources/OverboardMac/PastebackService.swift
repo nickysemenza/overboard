@@ -33,6 +33,16 @@ public final class PastebackService {
         self.store = store
     }
 
+    /// Awaits any in-flight paste-back restore, so quitting mid-paste puts the
+    /// user's real clipboard back instead of leaving Overboard's last write on
+    /// it. A no-op when nothing is pending. Callers that can't wait forever
+    /// (app termination, which is synchronous) should race this with their
+    /// own bound — `restoreTask` already caps itself at
+    /// `consumptionTimeout` (5s) plus the settle delay.
+    public func drain() async {
+        await self.restoreTask?.value
+    }
+
     /// Full paste-back: optionally snapshot the current clipboard, write the
     /// item, re-activate the target, synthesize ⌘V, then restore the snapshot
     /// once the paste has landed.

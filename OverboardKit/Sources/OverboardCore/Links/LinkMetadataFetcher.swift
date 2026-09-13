@@ -92,40 +92,61 @@ public struct LinkMetadataFetcher: Sendable {
     /// flips its answer between this check and the connection (DNS rebinding with
     /// a near-zero TTL) could still bypass it. Closing that fully needs pinning
     /// the connection to the vetted address, which URLSession doesn't expose.
-    static func hostResolvesToPrivate(_ host: String) -> Bool {
-        var hints = addrinfo()
-        hints.ai_family = AF_UNSPEC
-        hints.ai_socktype = SOCK_STREAM
-        var info: UnsafeMutablePointer<addrinfo>?
-        guard getaddrinfo(host, nil, &hints, &info) == 0, let head = info else { return false }
-        defer { freeaddrinfo(head) }
+    ///
+    /// `getaddrinfo` is a blocking syscall — a slow or hung resolver would
+    /// otherwise tie up a cooperative-pool thread for the system DNS timeout
+    /// (tens of seconds). It runs on a detached task backed by a plain
+    /// dispatch thread, raced against a 3s timeout; losing that race is
+    /// treated as "resolves to private" (i.e. not fetchable) rather than
+    /// letting an unresolved host through unchecked.
+    static func hostResolvesToPrivate(_ host: String) async -> Bool {
+        let resolution = Task.detached(priority: .utility) { () -> Bool in
+            var hints = addrinfo()
+            hints.ai_family = AF_UNSPEC
+            hints.ai_socktype = SOCK_STREAM
+            var info: UnsafeMutablePointer<addrinfo>?
+            guard getaddrinfo(host, nil, &hints, &info) == 0, let head = info else { return false }
+            defer { freeaddrinfo(head) }
 
-        var node: UnsafeMutablePointer<addrinfo>? = head
-        while let current = node {
-            var buffer = [CChar](repeating: 0, count: Int(NI_MAXHOST))
-            if let addr = current.pointee.ai_addr,
-               getnameinfo(
-                   addr, current.pointee.ai_addrlen,
-                   &buffer, socklen_t(buffer.count),
-                   nil, 0, NI_NUMERICHOST
-               ) == 0
-            {
-                // getnameinfo can append a scope id to link-local addrs (fe80::1%en0).
-                let numeric = buffer.withUnsafeBufferPointer { String(cString: $0.baseAddress!) }
-                let bare = numeric.split(separator: "%").first.map(String.init) ?? numeric
-                if self.isPrivateHost(bare) { return true }
+            var node: UnsafeMutablePointer<addrinfo>? = head
+            while let current = node {
+                var buffer = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+                if let addr = current.pointee.ai_addr,
+                   getnameinfo(
+                       addr, current.pointee.ai_addrlen,
+                       &buffer, socklen_t(buffer.count),
+                       nil, 0, NI_NUMERICHOST
+                   ) == 0
+                {
+                    // getnameinfo can append a scope id to link-local addrs (fe80::1%en0).
+                    let numeric = buffer.withUnsafeBufferPointer { String(cString: $0.baseAddress!) }
+                    let bare = numeric.split(separator: "%").first.map(String.init) ?? numeric
+                    if self.isPrivateHost(bare) { return true }
+                }
+                node = current.pointee.ai_next
             }
-            node = current.pointee.ai_next
+            return false
         }
-        return false
+
+        return await withTaskGroup(of: Bool.self) { group in
+            group.addTask { await resolution.value }
+            group.addTask {
+                try? await Task.sleep(for: .seconds(3))
+                return true // timeout → treat as unresolved/private, i.e. not fetchable.
+            }
+            let first = await group.next() ?? true
+            group.cancelAll()
+            resolution.cancel()
+            return first
+        }
     }
 
     /// The full connect-time gate: cheap string checks (`isFetchable`) plus a DNS
     /// resolution check. Applied at every outbound-connection boundary, including
     /// redirects, so a name that resolves to an internal address is never dialed.
-    static func isConnectPermitted(_ url: URL) -> Bool {
+    static func isConnectPermitted(_ url: URL) async -> Bool {
         guard self.isFetchable(url), let host = url.host else { return false }
-        return !self.hostResolvesToPrivate(host)
+        return await !self.hostResolvesToPrivate(host)
     }
 
     /// True if `host` is a dotted-quad IPv4 in a loopback/private/link-local
@@ -183,7 +204,7 @@ public struct LinkMetadataFetcher: Sendable {
     /// at `</head>` or the byte cap — whichever comes first. Returns the HTML
     /// and the final (post-redirect) URL to resolve relative links against.
     private func fetchHTML(_ url: URL) async -> (html: String, finalURL: URL)? {
-        guard Self.isConnectPermitted(url) else { return nil }
+        guard await Self.isConnectPermitted(url) else { return nil }
         var request = URLRequest(url: url)
         request.timeoutInterval = self.timeout
         request.setValue(
@@ -263,7 +284,7 @@ public struct LinkMetadataFetcher: Sendable {
     /// its longest side, and re-encodes as PNG via ImageIO — no AppKit. Nil on
     /// any failure, so a broken image URL never blocks the rest of the card.
     private func fetchImagePNG(_ url: URL?, byteCap: Int, maxPixel: Int) async -> Data? {
-        guard let url, Self.isConnectPermitted(url) else { return nil }
+        guard let url, await Self.isConnectPermitted(url) else { return nil }
         var request = URLRequest(url: url)
         request.timeoutInterval = self.timeout
         request.setValue("image/*", forHTTPHeaderField: "Accept")
@@ -321,11 +342,32 @@ private final class RedirectGuard: NSObject, URLSessionTaskDelegate, @unchecked 
         newRequest request: URLRequest,
         completionHandler: @escaping (URLRequest?) -> Void
     ) {
-        if let url = request.url, LinkMetadataFetcher.isConnectPermitted(url) {
-            completionHandler(request)
-        } else {
+        guard let url = request.url else {
             completionHandler(nil)
+            return
         }
+        // The DNS check is now async (see `isConnectPermitted`), so the
+        // decision can't be made before this synchronous delegate callback
+        // returns. `completionHandler` isn't `Sendable` (it's a plain
+        // `@escaping` closure from the ObjC-bridged protocol), so it's boxed
+        // to cross into the `Task` — this call site is its only use, so the
+        // box just carries it, it doesn't share it.
+        let box = CompletionHandlerBox(completionHandler)
+        Task {
+            let permitted = await LinkMetadataFetcher.isConnectPermitted(url)
+            box.handler(permitted ? request : nil)
+        }
+    }
+}
+
+/// Asserts (rather than proves) that a captured `@escaping` completion
+/// handler is safe to hand to a `Task` — true here because each box is
+/// constructed and consumed exactly once, on the delegate queue this session
+/// was created with, in `RedirectGuard`.
+private struct CompletionHandlerBox: @unchecked Sendable {
+    let handler: (URLRequest?) -> Void
+    init(_ handler: @escaping (URLRequest?) -> Void) {
+        self.handler = handler
     }
 }
 

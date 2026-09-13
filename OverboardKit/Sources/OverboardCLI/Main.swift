@@ -1,10 +1,13 @@
 import AppKit
+import ArgumentParser
 import Foundation
 import GRDB
 import OverboardCore
 
-/// Exit codes are part of the CLI contract — scripts branch on them.
-enum ExitCode: Int32 {
+/// Exit codes are part of the CLI contract — scripts branch on them. They're
+/// `Error`s so a subcommand can throw one out of `run()` and the root can turn
+/// it back into a process status.
+enum ExitCode: Int32, Error {
     /// Success.
     case ok = 0
     /// A well-formed request that found nothing (empty history, index out of
@@ -14,45 +17,61 @@ enum ExitCode: Int32 {
     /// left behind by an app crash.
     case environment = 2
     /// The command line itself was wrong (unknown subcommand, bad flag).
+    /// Matches ArgumentParser's own validation-failure status, so its parse
+    /// errors and our hand-written ones report the same thing.
     case usage = 64
 }
 
 @main
-struct Overboard {
+enum Main {
     static func main() async {
-        let args = Array(CommandLine.arguments.dropFirst())
-        let code = await self.run(args)
+        let code = await Overboard.run(Array(CommandLine.arguments.dropFirst()))
         exit(code.rawValue)
     }
+}
 
+struct Overboard: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "overboard",
+        abstract: "Drive the Overboard clipboard manager from the shell.",
+        discussion: """
+        Reads open the app's database read-only; secrets are never printed.
+        `copy` sets the system clipboard directly — run the app to capture it \
+        into history.
+        """,
+        subcommands: [History.self, Search.self, Get.self, Copy.self, Export.self]
+    )
+
+    /// `overboard` with no subcommand is a malformed command line, not a help
+    /// request — ArgumentParser's default would exit 0, and scripts rely on 64.
+    func run() async throws {
+        FileHandle.standardError.printLine(Overboard.helpMessage())
+        throw ExitCode.usage
+    }
+
+    /// Parses and runs `args`, mapping every outcome onto the documented exit
+    /// codes. Kept separate from `Main.main()` so tests can drive the whole
+    /// command line without spawning a process.
     static func run(_ args: [String]) async -> ExitCode {
-        guard let command = args.first else {
-            self.printUsage(to: FileHandle.standardError)
-            return .usage
-        }
-
-        switch command {
-        case "help", "--help", "-h":
-            self.printUsage(to: FileHandle.standardOutput)
+        do {
+            var command = try self.parseAsRoot(args)
+            if var asyncCommand = command as? AsyncParsableCommand {
+                try await asyncCommand.run()
+            } else {
+                try command.run()
+            }
             return .ok
-        case "history":
-            return await self.runReading(Array(args.dropFirst())) { store, rest in
-                try await self.history(store: store, args: rest)
+        } catch let code as ExitCode {
+            return code
+        } catch {
+            // ArgumentParser's own errors: a help request is a success that
+            // prints to stdout, anything else is a usage error on stderr.
+            let isHelp = self.exitCode(for: error) == .success
+            let message = self.fullMessage(for: error)
+            if !message.isEmpty {
+                (isHelp ? FileHandle.standardOutput : FileHandle.standardError).printLine(message)
             }
-        case "search":
-            return await self.runReading(Array(args.dropFirst())) { store, rest in
-                try await self.search(store: store, args: rest)
-            }
-        case "get":
-            return await self.runReading(Array(args.dropFirst())) { store, rest in
-                try await self.get(store: store, args: rest)
-            }
-        case "copy":
-            return self.copy(args: Array(args.dropFirst()))
-        default:
-            FileHandle.standardError.printLine("overboard: unknown command '\(command)'")
-            self.printUsage(to: FileHandle.standardError)
-            return .usage
+            return isHelp ? .ok : .usage
         }
     }
 
@@ -62,8 +81,7 @@ struct Overboard {
     /// into friendly stderr messages with the right exit code. Every read
     /// command routes through here so the environment handling lives once.
     static func runReading(
-        _ args: [String],
-        _ body: (ClipStore, [String]) async throws -> ExitCode
+        _ body: (ClipStore) async throws -> ExitCode
     ) async -> ExitCode {
         let store: ClipStore
         do {
@@ -85,7 +103,7 @@ struct Overboard {
         }
 
         do {
-            return try await body(store, args)
+            return try await body(store)
         } catch {
             FileHandle.standardError.printLine("overboard: \(error.localizedDescription)")
             return .environment
@@ -101,17 +119,19 @@ struct Overboard {
             || error.resultCode == .SQLITE_READONLY
     }
 
-    // MARK: - Commands
+    // MARK: - Command bodies
 
-    static func history(store: ClipStore, args: [String]) async throws -> ExitCode {
-        let options = ListOptions(args)
+    //
+    // Static functions over an injected store, so the tests can exercise the
+    // exit-code contract without touching a real database.
+
+    static func history(store: ClipStore, options: ListOptions) async throws -> ExitCode {
         let items = try await Output.visible(store.recent(limit: options.limit))
         return self.emitList(items, json: options.json)
     }
 
-    static func search(store: ClipStore, args: [String]) async throws -> ExitCode {
-        let options = ListOptions(args)
-        let query = options.positional.joined(separator: " ")
+    static func search(store: ClipStore, query words: [String], options: ListOptions) async throws -> ExitCode {
+        let query = words.joined(separator: " ")
         guard !query.isEmpty else {
             FileHandle.standardError.printLine("overboard: search requires a query")
             return .usage
@@ -120,13 +140,12 @@ struct Overboard {
         return self.emitList(items, json: options.json)
     }
 
-    static func get(store: ClipStore, args: [String]) async throws -> ExitCode {
-        let options = ListOptions(args)
-        // Default to the most recent clip. A single positional arg is the
-        // 1-based index into the non-secret recents.
+    static func get(store: ClipStore, index requested: String?, options: ListOptions) async throws -> ExitCode {
+        // Default to the most recent clip. The positional arg is the 1-based
+        // index into the non-secret recents.
         let index: Int
-        if let first = options.positional.first {
-            guard let parsed = Int(first), parsed >= 1 else {
+        if let requested {
+            guard let parsed = Int(requested), parsed >= 1 else {
                 FileHandle.standardError.printLine("overboard: get expects a positive index")
                 return .usage
             }
@@ -168,10 +187,33 @@ struct Overboard {
         return .ok
     }
 
-    static func copy(args: [String]) -> ExitCode {
-        let wantsStdin = args.contains("--stdin")
-        let positional = args.filter { $0 != "--stdin" }
+    /// Writes an archive folder and reports what landed in it. Read-only:
+    /// exporting only reads the database, so the CLI's read-only open is
+    /// enough. There is no matching `import` — restores mutate the store's
+    /// blobs and FTS index, and the app owns those.
+    static func export(store: ClipStore, directory: String, includeSecrets: Bool) async throws -> ExitCode {
+        let url = URL(fileURLWithPath: (directory as NSString).expandingTildeInPath)
+        let summary = try await store.export(to: url, includeSecrets: includeSecrets)
+        var line = "Exported \(CountPhrase.string(summary.itemCount, of: "item"))"
+        if summary.blobCount > 0 {
+            line += " and \(CountPhrase.string(summary.blobCount, of: "blob"))"
+        }
+        line += " to \(summary.directory.path)"
+        FileHandle.standardOutput.printLine(line)
+        if summary.secretsExcluded > 0 {
+            FileHandle.standardError.printLine(
+                "overboard: excluded \(CountPhrase.string(summary.secretsExcluded, of: "secret")) — pass --include-secrets to export them."
+            )
+        }
+        if summary.blobsMissing > 0 {
+            FileHandle.standardError.printLine(
+                "overboard: \(CountPhrase.string(summary.blobsMissing, of: "attachment")) could not be copied (missing on disk)."
+            )
+        }
+        return summary.itemCount == 0 ? .notFound : .ok
+    }
 
+    static func copy(stdin wantsStdin: Bool, text positional: [String]) -> ExitCode {
         let text: String
         if wantsStdin || (positional.isEmpty && isatty(0) == 0) {
             let data = FileHandle.standardInput.readDataToEndOfFile()
@@ -211,50 +253,115 @@ struct Overboard {
         }
         return items.isEmpty ? .notFound : .ok
     }
+}
 
-    // MARK: - Usage
+// MARK: - Subcommands
 
-    static func printUsage(to handle: FileHandle) {
-        handle.printLine(
-            """
-            overboard — drive the Overboard clipboard manager from the shell.
+/// The flags every read command shares. Each command adds its own positional
+/// argument, so `--help` describes what that command actually takes.
+struct ListOptions: ParsableArguments {
+    @Option(name: .long, help: "Maximum number of clips to consider.")
+    var limit: Int = 100
 
-            USAGE:
-              overboard history [--limit N] [--json]   Recent clips, newest/most-used first
-              overboard search <query> [--limit N] [--json]
-                                                       Search clips (supports kind: and app: operators)
-              overboard get [N] [--json]               Print the Nth recent clip (default 1) to stdout
-              overboard copy [text…] [--stdin]         Set the clipboard from args or stdin
-              overboard help                           Show this help
+    @Flag(name: .long, help: "Emit the stable JSON projection instead of text.")
+    var json = false
 
-            Reads open the app's database read-only; secrets are never printed.
-            `copy` sets the system clipboard directly — run the app to capture it into history.
-            """
-        )
+    func validate() throws {
+        guard self.limit > 0 else {
+            throw ValidationError("--limit must be a positive integer")
+        }
     }
 }
 
-/// Shared flag parsing for the list-style commands: `--limit N`, `--json`, and
-/// whatever positional words remain (the search query, the get index).
-struct ListOptions {
-    var limit: Int = 100
-    var json = false
-    var positional: [String] = []
+struct History: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        abstract: "Recent clips, newest/most-used first."
+    )
 
-    init(_ args: [String]) {
-        var iterator = args.makeIterator()
-        while let arg = iterator.next() {
-            switch arg {
-            case "--json":
-                self.json = true
-            case "--limit":
-                if let value = iterator.next(), let parsed = Int(value), parsed > 0 {
-                    self.limit = parsed
-                }
-            default:
-                self.positional.append(arg)
-            }
-        }
+    @OptionGroup var options: ListOptions
+
+    func run() async throws {
+        try await Overboard.finish(Overboard.runReading { store in
+            try await Overboard.history(store: store, options: self.options)
+        })
+    }
+}
+
+struct Search: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        abstract: "Search clips (supports the kind: and app: operators)."
+    )
+
+    @OptionGroup var options: ListOptions
+
+    @Argument(help: ArgumentHelp("Words to search for.", valueName: "query"))
+    var query: [String] = []
+
+    func run() async throws {
+        try await Overboard.finish(Overboard.runReading { store in
+            try await Overboard.search(store: store, query: self.query, options: self.options)
+        })
+    }
+}
+
+struct Get: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        abstract: "Print the Nth recent clip (default 1) to stdout."
+    )
+
+    @OptionGroup var options: ListOptions
+
+    @Argument(help: ArgumentHelp("1-based index into the recent clips.", valueName: "n"))
+    var index: String?
+
+    func run() async throws {
+        try await Overboard.finish(Overboard.runReading { store in
+            try await Overboard.get(store: store, index: self.index, options: self.options)
+        })
+    }
+}
+
+struct Export: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        abstract: "Write clipboard history to a folder as items.ndjson + blobs/."
+    )
+
+    @Flag(name: .long, help: "Include detected secrets, which are excluded by default.")
+    var includeSecrets = false
+
+    @Argument(help: ArgumentHelp("Folder to write the archive into.", valueName: "dir"))
+    var directory: String
+
+    func run() async throws {
+        try await Overboard.finish(Overboard.runReading { store in
+            try await Overboard.export(
+                store: store, directory: self.directory, includeSecrets: self.includeSecrets
+            )
+        })
+    }
+}
+
+struct Copy: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        abstract: "Set the clipboard from arguments or stdin."
+    )
+
+    @Flag(name: .long, help: "Read the text from stdin.")
+    var stdin = false
+
+    @Argument(help: ArgumentHelp("The text to copy.", valueName: "text"))
+    var text: [String] = []
+
+    func run() throws {
+        try Overboard.finish(Overboard.copy(stdin: self.stdin, text: self.text))
+    }
+}
+
+extension Overboard {
+    /// Subcommands report through the shared `ExitCode`; anything but success
+    /// is thrown so the root can turn it into the process's status.
+    static func finish(_ code: ExitCode) throws {
+        guard code == .ok else { throw code }
     }
 }
 

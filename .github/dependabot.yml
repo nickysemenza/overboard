@@ -1,0 +1,10 @@
+version: 2
+updates:
+  # Actions pinned to commit SHAs (see .github/actions/build-signed/action.yml)
+  # still need a bot to notice upstream releases and open the bump PR — this
+  # is that. SPM dependencies aren't a Dependabot-supported ecosystem, so
+  # those are covered separately by .github/workflows/dependency-check.yml.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly

@@ -23,9 +23,7 @@ struct LauncherCommitRoutingTests {
         )
         viewModel.query = "zzz"
         viewModel.scheduleSearch()
-        while viewModel.results.isEmpty {
-            try? await Task.sleep(for: .milliseconds(10))
-        }
+        await viewModel.settle()
         if let id = rows.first?.id, let index = viewModel.results.firstIndex(where: { $0.id == id }) {
             viewModel.select(at: index)
         }
@@ -143,10 +141,9 @@ struct LauncherCommitRoutingTests {
         )
         viewModel.query = "zzz"
         viewModel.scheduleSearch()
-        // Secondary providers land after the 250 ms debounce.
-        while viewModel.results.count < 3 {
-            try? await Task.sleep(for: .milliseconds(25))
-        }
+        // `settle()` covers the 120 ms debounce: the secondary pass is what
+        // clears `isSearching` for this generation.
+        await viewModel.settle()
 
         #expect(viewModel.results[0] == .snippet(snippet))
         #expect(viewModel.results[1] == .clip(clip))
@@ -204,10 +201,10 @@ struct LauncherCommitRoutingTests {
         )
         viewModel.query = ":version"
         viewModel.scheduleSearch()
-        while viewModel.results.isEmpty {
-            try? await Task.sleep(for: .milliseconds(10))
-        }
-        // Give the (skipped) debounce window a chance to wrongly fire.
+        await viewModel.settle()
+        // Not a wait for completion — `settle()` already covered that. This is
+        // a window in which a wrongly-scheduled debounce would have fired and
+        // spliced the clip in, which is the whole point of the test.
         try? await Task.sleep(for: .milliseconds(300))
 
         #expect(viewModel.results == [.command(.version)])
@@ -247,10 +244,9 @@ struct LauncherCommitRoutingTests {
         viewModel.pinnedResults = { [.nowPlaying(Self.track)] }
         viewModel.query = "zzz"
         viewModel.scheduleSearch()
-        // Wait for the debounced splice: clip + web + pinned now-playing.
-        while viewModel.results.count < 3 {
-            try? await Task.sleep(for: .milliseconds(25))
-        }
+        // The debounced splice lands before `settle()` returns: clip + web +
+        // pinned now-playing.
+        await viewModel.settle()
 
         #expect(viewModel.results.last == .nowPlaying(Self.track))
         guard case .webSearch = viewModel.results[viewModel.results.count - 2] else {
@@ -331,10 +327,9 @@ struct LauncherCommitRoutingTests {
         viewModel.pinnedResults = { [.nowPlaying(Self.track)] }
         viewModel.query = "make this shorter"
         viewModel.scheduleSearch()
-        // Wait for the debounced splice: clip + web + askAI + pinned now-playing.
-        while viewModel.results.count < 4 {
-            try? await Task.sleep(for: .milliseconds(25))
-        }
+        // The debounced splice lands before `settle()` returns: clip + web +
+        // askAI + pinned now-playing.
+        await viewModel.settle()
 
         // clip (secondary), then web, then askAI, then the pinned footer last.
         #expect(viewModel.results[0] == .clip(clip))
@@ -366,9 +361,7 @@ struct LauncherCommitRoutingTests {
 
         viewModel.prepareForShow(clearQuery: false)
         #expect(viewModel.query == "zzz")
-        while viewModel.results.isEmpty {
-            try? await Task.sleep(for: .milliseconds(10))
-        }
+        await viewModel.settle()
         // Rows repopulate from the preserved query (instant router also appends
         // its standing web-search row).
         #expect(viewModel.results.first == .command(.version))
@@ -380,7 +373,7 @@ struct LauncherCommitRoutingTests {
         let viewModel = await makeViewModel(rows: [.command(.version)])
 
         viewModel.prepareForShow(clearQuery: true)
-        try? await Task.sleep(for: .milliseconds(50))
+        await viewModel.settle()
 
         #expect(viewModel.query.isEmpty)
         #expect(viewModel.results.isEmpty)
@@ -557,9 +550,7 @@ struct LauncherCommitRoutingTests {
         viewModel.commit() // selection 0 is the recents row
 
         #expect(viewModel.query == "foo")
-        for _ in 0 ..< 200 where viewModel.isSearching {
-            try? await Task.sleep(for: .milliseconds(10))
-        }
+        await viewModel.settle()
         #expect(!viewModel.isSearching)
         #expect(viewModel.results.contains(app))
         #expect(!opened) // re-running a recent must not commit a row

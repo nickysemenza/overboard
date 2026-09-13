@@ -8,8 +8,8 @@ struct LauncherActionPalette: View {
 
     var body: some View {
         CommandPaletteView(
-            items: self.viewModel.filteredPaletteActions.map {
-                CommandPaletteItem(id: $0.id, label: $0.label, systemImage: $0.systemImage)
+            items: self.viewModel.filteredPaletteActions.enumerated().map { index, action in
+                CommandPaletteItem(id: action.id, label: action.label, systemImage: action.systemImage, hint: LauncherActions.hint(at: index))
             },
             query: self.$viewModel.paletteQuery,
             index: self.$viewModel.paletteIndex,

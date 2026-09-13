@@ -8,6 +8,9 @@ public struct DrawerView: View {
     @FocusState private var searchFocused: Bool
     @Environment(\.openSettings) private var openSettings
     @Default(.savedSearches) private var savedSearches
+    /// Card height for the strip; the drawer panel itself is sized from the
+    /// unscaled base in `CardMetrics` (see its note on macOS Dynamic Type).
+    @ScaledMetric(relativeTo: .callout) private var cardHeight: CGFloat = CardMetrics.height
 
     public init(viewModel: DrawerViewModel) {
         self.viewModel = viewModel
@@ -29,7 +32,7 @@ public struct DrawerView: View {
             }
             .animation(.spring(response: 0.22, dampingFraction: 0.85), value: self.viewModel.isPaletteOpen)
             .padding(14)
-            .glassPanel(cornerRadius: 16)
+            .glassPanel(cornerRadius: PanelRadius.drawer)
             .overlay {
                 if self.viewModel.isPaletteOpen {
                     ActionPalette(viewModel: self.viewModel)
@@ -66,17 +69,14 @@ public struct DrawerView: View {
     }
 
     private var searchBar: some View {
-        HStack(spacing: 8) {
-            Image(systemName: self.viewModel.mode == .history ? "magnifyingglass" : "text.badge.star")
-                .foregroundStyle(.secondary)
-            TextField(
-                self.viewModel.mode == .history ? "Search your clipboard…" : "Search snippets…",
-                text: self.$viewModel.query
-            )
-            .textFieldStyle(.plain)
-            .font(.title3)
-            .focused(self.$searchFocused)
-
+        PanelSearchField(
+            symbol: self.viewModel.mode == .history ? "magnifyingglass" : "text.badge.star",
+            prompt: self.viewModel.mode == .history
+                ? String(localized: "Search your clipboard…", bundle: .module)
+                : String(localized: "Search snippets…", bundle: .module),
+            text: self.$viewModel.query,
+            focus: self.$searchFocused
+        ) {
             Button("Browse History", systemImage: "list.bullet.rectangle", action: self.viewModel.onBrowseHistory)
                 .buttonStyle(.plain).font(.caption).help("Open searchable history with a preview")
 
@@ -103,10 +103,10 @@ public struct DrawerView: View {
             if self.viewModel.entryCount > 0 {
                 Text("\(self.viewModel.entryCount)")
                     .font(.caption.monospacedDigit())
-                    .foregroundStyle(.tertiary)
+                    .contrastAwareForeground(.tertiary)
+                    .accessibilityLabel("\(self.viewModel.entryCount) entries")
             }
         }
-        .padding(.horizontal, 6)
     }
 
     /// Pinned-search chips: tap to run, right-click to remove.
@@ -174,7 +174,7 @@ public struct DrawerView: View {
                 self.scrollToSelection(proxy)
             }
         }
-        .frame(height: 184)
+        .frame(height: CardMetrics.stripHeight(cardHeight: self.cardHeight))
         .overlay {
             if self.viewModel.entryCount == 0 {
                 self.emptyState
@@ -249,37 +249,30 @@ public struct DrawerView: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: 8) {
-            if self.viewModel.mode == .history {
-                BobbingBoat()
-            } else {
-                Image(systemName: "text.badge.star")
-                    .font(.largeTitle)
-                    .foregroundStyle(.secondary)
-            }
-            Text(self.emptyTitle)
-                .font(.headline)
-            Text(self.emptyDescription)
-                .font(.callout)
-                .foregroundStyle(.secondary)
-        }
+        PanelEmptyState(
+            mark: self.viewModel.mode == .history ? .boat : .symbol("text.badge.star"),
+            title: self.emptyTitle,
+            subtitle: self.emptyDescription
+        )
     }
 
     private var emptyTitle: String {
         switch self.viewModel.mode {
-        case .history: self.viewModel.query.isEmpty ? "Nothing captured yet" : "No matches"
-        case .snippets: self.viewModel.query.isEmpty ? "No snippets yet" : "No matches"
+        case .history: self.viewModel.query.isEmpty ? String(localized: "Nothing captured yet", bundle: .module) : String(localized: "No matches", bundle: .module)
+        case .snippets: self.viewModel.query.isEmpty ? String(localized: "No snippets yet", bundle: .module) : String(localized: "No matches", bundle: .module)
         }
     }
 
     private var emptyDescription: String {
         switch self.viewModel.mode {
         case .history:
-            self.viewModel.query.isEmpty ? "Copy something and it'll wash up here." : "Try a different search."
+            self.viewModel.query.isEmpty
+                ? String(localized: "Copy something and it'll wash up here.", bundle: .module)
+                : String(localized: "Try a different search.", bundle: .module)
         case .snippets:
             self.viewModel.query.isEmpty
-                ? "Add snippets from the menu bar → Snippets…"
-                : "Try a different search."
+                ? String(localized: "Add snippets from the menu bar → Snippets…", bundle: .module)
+                : String(localized: "Try a different search.", bundle: .module)
         }
     }
 
@@ -313,9 +306,9 @@ public struct DrawerView: View {
         SeededPreview { store in
             DrawerView(viewModel: Fixtures.drawerViewModel(store: store))
         }
-        // Matches OverlayController's collapsed panel frame (full screen width,
-        // 282pt tall); a fixed 900pt stands in for the screen width in previews.
-        .frame(width: 900, height: 282)
+        // Matches OverlayController's collapsed panel frame (full screen width);
+        // a fixed 900pt stands in for the screen width in previews.
+        .frame(width: 900, height: CardMetrics.collapsedPanelHeight)
     }
 
     #Preview("Empty") {
@@ -325,6 +318,6 @@ public struct DrawerView: View {
             viewModel.scheduleSearch()
             return DrawerView(viewModel: viewModel)
         }
-        .frame(width: 900, height: 282)
+        .frame(width: 900, height: CardMetrics.collapsedPanelHeight)
     }
 #endif

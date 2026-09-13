@@ -1,12 +1,11 @@
-import Expression
 import Foundation
 #if DEBUG
     import Playgrounds
 #endif
 
-/// Inline calculator for the launcher. Thin wrapper around the Expression
-/// package: gates "does this look like math" before evaluating, adds the
-/// `^` / postfix-`%` / `X% of Y` sugar, and formats results deterministically.
+/// Inline calculator for the launcher. Wraps `ArithmeticParser`: gates
+/// "does this look like math" before evaluating, adds the `X% of Y` sugar,
+/// and formats results deterministically.
 public enum CalculatorEngine {
     public struct Evaluation: Sendable, Equatable {
         public let value: Double
@@ -24,15 +23,8 @@ public enum CalculatorEngine {
     public static func evaluate(_ input: String) -> Evaluation? {
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard self.looksLikeMath(trimmed) else { return nil }
-        // Order matters: fold locale separators (removing any user commas) before
-        // rewriting `^` to `pow(a, b)`, whose own commas are argument separators.
-        let normalized = self.rewritePowers(self.normalizeSeparators(trimmed))
-        let expression = Expression(
-            preprocess(normalized),
-            constants: ["pi": .pi, "e": M_E],
-            symbols: [.postfix("%"): { $0[0] / 100 }]
-        )
-        guard let value = try? expression.evaluate(), value.isFinite else { return nil }
+        let normalized = self.preprocess(self.normalizeSeparators(trimmed))
+        guard let value = ArithmeticParser.evaluate(normalized), value.isFinite else { return nil }
         return Evaluation(value: value, display: self.format(value))
     }
 
@@ -43,7 +35,7 @@ public enum CalculatorEngine {
     /// arbitrary search queries.
     private static let functionWords: Set<String> = [
         "sqrt", "pow", "abs", "min", "max",
-        "floor", "ceil", "round", "log", "exp",
+        "floor", "ceil", "round", "log",
     ]
     private static let allowedWords: Set<String> = functionWords.union(["of", "pi", "e"])
 
@@ -109,114 +101,9 @@ public enum CalculatorEngine {
         return degrouped.replacingOccurrences(of: ",", with: ".")
     }
 
-    // MARK: - Power operator
-
-    /// Rewrites `a ^ b` into `pow(a, b)` so exponentiation gets standard math
-    /// precedence and associativity from the parser. The Expression package binds
-    /// unary minus tighter than a custom `^` (so `-2^2` wrongly gave `4`) and
-    /// parses `^` left-associatively; `pow(...)` sidesteps both. Rewriting the
-    /// right-most `^` first yields right associativity: `2^3^2` → `pow(2, pow(3, 2))`.
-    /// A malformed `^` (no operand) is dropped so the parse fails cleanly (no row).
-    private static func rewritePowers(_ input: String) -> String {
-        var chars = Array(input)
-        while let caret = chars.lastIndex(of: "^") {
-            guard let left = self.leftOperand(chars, before: caret),
-                  let right = self.rightOperand(chars, after: caret)
-            else {
-                // Malformed `^` (missing operand). Leave it in place: with no `^`
-                // symbol registered, the parser rejects the whole input (no row),
-                // rather than a silent drop that could evaluate a partial result.
-                return String(chars)
-            }
-            let replacement = Array("pow(\(String(chars[left])),\(String(chars[right])))")
-            chars.replaceSubrange(left.lowerBound ... right.upperBound, with: replacement)
-        }
-        return String(chars)
-    }
-
-    private static func isOperand(_ c: Character) -> Bool {
-        c.isNumber || c == "." || c.isLetter || c == "_"
-    }
-
-    /// The primary immediately left of `caret`: a parenthesized group (with any
-    /// leading function name) or a number/identifier run. Excludes a leading
-    /// unary minus — that's the whole point of `-2^2` == `-(2^2)`.
-    private static func leftOperand(_ s: [Character], before caret: Int) -> ClosedRange<Int>? {
-        var i = caret - 1
-        while i >= 0, s[i] == " " {
-            i -= 1
-        }
-        guard i >= 0 else { return nil }
-        let end = i
-        if s[i] == ")" {
-            var depth = 0
-            while i >= 0 {
-                if s[i] == ")" { depth += 1 } else if s[i] == "(" {
-                    depth -= 1
-                    if depth == 0 { break }
-                }
-                i -= 1
-            }
-            guard depth == 0, i >= 0 else { return nil }
-            var j = i - 1 // absorb a preceding function name, e.g. sqrt(9)
-            while j >= 0, self.isOperand(s[j]) {
-                j -= 1
-            }
-            return (j + 1) ... end
-        }
-        guard self.isOperand(s[i]) else { return nil }
-        while i >= 0, self.isOperand(s[i]) {
-            i -= 1
-        }
-        return (i + 1) ... end
-    }
-
-    /// The primary immediately right of `caret`: an optional sign, then a
-    /// parenthesized group, a function call, a number, or an identifier.
-    private static func rightOperand(_ s: [Character], after caret: Int) -> ClosedRange<Int>? {
-        var i = caret + 1
-        while i < s.count, s[i] == " " {
-            i += 1
-        }
-        let start = i
-        while i < s.count, s[i] == "+" || s[i] == "-" {
-            i += 1
-        }
-        while i < s.count, s[i] == " " {
-            i += 1
-        }
-        guard i < s.count else { return nil }
-        if s[i] == "(" {
-            guard let close = self.matchParen(s, from: i) else { return nil }
-            return start ... close
-        }
-        guard self.isOperand(s[i]) else { return nil }
-        while i < s.count, self.isOperand(s[i]) {
-            i += 1
-        }
-        if i < s.count, s[i] == "(", let close = self.matchParen(s, from: i) {
-            return start ... close // function call
-        }
-        return start ... (i - 1)
-    }
-
-    /// Index of the `)` matching the `(` at `open`, or nil if unbalanced.
-    private static func matchParen(_ s: [Character], from open: Int) -> Int? {
-        var depth = 0
-        var i = open
-        while i < s.count {
-            if s[i] == "(" { depth += 1 } else if s[i] == ")" {
-                depth -= 1
-                if depth == 0 { return i }
-            }
-            i += 1
-        }
-        return nil
-    }
-
     // MARK: - Sugar
 
-    /// "15% of 80" reads naturally; Expression just needs it spelled "*".
+    /// "15% of 80" reads naturally; the parser just needs it spelled "*".
     private static func preprocess(_ s: String) -> String {
         s.replacingOccurrences(
             of: #"\bof\b"#,

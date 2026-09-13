@@ -1,6 +1,5 @@
 import AppKit
 import Foundation
-import os
 import OverboardCore
 
 /// Tracks Spotify's currently-playing song for the launcher's now-playing row.
@@ -34,7 +33,6 @@ public final class SpotifyNowPlayingMonitor {
     /// threads; a stuck script holds its slot and further snapshots skip. Static
     /// so the queue block can signal it without capturing the main-actor self.
     private nonisolated static let snapshotSlots = DispatchSemaphore(value: 2)
-    private let logger = Logger(subsystem: "com.nickysemenza.overboard", category: "spotify")
 
     public init() {}
 

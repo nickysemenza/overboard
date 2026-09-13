@@ -4,6 +4,39 @@ import Darwin
 import Observation
 import OverboardCore
 
+/// One line of `FileIndexService.issues`, split into the location it names and
+/// the reason. The scanner formats failures as "<path>: <reason>" (a bare
+/// message when the failure isn't about one path), which is fine to read but
+/// not enough to act on — parsing it back gives Settings → Permissions a folder
+/// to reveal.
+public nonisolated struct FileIndexIssue: Identifiable, Sendable, Equatable {
+    /// The raw line, which is unique enough to identify a row.
+    public let id: String
+    public let url: URL?
+    public let message: String
+
+    public init(raw: String) {
+        self.id = raw
+        // Only an absolute path is a location we can act on; anything else is
+        // a whole-index failure whose text is already the whole message.
+        guard raw.hasPrefix("/"), let separator = raw.range(of: ": ") else {
+            self.url = nil
+            self.message = raw
+            return
+        }
+        self.url = URL(fileURLWithPath: String(raw[raw.startIndex ..< separator.lowerBound]))
+        self.message = String(raw[separator.upperBound...])
+    }
+
+    /// Shows the folder in Finder. A no-op when the issue names no path, or
+    /// when the path is gone — which is itself an answer.
+    @MainActor
+    public func revealInFinder() {
+        guard let url else { return }
+        NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
+}
+
 /// Owns the OS-facing lifecycle. The database and ranking run on the core
 /// actor; directory enumeration runs on a utility task and never reads bytes.
 @MainActor
@@ -27,6 +60,9 @@ public final class FileIndexService {
 
     private let rootsOverride: [URL]?
     private let exclusionsOverride: [String]?
+    /// Callers parked in ``nextReconcile()``, resumed by ``signalReconcile()``
+    /// or, one at a time, by cancellation — hence keyed rather than a list.
+    private var reconcileWaiters: [UUID: CheckedContinuation<Void, Never>] = [:]
 
     public init(index: FileNameIndex? = nil, roots: [URL]? = nil, exclusions: [String]? = nil) {
         self.index = index
@@ -35,6 +71,16 @@ public final class FileIndexService {
     }
 
     isolated deinit {
+        self.scanTask?.cancel()
+        self.refreshTask?.cancel()
+        self.stopWatching()
+    }
+
+    /// Tears down the FSEvents stream and cancels in-flight scan/refresh work.
+    /// `shared` is a singleton that otherwise only stops via `deinit`, which a
+    /// process `exit()` never runs — called explicitly from app shutdown
+    /// (`AppServices.stop()`) so the stream doesn't survive to `exit()`.
+    public func stop() {
         self.scanTask?.cancel()
         self.refreshTask?.cancel()
         self.stopWatching()
@@ -109,6 +155,7 @@ public final class FileIndexService {
                 self.isIndexing = false
                 self.status = self.issues.isEmpty ? "\(self.fileCount.formatted()) files ready" : "\(self.fileCount.formatted()) files · some locations unavailable"
                 self.onChange()
+                self.signalReconcile()
                 if !self.dirtyPaths.isEmpty { self.scheduleRefresh() }
             } catch is CancellationError {
                 // A successor owns the status.
@@ -118,7 +165,49 @@ public final class FileIndexService {
                 self.status = "File index unavailable. Rebuild in Settings → Files."
                 self.issues = [error.localizedDescription]
                 self.onChange()
+                self.signalReconcile()
             }
+        }
+    }
+
+    /// Returns when the next index pass finishes — the initial scan, or a
+    /// reconcile triggered by filesystem events.
+    ///
+    /// FSEvents delivery and the refresh debounce are genuinely asynchronous,
+    /// so a test can't avoid waiting; what it *can* avoid is guessing how long
+    /// to wait. Parking on this instead of polling `isIndexing` on a sleep loop
+    /// means a test wakes exactly when the index is consistent again. Park
+    /// before making the change you want reconciled: everything here is
+    /// main-actor, so a `FileManager` call followed by `await nextReconcile()`
+    /// can't miss the signal. A pass abandoned by cancellation signals nothing,
+    /// since its successor owns the outcome.
+    public func nextReconcile() async {
+        let id = UUID()
+        // Cancellable on purpose: a caller that races this against a deadline
+        // (or is torn down) would otherwise leave a continuation parked here
+        // forever, and its task group would wait on that child for good.
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                if Task.isCancelled {
+                    continuation.resume()
+                } else {
+                    self.reconcileWaiters[id] = continuation
+                }
+            }
+        } onCancel: {
+            Task { @MainActor in self.resumeReconcileWaiter(id) }
+        }
+    }
+
+    private func resumeReconcileWaiter(_ id: UUID) {
+        self.reconcileWaiters.removeValue(forKey: id)?.resume()
+    }
+
+    private func signalReconcile() {
+        let waiters = self.reconcileWaiters
+        self.reconcileWaiters.removeAll()
+        for waiter in waiters.values {
+            waiter.resume()
         }
     }
 
@@ -150,6 +239,7 @@ public final class FileIndexService {
             self.isIndexing = true
             defer {
                 self.isIndexing = false
+                self.signalReconcile()
                 if !Task.isCancelled, !self.dirtyPaths.isEmpty { self.scheduleRefresh() }
             }
             for directory in directories {

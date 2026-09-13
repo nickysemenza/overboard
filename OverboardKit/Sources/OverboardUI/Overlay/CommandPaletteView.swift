@@ -8,6 +8,11 @@ struct CommandPaletteItem: Identifiable {
     let id: String
     let label: String
     let systemImage: String
+    /// The modifier glyph for this row's keyboard shortcut (↩ / ⌘↩ / ⌥↩), for
+    /// hosts whose rows commit via a positional keyboard shortcut (the
+    /// launcher's ↩/⌘↩/⌥↩ triad — see `LauncherActions.hint(at:)`). `nil` for
+    /// hosts with no such convention (the drawer's palette).
+    var hint: String?
 }
 
 /// The ⌘K command-palette chrome, factored out of `ActionPalette` so the
@@ -29,6 +34,7 @@ struct CommandPaletteView: View {
             HStack(spacing: 8) {
                 Image(systemName: "command")
                     .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
                 TextField("Type an action…", text: self.$query)
                     .textFieldStyle(.plain)
                     .font(.title3)
@@ -41,27 +47,43 @@ struct CommandPaletteView: View {
             if self.items.isEmpty {
                 Text(self.emptyMessage)
                     .font(.callout)
-                    .foregroundStyle(.tertiary)
+                    .contrastAwareForeground(.tertiary)
                     .padding(14)
             } else {
-                VStack(spacing: 2) {
-                    ForEach(Array(self.items.enumerated()), id: \.element.id) { index, item in
-                        self.row(item, isHighlighted: index == self.index)
-                            .onTapGesture {
-                                self.onRun(index)
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        VStack(spacing: 2) {
+                            ForEach(Array(self.items.enumerated()), id: \.element.id) { index, item in
+                                self.row(item, isHighlighted: index == self.index)
+                                    .id(item.id)
+                                    .onTapGesture {
+                                        self.onRun(index)
+                                    }
                             }
+                        }
+                        .padding(6)
+                    }
+                    // A bare ScrollView has no natural "hug my content" height —
+                    // it greedily fills whatever it's offered — so an explicit
+                    // height keyed to the row count is what lets a short list
+                    // (the common case) stay content-sized instead of ballooning
+                    // to fill the palette's floating position, while a longer
+                    // one caps at `maxVisibleRows` and scrolls.
+                    .frame(height: self.listHeight)
+                    .onChange(of: self.index) {
+                        guard self.items.indices.contains(self.index) else { return }
+                        proxy.scrollTo(self.items[self.index].id)
                     }
                 }
-                .padding(6)
             }
         }
         .frame(width: 380)
         // A second glass shape merges into the host panel's glass and ends up
         // behind its list/preview. A native opaque fill keeps actions legible
         // over both columns, including when Reduce Transparency is enabled.
-        .background(Color(nsColor: .windowBackgroundColor), in: RoundedRectangle(cornerRadius: 12))
+        .background(Color(nsColor: .windowBackgroundColor), in: RoundedRectangle(cornerRadius: PanelRadius.palette))
         .overlay {
-            RoundedRectangle(cornerRadius: 12)
+            RoundedRectangle(cornerRadius: PanelRadius.palette)
                 .strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.5)
                 .allowsHitTesting(false)
         }
@@ -73,17 +95,39 @@ struct CommandPaletteView: View {
         }
     }
 
+    /// Approximate rendered height of one `row(_:isHighlighted:)` (its
+    /// vertical padding plus one line of `.body` text) — close enough for
+    /// sizing the scroll area; a pixel or two of slack doesn't matter since
+    /// it only governs how many rows show before scrolling kicks in.
+    private static let rowHeight: CGFloat = 32
+    private static let maxVisibleRows = 8
+
+    private var listHeight: CGFloat {
+        let rows = min(self.items.count, Self.maxVisibleRows)
+        guard rows > 0 else { return 0 }
+        return CGFloat(rows) * Self.rowHeight + CGFloat(rows - 1) * 2 + 12
+    }
+
     private func row(_ item: CommandPaletteItem, isHighlighted: Bool) -> some View {
         HStack(spacing: 8) {
             Image(systemName: item.systemImage)
                 .frame(width: 18)
                 .foregroundStyle(isHighlighted ? .primary : .secondary)
+                .accessibilityHidden(true)
             Text(item.label)
             Spacer()
-            if isHighlighted {
+            if let hint = item.hint {
+                Text(hint)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+            } else if isHighlighted {
+                // Hosts with no positional-shortcut convention (the drawer's
+                // palette) keep the old highlighted-row-only ↩ affordance.
                 Image(systemName: "return")
                     .font(.caption)
-                    .foregroundStyle(.tertiary)
+                    .contrastAwareForeground(.tertiary)
+                    .accessibilityHidden(true)
             }
         }
         .padding(.horizontal, 10)
@@ -102,9 +146,9 @@ struct CommandPaletteView: View {
         @Previewable @State var index = 0
         CommandPaletteView(
             items: [
-                CommandPaletteItem(id: "paste", label: "Paste", systemImage: "doc.on.clipboard"),
-                CommandPaletteItem(id: "copy", label: "Copy", systemImage: "doc.on.doc"),
-                CommandPaletteItem(id: "pastePlain", label: "Paste as Plain Text", systemImage: "textformat"),
+                CommandPaletteItem(id: "paste", label: "Paste", systemImage: "doc.on.clipboard", hint: "↩"),
+                CommandPaletteItem(id: "copy", label: "Copy", systemImage: "doc.on.doc", hint: "⌘↩"),
+                CommandPaletteItem(id: "pastePlain", label: "Paste as Plain Text", systemImage: "textformat", hint: "⌥↩"),
                 CommandPaletteItem(id: "openLink", label: "Open Link in Browser", systemImage: "safari"),
             ],
             query: $query,

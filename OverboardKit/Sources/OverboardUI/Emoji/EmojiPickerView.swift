@@ -7,47 +7,48 @@ import SwiftUI
 public struct EmojiPickerView: View {
     @Bindable var viewModel: EmojiPickerViewModel
     @FocusState private var fieldFocused: Bool
+    /// The mouse-hovered cell, tracked separately from `viewModel.selectedIndex`
+    /// so resting the pointer over the grid can no longer steal the keyboard
+    /// selection — only a click (or ↩) commits.
+    @State private var hoveredIndex: Int?
 
     public init(viewModel: EmojiPickerViewModel) {
         self.viewModel = viewModel
     }
 
     public var body: some View {
-        GlassEffectContainer(spacing: 20) {
-            VStack(spacing: 8) {
-                self.searchBar
-                Divider()
-                if self.viewModel.sections.isEmpty {
-                    self.emptyState
-                } else {
-                    self.grid
-                }
-                Divider()
-                EmojiFooterBar()
+        VStack(spacing: 8) {
+            self.searchBar
+            Divider()
+            if self.viewModel.sections.isEmpty {
+                self.emptyState
+            } else {
+                self.grid
             }
-            .padding(14)
-            .glassPanel(cornerRadius: 16)
-            .padding(12)
-            .onAppear {
-                self.fieldFocused = true
-            }
-            .onChange(of: self.viewModel.showGeneration) {
-                self.fieldFocused = true
-            }
+            Divider()
+            PanelFooterBar(
+                primary: .init(label: String(localized: "Paste", bundle: .module)),
+                secondary: .init(label: String(localized: "Copy", bundle: .module), keycap: "⌘↩")
+            )
+        }
+        .padding(14)
+        .glassPanel(cornerRadius: PanelRadius.drawer)
+        .padding(12)
+        .onAppear {
+            self.fieldFocused = true
+        }
+        .onChange(of: self.viewModel.showGeneration) {
+            self.fieldFocused = true
         }
     }
 
     private var searchBar: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "face.smiling")
-                .foregroundStyle(.secondary)
-            TextField("Search emoji…", text: self.$viewModel.query)
-                .textFieldStyle(.plain)
-                .font(.title3)
-                .focused(self.$fieldFocused)
-        }
-        .padding(.horizontal, 6)
-        .frame(height: 30)
+        PanelSearchField(
+            symbol: "face.smiling",
+            prompt: String(localized: "Search emoji…", bundle: .module),
+            text: self.$viewModel.query,
+            focus: self.$fieldFocused
+        )
     }
 
     private var grid: some View {
@@ -55,7 +56,7 @@ public struct EmojiPickerView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 2) {
                     ForEach(Array(self.viewModel.sections.enumerated()), id: \.element.id) { sectionIndex, section in
-                        LauncherSectionHeader(title: section.title)
+                        PanelSectionHeader(title: section.title)
                         LazyVGrid(columns: Self.columns, spacing: 2) {
                             ForEach(Array(section.emoji.enumerated()), id: \.element.id) { offset, emoji in
                                 // Flat index from the CAPTURED section value —
@@ -67,12 +68,15 @@ public struct EmojiPickerView: View {
                                 let flatIndex = section.start + offset
                                 EmojiCell(
                                     emoji: emoji,
-                                    isSelected: flatIndex == self.viewModel.selectedIndex
+                                    isSelected: flatIndex == self.viewModel.selectedIndex,
+                                    isHovered: flatIndex == self.hoveredIndex
                                 )
                                 .id(EmojiPickerViewModel.cellID(section: sectionIndex, character: emoji.character))
                                 .onHover { hovering in
                                     if hovering {
-                                        self.viewModel.selectedIndex = flatIndex
+                                        self.hoveredIndex = flatIndex
+                                    } else if self.hoveredIndex == flatIndex {
+                                        self.hoveredIndex = nil
                                     }
                                 }
                                 .onTapGesture {
@@ -97,10 +101,12 @@ public struct EmojiPickerView: View {
     }
 
     private var emptyState: some View {
-        Text("No emoji found")
-            .font(.callout)
-            .foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        PanelEmptyState(
+            mark: .symbol("face.dashed"),
+            title: String(localized: "No emoji found", bundle: .module),
+            subtitle: String(localized: "Try a different name or keyword.", bundle: .module)
+        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private static let columns = Array(
@@ -113,50 +119,28 @@ public struct EmojiPickerView: View {
 struct EmojiCell: View {
     let emoji: Emoji
     let isSelected: Bool
+    var isHovered: Bool = false
+    /// The glyph is the cell's whole content, so it scales with Dynamic Type
+    /// rather than staying pinned at 24pt.
+    @ScaledMetric(relativeTo: .title) private var glyphSize: CGFloat = 24
+    @ScaledMetric(relativeTo: .title) private var cellHeight: CGFloat = 38
 
     var body: some View {
         Text(self.emoji.character)
-            .font(.system(size: 24))
+            .font(.system(size: self.glyphSize))
             .frame(maxWidth: .infinity)
-            .frame(height: 38)
-            .background(
-                self.isSelected ? Color.accentColor.opacity(0.22) : .clear,
-                in: RoundedRectangle(cornerRadius: 8)
-            )
+            .frame(height: self.cellHeight)
+            .background(self.fill, in: RoundedRectangle(cornerRadius: 8))
             .contentShape(RoundedRectangle(cornerRadius: 8))
             .help(self.emoji.name)
             .accessibilityLabel(self.emoji.name)
             .accessibilityAddTraits(self.isSelected ? .isSelected : [])
     }
-}
 
-/// Persistent bottom bar advertising the two commit actions, styled after
-/// LauncherFooterBar.
-struct EmojiFooterBar: View {
-    var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "bolt.fill")
-                .font(.caption)
-            Text("Overboard")
-                .font(.caption)
-            Spacer(minLength: 12)
-            Text("Paste")
-                .font(.caption)
-            Image(systemName: "return")
-                .font(.caption2)
-            Divider()
-                .frame(height: 12)
-            Text("Copy")
-                .font(.caption)
-            Text("⌘↩")
-                .font(.caption2)
-                .padding(.horizontal, 4)
-                .padding(.vertical, 1)
-                .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 4))
-        }
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, 8)
-        .frame(height: 20)
+    private var fill: Color {
+        if self.isSelected { return Color.accentColor.opacity(0.22) }
+        if self.isHovered { return Color.primary.opacity(0.06) }
+        return .clear
     }
 }
 
@@ -201,11 +185,5 @@ struct EmojiFooterBar: View {
         EmojiCell(emoji: Emoji(character: "🔥", name: "fire", keywords: [], category: .travel, version: 0.6), isSelected: true)
             .padding()
             .frame(width: 80)
-    }
-
-    #Preview("Footer bar") {
-        EmojiFooterBar()
-            .padding()
-            .frame(width: 400)
     }
 #endif

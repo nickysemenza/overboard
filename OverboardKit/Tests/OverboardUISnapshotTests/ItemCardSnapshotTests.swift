@@ -4,7 +4,6 @@ import SnapshotTesting
 import SwiftUI
 import Testing
 
-@Suite(.localOnly)
 @MainActor
 struct ItemCardSnapshotTests {
     private let store: ClipStore
@@ -14,8 +13,8 @@ struct ItemCardSnapshotTests {
     }
 
     /// 190×180 card plus margin for the selected state's scale and shadow.
-    private func host(_ item: ClipItem, index: Int = 0, selected: Bool = false, dark: Bool = false) -> NSView {
-        snapshotHost(
+    private func host(_ item: ClipItem, index: Int = 0, selected: Bool = false, dark: Bool = false) -> NSImage {
+        snapshotImage(
             ItemCardView(item: item, index: index, isSelected: selected, store: self.store),
             width: 220,
             height: 210,
@@ -121,5 +120,19 @@ struct ItemCardSnapshotTests {
             isPinned: true
         )
         assertSnapshot(of: self.host(item), as: snapshotImageStrategy)
+    }
+
+    /// Pins the accessibility-text layout: the card's own geometry scales with
+    /// Dynamic Type and the preview's line budget shrinks to match, so nothing
+    /// spills past the tile.
+    @Test func largestDynamicType() {
+        let item = Fixtures.item(
+            preview: "Pick up the package before 6pm — front desk closes early on Fridays.",
+            charCount: 1240,
+            lineCount: 32
+        )
+        let view = ItemCardView(item: item, index: 0, isSelected: false, store: self.store)
+            .environment(\.dynamicTypeSize, .xxxLarge)
+        assertSnapshot(of: snapshotImage(view, width: 300, height: 300), as: snapshotImageStrategy)
     }
 }

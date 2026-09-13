@@ -19,10 +19,24 @@ struct ItemCardView: View {
     var onPreview: () -> Void = {}
 
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var contrast
+    /// Cards are a fixed grid of equal tiles, so the tile itself has to grow
+    /// with the type inside it.
+    @ScaledMetric(relativeTo: .callout) private var cardWidth: CGFloat = CardMetrics.width
+    @ScaledMetric(relativeTo: .callout) private var cardHeight: CGFloat = CardMetrics.height
     @State private var thumbnail: NSImage?
     @State private var hovering = false
     @State private var miniCode: NSAttributedString?
+    /// The (length-capped) source text behind `miniCode`, kept so a
+    /// colorScheme flip can re-highlight without re-fetching from the store.
+    @State private var miniCodeSource: String?
     @State private var swatch: NSColor?
+    @State private var faviconImage: NSImage?
+    @State private var linkPreviewImage: NSImage?
+    /// Dominant color of the source app's icon, for the tinted header
+    /// gradient — computed once per `.task(id:)` pass instead of during
+    /// every layout pass.
+    @State private var headerTint: Color?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -32,7 +46,7 @@ struct ItemCardView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             self.footer
         }
-        .frame(width: 190, height: 180)
+        .frame(width: self.cardWidth, height: self.cardHeight)
         .background(.background.opacity(0.6))
         // Clip the whole card so image fills can't bleed past the corners.
         .clipShape(RoundedRectangle(cornerRadius: 10))
@@ -54,10 +68,15 @@ struct ItemCardView: View {
             radius: self.isSelected ? 9 : 0,
             y: 4
         )
-        .animation(.spring(response: 0.25, dampingFraction: 0.7), value: self.isSelected)
+        .motion(.spring(response: 0.25, dampingFraction: 0.7), value: self.isSelected)
+        .motion(.easeOut(duration: 0.12), value: self.hovering)
         .onHover { self.hovering = $0 }
         .task(id: self.item.id) {
             await self.loadThumbnailIfNeeded()
+        }
+        .onChange(of: self.colorScheme) {
+            guard let source = self.miniCodeSource else { return }
+            Task { self.miniCode = await CodeHighlighter.highlight(source, dark: self.colorScheme == .dark) }
         }
         .contextMenu {
             Button("Paste") { self.onPaste(.full) }
@@ -104,7 +123,7 @@ struct ItemCardView: View {
     /// VoiceOver summary for the whole card: source app plus a short preview,
     /// so the card reads as one item instead of its individual subviews.
     private var accessibilityCardLabel: String {
-        let app = self.item.sourceAppName ?? self.kindLabel
+        let app = self.item.sourceAppName ?? self.item.kind.displayName
         if self.item.isSecret {
             return "\(app), secret item"
         }
@@ -128,7 +147,6 @@ struct ItemCardView: View {
         .padding(5)
         .background(.regularMaterial, in: Capsule())
         .padding(6)
-        .offset(y: 26)
         .transition(.opacity)
     }
 
@@ -149,7 +167,7 @@ struct ItemCardView: View {
                     .resizable()
                     .frame(width: 16, height: 16)
             }
-            Text(self.item.sourceAppName ?? self.kindLabel)
+            Text(self.item.sourceAppName ?? self.item.kind.displayName)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
@@ -163,9 +181,19 @@ struct ItemCardView: View {
                     .foregroundStyle(.secondary)
             }
             if self.item.isSecret {
-                Image(systemName: "lock.fill")
-                    .font(.caption2)
-                    .foregroundStyle(.yellow)
+                // A yellow glyph on glass was easy to miss on the one card where
+                // misreading the content matters most; a filled capsule reads as
+                // a warning at any contrast setting.
+                HStack(spacing: 3) {
+                    Image(systemName: "lock.fill")
+                    Text("Secret")
+                }
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 1.5)
+                .background(.orange, in: Capsule())
+                .accessibilityHidden(true)
             }
             if self.item.isPinned {
                 Image(systemName: "pin.fill")
@@ -175,14 +203,18 @@ struct ItemCardView: View {
             if self.index < 9 {
                 Text("⌘\(self.index + 1)")
                     .font(.caption2.monospaced())
-                    .foregroundStyle(.tertiary)
+                    .contrastAwareForeground(.tertiary)
+                    .accessibilityLabel("Command \(self.index + 1)")
             }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
         .background {
             // Paste-style signature: header tinted by the source app's icon.
-            if let tint = AppIconCache.shared.tint(forBundleID: item.sourceBundleID) {
+            // Increase Contrast drops the gradient: an arbitrary app-icon color
+            // behind the source name is exactly the kind of low-contrast pairing
+            // the setting exists to remove.
+            if let tint = self.headerTint, self.contrast != .increased {
                 LinearGradient(
                     colors: [tint.opacity(0.45), tint.opacity(0.2)],
                     startPoint: .leading,
@@ -202,13 +234,13 @@ struct ItemCardView: View {
                 VStack(spacing: 8) {
                     Image(systemName: "lock.fill")
                         .font(.title)
-                        .foregroundStyle(.yellow)
+                        .foregroundStyle(.orange)
                     Text(self.item.previewText ?? "Secret")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                     Text("Auto-expires soon")
                         .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                        .contrastAwareForeground(.tertiary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let miniCode {
@@ -231,7 +263,7 @@ struct ItemCardView: View {
                         HStack(alignment: .top, spacing: 4) {
                             Image(systemName: "sparkles")
                                 .font(.caption2)
-                                .foregroundStyle(.tertiary)
+                                .contrastAwareForeground(.tertiary)
                             Text(summary)
                                 .font(.caption)
                                 .italic()
@@ -347,7 +379,7 @@ struct ItemCardView: View {
             Spacer(minLength: 0)
             Text(self.item.previewText ?? "")
                 .font(.caption2)
-                .foregroundStyle(.tertiary)
+                .contrastAwareForeground(.tertiary)
                 .lineLimit(1)
                 .truncationMode(.middle)
         }
@@ -387,16 +419,6 @@ struct ItemCardView: View {
         return self.linkHost ?? "Link"
     }
 
-    private var faviconImage: NSImage? {
-        guard let data = item.faviconData, !data.isEmpty else { return nil }
-        return NSImage(data: data)
-    }
-
-    private var linkPreviewImage: NSImage? {
-        guard let data = item.previewImageData, !data.isEmpty else { return nil }
-        return NSImage(data: data)
-    }
-
     /// Metadata line under the card content (char/line counts, file size…).
     /// Images carry their dimensions in the image overlay instead, so they get
     /// no footer row here. Nil metadata renders nothing — no placeholder.
@@ -405,8 +427,8 @@ struct ItemCardView: View {
         if self.item.kind != .image, let text = item.metadataFooter {
             Divider().opacity(0.25)
             Text(text)
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
+                .font(.caption2.monospacedDigit())
+                .contrastAwareForeground(.tertiary)
                 .lineLimit(1)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 4)
@@ -430,32 +452,27 @@ struct ItemCardView: View {
     /// Raw text yields lines to the title and summary when they're present.
     /// One line is reserved for the metadata footer row (see `footer`).
     private var textPreviewLineLimit: Int {
-        switch (self.item.aiTitle != nil, self.item.aiSummary != nil) {
+        let base = switch (self.item.aiTitle != nil, self.item.aiSummary != nil) {
         case (false, false): 6
         case (true, false): 5
         case (false, true): 3
         case (true, true): 2
         }
+        // The card grows with Dynamic Type but not as fast as the type does, so
+        // the line budget shrinks to keep the preview inside the content slot.
+        return max(1, Int((Double(base) * CardMetrics.height / self.cardHeight).rounded(.down)))
     }
 
     private func placeholder(_ systemImage: String) -> some View {
         Image(systemName: systemImage)
             .font(.largeTitle)
-            .foregroundStyle(.quaternary)
+            .contrastAwareForeground(.quaternary)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private var kindLabel: String {
-        switch self.item.kind {
-        case .text: "Text"
-        case .link: "Link"
-        case .image: "Image"
-        case .file: "File"
-        case .color: "Color"
-        }
-    }
-
     private func loadThumbnailIfNeeded() async {
+        // Header tint runs for every kind, so it lives outside the switch.
+        self.headerTint = AppIconCache.shared.tint(forBundleID: self.item.sourceBundleID)
         switch self.item.kind {
         case .image:
             guard self.thumbnail == nil,
@@ -477,10 +494,11 @@ struct ItemCardView: View {
                   self.item.category == "code",
                   let text = try? await store.plainText(for: item.id)
             else { return }
-            self.miniCode = CodeHighlighter.highlight(
-                String(text.prefix(500)),
-                dark: self.colorScheme == .dark
-            )
+            let capped = String(text.prefix(500))
+            self.miniCodeSource = capped
+            let highlighted = await CodeHighlighter.highlight(capped, dark: self.colorScheme == .dark)
+            guard !Task.isCancelled else { return }
+            self.miniCode = highlighted
 
         case .color:
             guard self.swatch == nil,
@@ -490,7 +508,17 @@ struct ItemCardView: View {
             else { return }
             self.swatch = try? NSKeyedUnarchiver.unarchivedObject(ofClass: NSColor.self, from: data)
 
-        default:
+        case .link:
+            // Already-fetched bytes on the model — just decode once here
+            // instead of on every body evaluation.
+            if self.faviconImage == nil, let data = item.faviconData, !data.isEmpty {
+                self.faviconImage = NSImage(data: data)
+            }
+            if self.linkPreviewImage == nil, let data = item.previewImageData, !data.isEmpty {
+                self.linkPreviewImage = NSImage(data: data)
+            }
+
+        case .file:
             break
         }
     }
@@ -561,27 +589,50 @@ struct ItemCardView: View {
 }
 
 /// Resolves and caches app icons by bundle ID. Icons are looked up lazily —
-/// we never persist them.
+/// we never persist them. Backed by `NSCache` (rather than a plain
+/// dictionary) so the icon/tint caches can be evicted under memory pressure
+/// instead of growing for the life of the process.
+@MainActor
 final class AppIconCache {
     static let shared = AppIconCache()
-    private var cache: [String: NSImage?] = [:]
-    private var tintCache: [String: Color?] = [:]
+
+    /// `NSCache` needs a reference-type value; wraps the (possibly-nil)
+    /// lookup result so a bundle ID known to have no icon/tint stays
+    /// distinguishable from one never looked up.
+    private final class IconBox {
+        let image: NSImage?
+        init(_ image: NSImage?) {
+            self.image = image
+        }
+    }
+
+    private final class TintBox {
+        let color: Color?
+        init(_ color: Color?) {
+            self.color = color
+        }
+    }
+
+    private let iconCache = NSCache<NSString, IconBox>()
+    private let tintCache = NSCache<NSString, TintBox>()
 
     func icon(forBundleID bundleID: String?) -> NSImage? {
         guard let bundleID else { return nil }
-        if let cached = cache[bundleID] { return cached }
+        let key = bundleID as NSString
+        if let boxed = self.iconCache.object(forKey: key) { return boxed.image }
         let icon = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID)
             .map { NSWorkspace.shared.icon(forFile: $0.path) }
-        self.cache[bundleID] = icon
+        self.iconCache.setObject(IconBox(icon), forKey: key)
         return icon
     }
 
     /// Dominant color of the app's icon (average pixel), for tinted headers.
     func tint(forBundleID bundleID: String?) -> Color? {
         guard let bundleID else { return nil }
-        if let cached = tintCache[bundleID] { return cached }
+        let key = bundleID as NSString
+        if let boxed = self.tintCache.object(forKey: key) { return boxed.color }
         let tint = self.icon(forBundleID: bundleID).flatMap(Self.averageColor)
-        self.tintCache[bundleID] = tint
+        self.tintCache.setObject(TintBox(tint), forKey: key)
         return tint
     }
 

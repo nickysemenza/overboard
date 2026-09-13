@@ -49,11 +49,28 @@ public nonisolated extension Defaults.Keys {
     static let launcherItemLastUsed = Key<[String: Double]>("launcherItemLastUsed", default: [:])
     static let fileSearchRoots = Key<[String]>("fileSearchRoots", default: [])
     static let fileSearchExclusions = Key<String>("fileSearchExclusions", default: ".git\nnode_modules\n.build\nbuild\ndist\ntarget\nDerivedData\n.cache\n.Trash")
+    /// Unsaved draft text for the Files settings tab's included-folders editor.
+    /// The tab only commits typed edits on "Apply & Rebuild Index" (rebuilding
+    /// the index is expensive), so this mirrors keystrokes as they happen —
+    /// switching tabs or relaunching mid-edit no longer discards them. Empty
+    /// string means "no draft"; the tab falls back to the persisted value.
+    static let fileSearchRootsDraft = Key<String>("fileSearchRootsDraft", default: "")
+    /// Unsaved draft text for the excluded-folders editor; same purpose as
+    /// `fileSearchRootsDraft`.
+    static let fileSearchExclusionsDraft = Key<String>("fileSearchExclusionsDraft", default: "")
     /// Pinned drawer searches (raw query strings), shown as chips above history.
     static let savedSearches = Key<[String]>("savedSearches", default: [])
     /// Emoji picked in the emoji picker, most-recent first, capped by
     /// EmojiRecents.cap — drives the picker's "Recently Used" section.
     static let emojiRecents = Key<[String]>("emojiRecents", default: [])
+    /// False until the Welcome window has been seen (Done, or closed any other
+    /// way). Gates the first-launch Welcome window; the menu item reopens it
+    /// regardless.
+    static let hasCompletedOnboarding = Key<Bool>("hasCompletedOnboarding", default: false)
+    /// How many times the copy-only paste HUD has explained the missing
+    /// Accessibility permission. Past `PermissionService`'s limit the HUD
+    /// shrinks back to the short reminder.
+    static let accessibilityHintsShown = Key<Int>("accessibilityHintsShown", default: 0)
 }
 
 /// Parsed views over the newline-list preference keys.

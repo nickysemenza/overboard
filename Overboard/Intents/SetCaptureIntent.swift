@@ -18,7 +18,7 @@ struct SetCaptureIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
-        AppServices.shared.setCapturePaused(self.paused)
+        IntentDependencies.current.setCapturePaused(self.paused)
         return .result()
     }
 }

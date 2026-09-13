@@ -1,5 +1,5 @@
 {
-  "originHash" : "e0b77f961c045bb7297fa21e68f36b054438b6429ee62bd2e44c68ccf9583104",
+  "originHash" : "04f5755bee9a98863caf3809f3ee9754a8477ef3d088ef50404316d2c6d34afe",
   "pins" : [
     {
       "identity" : "defaults",
@@ -8,24 +8,6 @@
       "state" : {
         "revision" : "5bfac4928f000fabdbef7e4ed0251399bb0841c9",
         "version" : "9.0.8"
-      }
-    },
-    {
-      "identity" : "expression",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/nicklockwood/Expression",
-      "state" : {
-        "revision" : "95ffe4c352e456cede933d9910d25b9c84039d1b",
-        "version" : "0.13.9"
-      }
-    },
-    {
-      "identity" : "filetype",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/velocityzen/FileType",
-      "state" : {
-        "revision" : "2dd39f2fdde25681fbf8184ad83f6226bf86ca0a",
-        "version" : "2.2.1"
       }
     },
     {
@@ -51,8 +33,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/sindresorhus/KeyboardShortcuts",
       "state" : {
-        "revision" : "1aef85578fdd4f9eaeeb8d53b7b4fc31bf08fe27",
-        "version" : "2.4.0"
+        "revision" : "772133d9dbe800fdac0473226822994c5c162c58",
+        "version" : "3.1.0"
       }
     },
     {
@@ -62,6 +44,15 @@
       "state" : {
         "revision" : "2849f5323265386e200484b0d0f896e73c3411b9",
         "version" : "6.0.1"
+      }
+    },
+    {
+      "identity" : "swift-argument-parser",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-argument-parser",
+      "state" : {
+        "revision" : "6a52f3251125d74daf04fcbd5e6f08a75d074382",
+        "version" : "1.8.2"
       }
     },
     {

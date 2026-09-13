@@ -110,21 +110,21 @@ struct MetadataFooterTests {
         var clip = self.item()
         clip.charCount = 1240
         clip.lineCount = 32
-        #expect(clip.metadataFooter == "1,240 chars · 32 lines")
+        #expect(clip.metadataFooter == "1,240 characters · 32 lines")
     }
 
     @Test func textOmitsLinesWhenSingleLine() {
         var clip = self.item()
         clip.charCount = 42
         clip.lineCount = 1
-        #expect(clip.metadataFooter == "42 chars")
+        #expect(clip.metadataFooter == "42 characters")
     }
 
     @Test func singleCharIsSingular() {
         var clip = self.item()
         clip.charCount = 1
         clip.lineCount = 1
-        #expect(clip.metadataFooter == "1 char")
+        #expect(clip.metadataFooter == "1 character")
     }
 
     @Test func textWithoutCharCountIsNil() {

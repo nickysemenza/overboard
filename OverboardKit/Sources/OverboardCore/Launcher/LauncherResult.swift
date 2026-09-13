@@ -45,7 +45,8 @@ public enum LauncherResult: Sendable, Equatable, Identifiable {
 
 /// A source of launcher rows, queried in priority order by `QueryRouter`.
 /// Implementations must either be cheap enough to run on every keystroke
-/// (calculator, web) or rely on the caller's debounce (Spotlight).
+/// (calculator, web, apps) or run concurrently off the main pass and merge in
+/// as they finish (files, snippets, clipboard) — there is no debounce to lean on.
 public protocol LauncherProvider: Sendable {
     var searchScopes: Set<LauncherScope> { get }
     func results(for query: String) async -> [LauncherResult]

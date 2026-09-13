@@ -18,7 +18,16 @@ person's workflow and taste.
 
 ## Install
 
-Grab the zip from
+**Homebrew:** this repo doubles as a tap. The cask downloads the same
+signed and notarized zip as the Releases page, and `brew upgrade` picks up
+new releases (the release workflow bumps the cask on `main`).
+
+```sh
+brew tap nickysemenza/overboard https://github.com/nickysemenza/overboard
+brew install --cask nickysemenza/overboard/overboard
+```
+
+Or grab the zip from
 [Releases](https://github.com/nickysemenza/overboard/releases) — releases are
 signed with a Developer ID certificate and notarized by Apple, so a plain
 double-click works, no right-click → Open dance needed. Or build from source
@@ -35,16 +44,35 @@ Building from source signs with *your* Apple Development identity — set your
 team in Xcode's Signing settings, or pass `CODE_SIGNING_ALLOWED=NO` (see the
 signing note below for the TCC consequences).
 
-Overboard lives in the menu bar (no Dock icon). On first run, grant
-**Accessibility** when prompted (System Settings → Privacy & Security) —
-paste-back synthesizes ⌘V into the target app and falls back to copy-only
+Overboard lives in the menu bar (no Dock icon). First launch opens a Welcome
+window with the three shortcuts and an Accessibility button; grant
+**Accessibility** there or when prompted (System Settings → Privacy & Security)
+— paste-back synthesizes ⌘V into the target app and falls back to copy-only
 without it. The first time you copy from a browser, macOS also prompts for
 **Automation** permission for that browser — this powers Back-to-source
 (capturing the page URL/title); declining just skips provenance for that
-browser. No analytics, no account. Network is used only for two
-opt-outable features: fetching link-preview metadata (page title, favicon,
-description, og:image — toggle in Settings → General), and checking for app
-updates. All clipboard data stays on your machine.
+browser. Settings → Permissions shows every one of these, plus any folders the
+file index couldn't read, and can ask for them again. No analytics, no
+account. Network is used only for two opt-outable features: fetching
+link-preview metadata (page title, favicon, description, og:image — toggle in
+Settings → General), and checking for app updates. All clipboard data stays on
+your machine.
+
+### Network activity
+
+Overboard makes exactly two kinds of outbound request, both on by default but
+individually toggleable, and neither sends any of your clipboard content:
+
+- **Link-preview metadata** — fetches a copied page's title, favicon,
+  description, and og:image. Toggle: Settings → General → "Fetch link titles
+  and icons".
+- **App update check** — polls GitHub's releases API once a day to see if a
+  newer version exists. Toggle: Settings → General → "Check for updates
+  automatically".
+
+Both use an ephemeral `URLSession` with cookie storage and the URL cache
+disabled, so neither request can read or leave behind cookies, and nothing
+is cached to disk.
 
 ## Features
 
@@ -90,9 +118,14 @@ updates. All clipboard data stays on your machine.
 - **Launcher commands**: `:stats` (word/char/line stats), `:pause` / `:resume`
   (toggles clipboard capture; menu-bar indicator), `:clear` (clears history,
   keeps pins), `:settings`, `:version`. Plus `:` to open the commands palette.
-- **CLI**: `overboard history|search|get|copy` with `--json` for scripts and
-  agents; read-only against the app's database, copy goes through the clipboard
-  so the app captures it. Install via `scripts/install-cli.sh`.
+- **CLI**: `overboard history|search|get|copy|export` with `--json` for scripts
+  and agents; read-only against the app's database, copy goes through the
+  clipboard so the app captures it. Install via `scripts/install-cli.sh`.
+- **Backup**: Settings → History exports the library to a folder of NDJSON plus
+  the large payloads it references, and imports one back (skipping clips you
+  already have, by content hash). Detected secrets are left out unless asked
+  for — they're TTL-limited on purpose. `overboard export <dir>` writes the same
+  archive from the shell; restoring is app-only, since it writes to the store.
 - **Shortcuts, Siri & Spotlight**: App Intents for Copy Latest Clip, Search
   Clipboard History, Copy Snippet (with a snippet picker), Set Clipboard
   Capture, Show Drawer, and Show Launcher. Clips themselves are never exposed
@@ -185,10 +218,12 @@ updates. All clipboard data stays on your machine.
 Dependencies: [GRDB](https://github.com/groue/GRDB.swift),
 [KeyboardShortcuts](https://github.com/sindresorhus/KeyboardShortcuts),
 [Highlightr](https://github.com/raspu/Highlightr),
-[Expression](https://github.com/nicklockwood/Expression),
 [Defaults](https://github.com/sindresorhus/Defaults),
-[MarkdownUI](https://github.com/gonzalezreal/swift-markdown-ui), and
-[swift-async-algorithms](https://github.com/apple/swift-async-algorithms).
+[MarkdownUI](https://github.com/gonzalezreal/swift-markdown-ui),
+[swift-async-algorithms](https://github.com/apple/swift-async-algorithms), and
+[swift-argument-parser](https://github.com/apple/swift-argument-parser) (CLI only).
+The calculator's expression parser and the file preview's binary-signature
+table are in-tree rather than dependencies.
 Dev/test only: [swift-snapshot-testing](https://github.com/pointfreeco/swift-snapshot-testing),
 SwiftFormat, and SwiftLint.
 
@@ -203,6 +238,17 @@ have to re-grant Accessibility after every build and paste-back will look
 "flaky" — it isn't; it's TCC. Released builds carry a stable Developer ID
 signature too, so the Accessibility grant also survives release-to-release
 upgrades, not just local rebuilds.
+
+### Why Overboard isn't sandboxed
+
+The main app needs Accessibility-driven paste-back (synthesizing `CGEvent`s
+into the frontmost app), global hotkeys, continuous pasteboard polling, and
+file-metadata indexing across the home folder and iCloud Drive — none of
+which App Sandbox permits. The Quick Look extension, which only renders a
+preview for a file the system already handed it, is sandboxed. Hardened
+runtime is on for both targets regardless. Clipboard and index data live in
+an Application Support directory created `0700`, so no other user or
+sandboxed process on the machine can read it.
 
 ### Building
 
@@ -219,6 +265,10 @@ cd OverboardKit && swift test                                     # core tests
 `.tools/` directory (`format` rewrites, `lint` checks), so a Homebrew upgrade
 can never make local and CI results disagree.
 
+Run `./scripts/hooks/install.sh` once to add a pre-commit hook that runs
+`scripts/tools.sh lint` before every commit — catches formatting/lint issues
+locally instead of on the next CI run. Not installed by default.
+
 `dogfood.sh` defaults to Debug for fast edits, builds only the current Mac's
 architecture, and reuses `build/dogfood` for both configurations. The first
 Debug build compiles its dependencies; subsequent builds are incremental.
@@ -229,6 +279,21 @@ swap the new build into `/Applications` and relaunch it. `--no-build` explicitly
 reuses an existing app; combine it with `--release` to reuse the Release build.
 Build duration is printed, and full diagnostics plus Xcode's timing summary are
 saved to `build/dogfood/dogfood-Debug.log` or `dogfood-Release.log`.
+
+### Snapshot tests
+
+The pixel suites in `OverboardUISnapshotTests` run everywhere, CI included.
+They capture through an `NSHostingView` into a bitmap the test builds at a
+fixed 2× pixel size, so the reference images no longer depend on the host's
+backing scale — which is what used to make them local-only, since the CI VM
+renders at 1×. Re-record after an intentional visual change:
+
+```sh
+OVERBOARD_RECORD_SNAPSHOTS=1 swift test --package-path OverboardKit
+```
+
+Review the resulting PNG diff before committing; without the variable, the
+references are asserted.
 
 ### Filename search performance
 
@@ -311,6 +376,10 @@ git tag v1.0.0 && git push --tags
 The Release workflow builds a Developer-ID-signed, notarized zip and attaches
 it to a GitHub Release. `./scripts/release.sh 1.0.0` produces the same zip
 locally into `dist/` (see below for what it needs to sign and notarize).
+
+The release job also prints the zip's `version`/`sha256` lines into its job
+summary; paste them into `Casks/overboard.rb` by hand. That step deliberately
+doesn't commit, so a tagged release never pushes back to the branch.
 
 CI also signs and notarizes on every push, pull request, and
 `workflow_dispatch` run (not just tags) — `ci.yml`'s `build` job and

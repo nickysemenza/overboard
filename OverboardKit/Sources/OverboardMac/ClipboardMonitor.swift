@@ -1,6 +1,5 @@
 import AppKit
 import Carbon
-import os
 import OverboardCore
 
 /// Polls NSPasteboard.changeCount and emits plain-struct snapshots.
@@ -36,7 +35,6 @@ public final class ClipboardMonitor {
     private let continuation: AsyncStream<PasteboardSnapshot>.Continuation
     private var timer: Timer?
     private var lastChangeCount: Int
-    private let logger = Logger(subsystem: "com.nickysemenza.overboard", category: "monitor")
 
     /// Evaluated on every capture so Settings changes apply immediately.
     public var excludedBundleIDs: () -> Set<String> = { ClipboardMonitor.defaultExclusions }

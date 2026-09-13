@@ -1,3 +1,4 @@
+import OverboardMac
 import OverboardUI
 import SwiftUI
 
@@ -17,8 +18,16 @@ struct OverboardApp: App {
                 Divider()
             }
 
-            Button("Show Drawer") {
+            SummonMenuItem(title: "Show Launcher", shortcutDescription: HotkeyService.toggleLauncherShortcutDescription) {
+                AppServices.shared.launcher.show()
+            }
+
+            SummonMenuItem(title: "Show Drawer", shortcutDescription: HotkeyService.toggleDrawerShortcutDescription) {
                 AppServices.shared.overlay.show()
+            }
+
+            SummonMenuItem(title: "Show Emoji Picker", shortcutDescription: HotkeyService.toggleEmojiPickerShortcutDescription) {
+                AppServices.shared.emojiPicker.show()
             }
 
             // HistoryDebugView is a debug affordance superseded by the drawer;
@@ -45,6 +54,22 @@ struct OverboardApp: App {
 
             Divider()
 
+            Button("Check for Updates…") {
+                Task { await AppServices.shared.updates.checkNow() }
+            }
+
+            Button("About Overboard") {
+                NSApp.activate(ignoringOtherApps: true)
+                NSApp.orderFrontStandardAboutPanel(nil)
+            }
+
+            Button("Welcome…") {
+                self.openWindow(id: AppServices.welcomeWindowID)
+                NSApp.activate(ignoringOtherApps: true)
+            }
+
+            Divider()
+
             // Not SettingsLink: it can't raise an already-open Settings window
             // sitting behind another app (a menu-bar app can't self-activate).
             // AppServices.openSettings handles create / re-show / front uniformly.
@@ -63,7 +88,26 @@ struct OverboardApp: App {
                 updates: self.updates,
                 captureState: self.captureState
             )
+            // The menu-bar label is the only view SwiftUI renders at launch, so
+            // it's where `openWindow` first becomes reachable — see
+            // `AppServices.openWindowByID`.
+            .onAppear {
+                AppServices.shared.openWindowByID = { self.openWindow(id: $0) }
+            }
         }
+
+        Window("Welcome to Overboard", id: AppServices.welcomeWindowID) {
+            WelcomeView(
+                openShortcutSettings: { AppServices.openSettings(tab: .general) },
+                onDone: { Defaults[.hasCompletedOnboarding] = true }
+            )
+            // Closing the window any other way still counts as seen — this
+            // isn't a gate, and re-showing it every launch would be a nag.
+            .onDisappear { Defaults[.hasCompletedOnboarding] = true }
+        }
+        .defaultSize(width: 460, height: 400)
+        .windowResizability(.contentSize)
+        .restorationBehavior(.disabled)
 
         #if DEBUG
             Window("Overboard History", id: "history") {
@@ -82,7 +126,33 @@ struct OverboardApp: App {
         .restorationBehavior(.disabled)
 
         Settings {
-            SettingsView(store: AppServices.shared.store)
+            SettingsView(
+                store: AppServices.shared.store,
+                navigation: AppServices.shared.settingsNavigation,
+                checkForUpdates: { await AppServices.shared.updates.checkNow() }
+            )
+        }
+    }
+}
+
+/// A menu-bar item that summons a panel (launcher / drawer / emoji picker),
+/// showing its recorded global shortcut as trailing secondary text, e.g.
+/// "Show Launcher  ⌥Space". These shortcuts are Carbon hotkeys owned by
+/// `KeyboardShortcuts`, so this deliberately does NOT attach a
+/// `.keyboardShortcut` modifier to the button — that would register a second,
+/// duplicate app-level shortcut alongside the global one.
+private struct SummonMenuItem: View {
+    let title: String
+    let shortcutDescription: String?
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: self.action) {
+            if let shortcutDescription {
+                Text("\(self.title)  \(Text(shortcutDescription).foregroundStyle(.secondary))")
+            } else {
+                Text(self.title)
+            }
         }
     }
 }

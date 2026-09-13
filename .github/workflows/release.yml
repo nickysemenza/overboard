@@ -15,6 +15,14 @@ on:
   push:
     tags: ["v*"]
 
+# One release group per workflow (tags are unique, but this keeps a
+# re-pushed tag from racing itself). cancel-in-progress is deliberately
+# false: notarization runs inside this job, and killing it mid-flight would
+# leave the tag's release build half-notarized with no automatic retry.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: write
 
@@ -53,3 +61,36 @@ jobs:
             "Overboard-${GITHUB_REF_NAME#v}.zip"
         env:
           GH_TOKEN: ${{ github.token }}
+
+      # Keep the in-repo Homebrew cask (Casks/overboard.rb) pointing at this
+      # release so `brew tap nickysemenza/overboard https://github.com/nickysemenza/overboard`
+      # users get it from `brew upgrade` without a manual bump. This is the one
+      # place CI pushes to main outside the PR flow, on purpose: the cask is
+      # derived data (tag + checksum of the asset just uploaded), and a human
+      # bumping it by hand is exactly the step that gets forgotten. Branch
+      # protection on main, if enabled, must let github-actions[bot] push.
+      # `permissions: contents: write` above covers the push.
+      - name: Update the Homebrew cask on main
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          checksum="$(shasum -a 256 "Overboard-${version}.zip" | cut -d' ' -f1)"
+          git fetch origin main
+          git checkout -B main origin/main
+          sed -i '' \
+            -e "s/^  version \".*\"$/  version \"${version}\"/" \
+            -e "s/^  sha256 .*$/  sha256 \"${checksum}\"/" \
+            Casks/overboard.rb
+          if git diff --quiet -- Casks/overboard.rb; then
+            echo "Cask already at ${version}; nothing to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Casks/overboard.rb
+          git commit -m "Cask: Overboard ${version}"
+          git push origin HEAD:main
+          {
+            echo "## Homebrew cask"
+            echo
+            echo "Bumped \`Casks/overboard.rb\` on main to ${version} (sha256 ${checksum})."
+          } >> "$GITHUB_STEP_SUMMARY"

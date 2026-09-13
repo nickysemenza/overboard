@@ -1,8 +1,9 @@
 import Foundation
 
-/// Concatenates provider results in priority order. The view model owns two
-/// of these — an instant one (calculator + web) rendered on every keystroke,
-/// and a full one (+ Spotlight) swapped in after the debounce — so the bar
+/// Concatenates provider results in priority order. The view model routes
+/// every keystroke through an instant router (calculator + web + apps) that
+/// answers from memory, while secondary providers (files, snippets, clipboard)
+/// run concurrently alongside it and merge in as they arrive — so the bar
 /// never waits on file I/O to show the math.
 public struct QueryRouter: Sendable {
     private let providers: [any LauncherProvider]

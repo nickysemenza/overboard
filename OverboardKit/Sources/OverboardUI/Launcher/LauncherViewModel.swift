@@ -1,5 +1,7 @@
+import AsyncAlgorithms
 import Foundation
 import Observation
+import os
 import OverboardCore
 import OverboardMac
 
@@ -94,6 +96,10 @@ public final class LauncherViewModel {
         self.observationTask?.cancel()
         self.observationTask = nil
         self.searchTask?.cancel()
+        // A cancelled task never reaches `finishSearch`, so release anything
+        // parked in `settle()` and don't leave the spinner flag stuck on a
+        // hidden panel; `prepareForShow` re-arms it on the next summon.
+        self.finishSearch(self.searchGeneration)
     }
 
     /// Bumped on every summon so the view re-asserts text-field focus
@@ -135,10 +141,11 @@ public final class LauncherViewModel {
     /// stay inside the existing scrolling viewport.
     public var onLayoutChanged: () -> Void = {}
 
-    /// Bundle paths of apps macOS currently reports as running. A later slice
-    /// populates this (from `NSWorkspace.runningApplications`); for now it stays
-    /// empty, so `isSelectedAppRunning` is always false and the "Switch to" /
-    /// Quit actions never surface.
+    /// Bundle paths of apps macOS currently reports as running. `AppServices`
+    /// snapshots `NSWorkspace.runningApplications` into this on summon and on
+    /// change while the panel is visible, which drives `isSelectedAppRunning`
+    /// and the "Switch to" / Quit actions. Empty in tests and previews that
+    /// don't wire that snapshot up.
     public var runningAppPaths: Set<String> = []
 
     /// Rows pinned under every result list (the Spotify now-playing footer).
@@ -150,6 +157,44 @@ public final class LauncherViewModel {
     private let instantRouter: QueryRouter
     private let secondaryProviders: [any LauncherProvider]
     private var searchTask: Task<Void, Never>?
+    /// Bumped by every `scheduleSearch` call; lets a cancelled task's deferred
+    /// cleanup recognize it's stale instead of clobbering a newer task's state.
+    private var searchGeneration = 0
+    /// True between a keystroke and the first `setResults` for that query.
+    /// The previous list stays on screen for continuity, but it belongs to an
+    /// older query, so `perform` must not act on it — ↩ pressed in that window
+    /// is dropped, exactly as it was when the list used to be blanked.
+    private var resultsAreStale = false
+
+    /// The instant pass's rows, cached so the debounced secondary pass can
+    /// splice its own results in without redoing the (cheap but not free)
+    /// instant router call.
+    private var lastInstantResults: [LauncherResult] = []
+
+    /// Keystrokes that need a secondary pass funnel through here; one
+    /// long-lived consumer debounces them so fast typing doesn't fan out to
+    /// FTS/clipboard queries on every character. House pattern: see
+    /// `DrawerViewModel`'s `searchChannel` — including the detail that the
+    /// send runs on its own short-lived `Task`, never on `searchTask`:
+    /// `AsyncChannel.send` drops the value when its task is cancelled, and a
+    /// send parked behind a busy consumer would otherwise vanish on the next
+    /// keystroke (or on `stopObserving`), leaving `isSearching` stuck.
+    private let secondaryChannel = AsyncChannel<Void>()
+    private var secondaryDebounceTask: Task<Void, Never>?
+
+    /// FTS match excerpts for the clip rows currently on screen, keyed by
+    /// item id. Computed once per search pass (batched into a single store
+    /// call) instead of per row, so typing doesn't fire dozens of concurrent
+    /// SQLite calls — one per visible clip row, every keystroke.
+    public private(set) var matchExcerpts: [String: String] = [:]
+
+    /// Makes the keystroke-to-results pipeline visible in Instruments: the
+    /// instant pass (apps/calc/web, every keystroke) and the debounced
+    /// secondary pass (indexed files/clipboard FTS/snippets) each get their
+    /// own interval. `SearchPerformanceTests` documents the ~30ms
+    /// keystroke-to-results budget these intervals make visible. Signposts
+    /// cost effectively nothing when no tracing session is attached.
+    private let searchSignposter = OSSignposter(subsystem: "com.nickysemenza.overboard", category: "Search")
 
     /// Instant providers (apps) answer from memory and render on every
     /// keystroke alongside the calculator; secondary providers (files) run
@@ -161,7 +206,9 @@ public final class LauncherViewModel {
         clipboardStore: ClipStore? = nil,
         // The "Ask AI" fallback row (after the web row). Default dark so
         // tests/previews don't light it up; AppServices injects the real gate.
-        askAIProvider: AskAIProvider = AskAIProvider(isAvailable: { false })
+        askAIProvider: AskAIProvider = AskAIProvider(isAvailable: { false }),
+        // Zero in tests that need the secondary pass to land immediately.
+        secondaryDebounceInterval: Duration = .milliseconds(120)
     ) {
         self.clipboardStore = clipboardStore
         self.history = Self.normalizedHistory(Defaults[.launcherSearchHistory])
@@ -170,6 +217,14 @@ public final class LauncherViewModel {
                 + [WebSearchProvider(), askAIProvider]
         )
         self.secondaryProviders = secondaryProviders
+        let channel = self.secondaryChannel
+        let interval = secondaryDebounceInterval
+        self.secondaryDebounceTask = Task { [weak self] in
+            for await _ in channel.debounce(for: interval) {
+                guard let self else { return }
+                await self.runSecondaryPass()
+            }
+        }
     }
 
     /// Preps state for a summon. When `clearQuery` is false the previous `query`
@@ -199,19 +254,31 @@ public final class LauncherViewModel {
         if !preserveSelection {
             self.clipboardLimit = 200
             self.hasMoreClipboard = false
-            self.results = []
+            // Deliberately not clearing `results` here: the stale list stays on
+            // screen until the instant pass (`setResults` below) replaces it, so
+            // fast typing doesn't flash the empty state between keystrokes.
+            self.resultsAreStale = true
             self.userSelected = false
             self.selectedIndex = 0
             self.isPaletteOpen = false
         }
         self.statusMessage = nil
         self.isSearching = true
+        // Each call claims a new generation so a task cancelled by a later
+        // keystroke can't clear `isSearching` after a newer task has already
+        // taken over (and possibly finished) — only the current generation's
+        // exit is allowed to flip the flag back off.
+        self.searchGeneration += 1
+        let generation = self.searchGeneration
         if query.isEmpty, scope == .all {
             let recents = self.history.reversed().prefix(self.maxRecentRows).map { LauncherResult.recentSearch(query: $0) }
             self.setResults(recents, preserveSelection: preserveSelection)
             self.searchTask = Task {
                 let apps = await self.instantRouter.results(for: "", scope: .apps)
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled else {
+                    self.finishSearch(generation)
+                    return
+                }
                 let counts = Defaults[.launcherItemUseCounts]
                 let candidates = apps.filter { row in
                     if counts[row.id, default: 0] > 0 { return true }
@@ -220,48 +287,168 @@ public final class LauncherViewModel {
                 }
                 let suggestions = self.sortByFrecency(candidates).prefix(6)
                 self.setResults(Array(suggestions) + recents, preserveSelection: true)
-                self.isSearching = false
+                self.finishSearch(generation)
             }
             return
         }
         self.searchTask = Task {
-            if scope == .clipboard, let store = self.clipboardStore {
-                do {
-                    let items = try await store.browseHistory(query, filter: self.clipboardFilter, limit: self.clipboardLimit + 1)
-                    let stats = try await store.libraryStats(topSources: 100)
-                    guard !Task.isCancelled else { return }
-                    self.sources = stats.bySource.map(\.app).sorted()
-                    self.hasMoreClipboard = items.count > self.clipboardLimit
-                    self.setResults(items.prefix(self.clipboardLimit).map(LauncherResult.clip), preserveSelection: true)
-                } catch {
-                    guard !Task.isCancelled else { return }
-                    self.statusMessage = "Couldn’t search clipboard history. Try again."
-                    self.setResults([])
-                }
-                self.isSearching = false
+            // The clipboard-scope store query is itself a "secondary" pass (a
+            // full FTS/browse query, not an in-memory lookup), so it's routed
+            // through the same debounce as the file/clipboard/snippet
+            // fan-out below. `isSearching` stays true — cleared by
+            // `runSecondaryPass` once the debounced fetch lands — and
+            // `resultsAreStale` (set above) keeps ↩ from acting on the old
+            // list until then.
+            if scope == .clipboard, self.clipboardStore != nil {
+                self.sendToSecondaryChannel()
                 return
             }
+            let instantState = self.searchSignposter.beginInterval("instant pass")
             let instant = await self.instantRouter.results(for: query, scope: scope)
-            guard !Task.isCancelled else { return }
+            self.searchSignposter.endInterval("instant pass", instantState)
+            guard !Task.isCancelled else {
+                self.finishSearch(generation)
+                return
+            }
+            self.lastInstantResults = instant
             self.setResults(instant, preserveSelection: true)
+            // The instant pass never carries `.clip` rows, so any excerpts
+            // left over from the previous query no longer pair with anything
+            // on screen; the debounced pass repopulates this once its own
+            // clip rows land.
+            self.matchExcerpts = [:]
             let providers = self.secondaryProviders.filter { $0.searchScopes.contains(scope) }
             guard !query.hasPrefix(":"), !providers.isEmpty else {
-                self.isSearching = false
+                self.finishSearch(generation)
                 return
             }
-            var buckets = [[LauncherResult]](repeating: [], count: providers.count)
-            await withTaskGroup(of: (Int, [LauncherResult]).self) { group in
-                for (index, provider) in providers.enumerated() {
-                    group.addTask { await (index, provider.results(for: query)) }
-                }
-                for await (index, rows) in group {
-                    guard !Task.isCancelled else { return }
-                    buckets[index] = rows.filter(scope.includes)
-                    self.setResults(instant + buckets.flatMap(\.self), preserveSelection: true)
-                }
+            // Secondary providers (indexed files FTS, clipboard FTS, snippet
+            // scans) don't run on every keystroke — only once the query has
+            // been stable for the debounce interval passed to `init`.
+            self.sendToSecondaryChannel()
+        }
+    }
+
+    /// See `secondaryChannel`: the send must outlive `searchTask`'s
+    /// cancellation, so it gets a task of its own. The debounce collapses
+    /// any pile-up into one pass.
+    private func sendToSecondaryChannel() {
+        Task { [secondaryChannel] in await secondaryChannel.send(()) }
+    }
+
+    /// The debounced half of a search: the clipboard-scope store query, or
+    /// the secondary-provider fan-out (indexed files FTS, clipboard FTS,
+    /// snippet scans). Runs on the long-lived consumer started in `init`, so
+    /// it isn't tied to `searchTask`'s per-keystroke cancellation — instead it
+    /// reads the *current* query/scope when the debounce settles (matching
+    /// `AsyncChannel.debounce`'s coalescing: only the latest keystroke's send
+    /// actually fires this) and checks `searchGeneration` before touching
+    /// `results`, so a pass superseded by a still-newer keystroke can't
+    /// clobber it.
+    private func runSecondaryPass() async {
+        let generation = self.searchGeneration
+        let state = self.searchSignposter.beginInterval("secondary pass")
+        defer { self.searchSignposter.endInterval("secondary pass", state) }
+        let query = self.query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let scope = self.scope
+        if scope == .clipboard, let store = self.clipboardStore {
+            do {
+                let items = try await store.browseHistory(query, filter: self.clipboardFilter, limit: self.clipboardLimit + 1)
+                let stats = try await store.libraryStats(topSources: 100)
+                guard self.searchGeneration == generation else { return }
+                self.sources = stats.bySource.map(\.app).sorted()
+                self.hasMoreClipboard = items.count > self.clipboardLimit
+                let clips = Array(items.prefix(self.clipboardLimit))
+                self.setResults(clips.map(LauncherResult.clip), preserveSelection: true)
+                await self.refreshMatchExcerpts(itemIDs: clips.map(\.id), query: query)
+            } catch {
+                guard self.searchGeneration == generation else { return }
+                self.statusMessage = "Couldn’t search clipboard history. Try again."
+                self.setResults([])
             }
-            guard !Task.isCancelled else { return }
-            self.isSearching = false
+            self.finishSearch(generation)
+            return
+        }
+        let instant = self.lastInstantResults
+        let providers = self.secondaryProviders.filter { $0.searchScopes.contains(scope) }
+        // Re-checked here (not just in `scheduleSearch`, before the send):
+        // a command-mode query that arrives while an older, non-command
+        // send is still sitting in the debounce window must not let that
+        // stale send fan out to secondary providers once it fires.
+        guard !query.hasPrefix(":"), !providers.isEmpty else {
+            self.finishSearch(generation)
+            return
+        }
+        var buckets = [[LauncherResult]](repeating: [], count: providers.count)
+        await withTaskGroup(of: (Int, [LauncherResult]).self) { group in
+            for (index, provider) in providers.enumerated() {
+                group.addTask { await (index, provider.results(for: query)) }
+            }
+            for await (index, rows) in group {
+                guard self.searchGeneration == generation else { return }
+                buckets[index] = rows.filter(scope.includes)
+                self.setResults(instant + buckets.flatMap(\.self), preserveSelection: true)
+            }
+        }
+        guard self.searchGeneration == generation else { return }
+        await self.refreshMatchExcerpts(for: self.results, query: query)
+        self.finishSearch(generation)
+    }
+
+    /// Batches the FTS excerpts for every `.clip` row currently on screen into
+    /// one store call instead of one per row — `LauncherRow` used to run
+    /// `store.matchExcerpt` from its own per-row `.task`, firing dozens of
+    /// concurrent SQLite calls while typing.
+    private func refreshMatchExcerpts(for results: [LauncherResult], query: String) async {
+        let ids = results.compactMap { result -> String? in
+            guard case let .clip(item) = result else { return nil }
+            return item.id
+        }
+        await self.refreshMatchExcerpts(itemIDs: ids, query: query)
+    }
+
+    private func refreshMatchExcerpts(itemIDs: [String], query: String) async {
+        guard !itemIDs.isEmpty, !query.isEmpty, let store = self.clipboardStore else {
+            self.matchExcerpts = [:]
+            return
+        }
+        self.matchExcerpts = await (try? store.matchExcerpts(itemIDs: itemIDs, query: query)) ?? [:]
+    }
+
+    /// Clears `isSearching` only if no newer `scheduleSearch` call has started
+    /// since this task began — a stale, cancelled task must never clear the
+    /// spinner out from under a search that superseded it.
+    private func finishSearch(_ generation: Int) {
+        guard self.searchGeneration == generation else { return }
+        self.isSearching = false
+        let waiters = self.settleWaiters
+        self.settleWaiters.removeAll()
+        for waiter in waiters {
+            waiter.resume()
+        }
+    }
+
+    /// Parked `settle()` callers, resumed by `finishSearch`. A list rather than
+    /// a single continuation because several waiters can be outstanding.
+    private var settleWaiters: [CheckedContinuation<Void, Never>] = []
+
+    /// Returns once the search pipeline is idle: the current `searchTask` has
+    /// finished and, if it handed off to the debounced secondary pass, that
+    /// pass has landed too.
+    ///
+    /// This exists so tests can wait on the real end of a search instead of
+    /// polling `isSearching` on a sleep loop — a loop that is both slower than
+    /// it needs to be and, on a loaded machine, capable of timing out while the
+    /// search is still perfectly healthy. Everything is main-actor, so
+    /// `scheduleSearch(); await settle()` cannot miss the signal: nothing can
+    /// run between the call that sets `isSearching` and the `await` that parks.
+    /// The loop re-checks the flag because a newer keystroke may have claimed a
+    /// fresh generation while this caller was parked.
+    public func settle() async {
+        while self.isSearching {
+            await withCheckedContinuation { continuation in
+                self.settleWaiters.append(continuation)
+            }
         }
     }
 
@@ -273,7 +460,9 @@ public final class LauncherViewModel {
     // MARK: - Search history
 
     /// Save the current query as the most-recent history entry. Called on every
-    /// dismissal (commit / escape / click-outside); no-ops on empty queries.
+    /// dismissal (commit / click-outside) and by the first, query-clearing
+    /// stage of Esc; no-ops on empty queries and de-dupes, so a double call
+    /// (Esc, then `hide`) is harmless.
     public func recordCurrentQuery() {
         let trimmed = self.query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
@@ -315,6 +504,15 @@ public final class LauncherViewModel {
         return LauncherActions.actions(for: self.results[self.selectedIndex], context: self.actionContext)
     }
 
+    /// Actions for an arbitrary row, not just the selected one — powers each
+    /// row's VoiceOver accessibility actions (a non-selected row must still
+    /// list what it can do), sharing `selectedActions`' running-app context
+    /// rule for app rows.
+    public func actions(for result: LauncherResult) -> [LauncherAction] {
+        let isRunning: Bool = if case let .app(_, url) = result { self.runningAppPaths.contains(url.path) } else { false }
+        return LauncherActions.actions(for: result, context: LauncherActionContext(isAppRunning: isRunning))
+    }
+
     /// The row's primary (↩) action — what the footer bar advertises.
     public var primaryAction: LauncherAction? {
         self.selectedActions.first
@@ -354,7 +552,7 @@ public final class LauncherViewModel {
     /// Executes one action against the selected row. The single routing point
     /// for the footer's primary action, the ⌘K palette, and `commit`.
     public func perform(_ action: LauncherAction) {
-        guard self.results.indices.contains(self.selectedIndex) else { return }
+        guard !self.resultsAreStale, self.results.indices.contains(self.selectedIndex) else { return }
         let result = self.results[self.selectedIndex]
         switch (action, result) {
         case let (.copy, .calculation(_, display)):
@@ -511,6 +709,12 @@ public final class LauncherViewModel {
     }
 
     private func setResults(_ newResults: [LauncherResult], preserveSelection: Bool = false) {
+        // Only a manual selection is re-anchored by id. An automatic
+        // selection deliberately snaps back to row 0 when a later provider
+        // bucket re-sorts the list: the product rule is "the best match is
+        // first and selected", so a file that outranks the instant web row
+        // must be what ↩ opens. The 120 ms secondary-pass debounce is what
+        // keeps that re-sort from racing a keypress.
         let anchor = preserveSelection && self.userSelected ? self.selectedResult?.id : nil
         let prefix = AppMatcher.fold(self.query.trimmingCharacters(in: .whitespacesAndNewlines)) + "\u{1F}"
         let usage = Dictionary(uniqueKeysWithValues: Defaults[.launcherSelectionUsage].compactMap { key, value in
@@ -529,6 +733,7 @@ public final class LauncherViewModel {
         }
         var seen = Set<String>()
         self.results = combined.filter { seen.insert($0.id).inserted }
+        self.resultsAreStale = false
         if let anchor, let index = self.results.firstIndex(where: { $0.id == anchor }) {
             self.selectedIndex = index
         } else {

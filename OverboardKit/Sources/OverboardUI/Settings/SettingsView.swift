@@ -9,68 +9,86 @@ import SwiftUI
 
 private let settingsLogger = Logger(subsystem: "com.nickysemenza.overboard", category: "settings")
 
-extension ItemKind {
-    /// Capitalized display name for Settings UI.
-    var displayName: String {
-        switch self {
-        case .text: "Text"
-        case .link: "Link"
-        case .image: "Image"
-        case .file: "File"
-        case .color: "Color"
-        }
-    }
+/// Identifies one Settings tab, so callers outside the view (a launcher
+/// command, a menu item) can deep-link to a specific one.
+public enum SettingsTab: Hashable, Sendable {
+    case general, history, files, apps, actions, permissions, ai
+}
 
-    /// SF Symbol representing this kind in Settings UI.
-    var symbolName: String {
-        switch self {
-        case .text: "textformat"
-        case .link: "link"
-        case .image: "photo"
-        case .file: "doc"
-        case .color: "paintpalette"
-        }
+/// Shared, externally-settable tab selection for the Settings scene. SwiftUI
+/// builds the `Settings` scene once at launch, long before any window exists,
+/// so there's no view instance around for a caller like
+/// `AppServices.openSettings` to hand a binding to — this observable object
+/// is the bridge: `SettingsView` binds its `TabView` selection to it, and a
+/// caller sets `selectedTab` before raising the window.
+@Observable
+public final class SettingsNavigation {
+    public var selectedTab: SettingsTab
+
+    public init(selectedTab: SettingsTab = .general) {
+        self.selectedTab = selectedTab
     }
+}
+
+/// Shared copy for the "clear all clipboard history" confirmation, so the
+/// Settings confirmation dialog and the `:clear` launcher command's `NSAlert`
+/// (which can't use a SwiftUI dialog since it runs outside a view) can't drift.
+public enum ClearHistoryPrompt {
+    public static let title = "Clear Clipboard History?"
+    public static let message = "All unpinned items will be deleted. Pinned items are kept. This can't be undone."
+    public static let confirm = "Clear History"
 }
 
 public struct SettingsView: View {
     private let store: ClipStore
+    private let checkForUpdates: () async -> Void
+    @Bindable private var navigation: SettingsNavigation
 
-    public init(store: ClipStore) {
+    public init(
+        store: ClipStore,
+        navigation: SettingsNavigation = SettingsNavigation(),
+        checkForUpdates: @escaping () async -> Void = {}
+    ) {
         self.store = store
+        self.navigation = navigation
+        self.checkForUpdates = checkForUpdates
     }
 
     public var body: some View {
-        TabView {
-            Tab("General", systemImage: "gearshape") {
-                GeneralSettingsTab()
+        TabView(selection: self.$navigation.selectedTab) {
+            Tab("General", systemImage: "gearshape", value: SettingsTab.general) {
+                GeneralSettingsTab(checkForUpdates: self.checkForUpdates)
             }
-            Tab("History", systemImage: "clock.arrow.circlepath") {
+            Tab("History", systemImage: "clock.arrow.circlepath", value: SettingsTab.history) {
                 HistorySettingsTab(store: self.store)
             }
-            Tab("Files", systemImage: "folder") {
+            Tab("Files", systemImage: "folder", value: SettingsTab.files) {
                 FileSearchSettingsTab()
             }
-            Tab("Apps", systemImage: "app.badge.checkmark") {
+            Tab("Apps", systemImage: "app.badge.checkmark", value: SettingsTab.apps) {
                 AppsSettingsTab()
             }
-            Tab("Actions", systemImage: "wand.and.stars") {
+            Tab("Actions", systemImage: "wand.and.stars", value: SettingsTab.actions) {
                 ActionsSettingsTab()
             }
-            Tab("AI", systemImage: "sparkles") {
+            Tab("Permissions", systemImage: "lock.shield", value: SettingsTab.permissions) {
+                PermissionsSettingsTab()
+            }
+            Tab("AI", systemImage: "sparkles", value: SettingsTab.ai) {
                 AISettingsTab()
             }
         }
-        .frame(width: 600)
-        .onAppear {
-            NSApp.activate(ignoringOtherApps: true)
-        }
+        // A fixed floor big enough for the tallest tab (History, with its
+        // stats sections) so switching tabs doesn't resize the window.
+        .frame(minWidth: 520, minHeight: 420)
     }
 }
 
 // MARK: - General
 
 private struct GeneralSettingsTab: View {
+    let checkForUpdates: () async -> Void
+
     @Default(.restoreClipboard) private var restoreClipboard
     @Default(.launcherFileResults) private var launcherFileResults
     @Default(.launcherClipResults) private var launcherClipResults
@@ -80,16 +98,14 @@ private struct GeneralSettingsTab: View {
     @Default(.launcherAppAliases) private var launcherAppAliases
     @Default(.updateCheckEnabled) private var updateCheckEnabled
     @Default(.richLinkPreviews) private var richLinkPreviews
-    @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
-    @State private var accessibilityGranted = PermissionService.isTrusted
 
     var body: some View {
         Form {
             Section {
-                KeyboardShortcuts.Recorder("Summon drawer", name: .toggleDrawer)
+                KeyboardShortcuts.Recorder("Show Drawer", name: .toggleDrawer)
                 KeyboardShortcuts.Recorder("Paste next from stack", name: .pasteNextFromStack)
-                KeyboardShortcuts.Recorder("Summon launcher", name: .toggleLauncher)
-                KeyboardShortcuts.Recorder("Summon emoji picker", name: .toggleEmojiPicker)
+                KeyboardShortcuts.Recorder("Show Launcher", name: .toggleLauncher)
+                KeyboardShortcuts.Recorder("Show Emoji Picker", name: .toggleEmojiPicker)
             } footer: {
                 Text("The emoji picker's default shortcut (⌃⌘Space) takes over the system emoji viewer's binding while Overboard is running — record a different one here to get the system viewer back.")
             }
@@ -113,10 +129,7 @@ private struct GeneralSettingsTab: View {
             }
 
             Section {
-                Toggle("Launch at login", isOn: self.$launchAtLogin)
-                    .onChange(of: self.launchAtLogin) {
-                        self.applyLaunchAtLogin()
-                    }
+                LaunchAtLoginToggle()
                 Toggle("Restore previous clipboard after paste", isOn: self.$restoreClipboard)
             }
 
@@ -124,22 +137,6 @@ private struct GeneralSettingsTab: View {
                 Toggle("Fetch link titles and icons", isOn: self.$richLinkPreviews)
             } footer: {
                 Text("Connects to the URLs you copy to fetch each page’s title, description, favicon, and preview image, rendered on link cards. Requests come only from your Mac; nothing is sent anywhere else. Turn this off to keep Overboard fully offline.")
-            }
-
-            Section {
-                LabeledContent("Accessibility") {
-                    if self.accessibilityGranted {
-                        Label("Granted", systemImage: "checkmark.circle.fill")
-                            .foregroundStyle(.green)
-                    } else {
-                        Button("Open System Settings…") {
-                            let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
-                            NSWorkspace.shared.open(url)
-                        }
-                    }
-                }
-            } footer: {
-                Text("Needed only for direct paste (⌘V into the previous app). Everything else works without it.")
             }
 
             Section {
@@ -156,8 +153,14 @@ private struct GeneralSettingsTab: View {
                         }
                     }
                 }
-                Toggle("Check for updates automatically", isOn: self.$updateCheckEnabled)
-                Button("Copy version info") {
+                HStack {
+                    Toggle("Check for updates automatically", isOn: self.$updateCheckEnabled)
+                    Spacer()
+                    Button("Check Now") {
+                        Task { await self.checkForUpdates() }
+                    }
+                }
+                Button("Copy Version Info") {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(AppVersion.summary, forType: .string)
                 }
@@ -168,12 +171,22 @@ private struct GeneralSettingsTab: View {
             }
         }
         .formStyle(.grouped)
-        .onAppear {
-            self.accessibilityGranted = PermissionService.isTrusted
-        }
+    }
+}
+
+/// The login-item toggle, shared by Settings → General and the Welcome window
+/// so the register/unregister handling (and its failure re-sync) lives once.
+struct LaunchAtLoginToggle: View {
+    @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
+
+    var body: some View {
+        Toggle("Launch at login", isOn: self.$launchAtLogin)
+            .onChange(of: self.launchAtLogin) {
+                self.apply()
+            }
     }
 
-    private func applyLaunchAtLogin() {
+    private func apply() {
         do {
             if self.launchAtLogin {
                 try SMAppService.mainApp.register()
@@ -197,6 +210,16 @@ private struct HistorySettingsTab: View {
     @State private var diskUsage: String?
     @State private var stats: LibraryStats?
     @State private var confirmingClear = false
+    @State private var archiveOutcome: ArchiveOutcome?
+    @State private var isArchiving = false
+
+    /// The result of an export or import, shown once in an alert. Carries its
+    /// own title so success and failure share one presentation.
+    private struct ArchiveOutcome: Identifiable {
+        let id = UUID()
+        let title: String
+        let message: String
+    }
 
     var body: some View {
         Form {
@@ -217,7 +240,10 @@ private struct HistorySettingsTab: View {
             }
 
             Section {
-                LabeledContent("Items", value: self.stats?.total.formatted() ?? "—")
+                LabeledContent("Items") {
+                    Text(self.stats?.total.formatted() ?? "—")
+                        .monospacedDigit()
+                }
                 LabeledContent("On disk", value: self.diskUsage ?? "—")
                 Button("Clear History…", role: .destructive) {
                     self.confirmingClear = true
@@ -228,13 +254,34 @@ private struct HistorySettingsTab: View {
                 Text("Clearing removes all unpinned items. Pinned items and snippets are kept.")
             }
 
+            Section {
+                Button("Export History…") {
+                    self.exportHistory()
+                }
+                Button("Import History…") {
+                    self.importHistory()
+                }
+            } header: {
+                Text("Backup")
+            } footer: {
+                Text("An export is a folder of readable JSON plus the large payloads it references. Detected secrets are left out — they expire on purpose. Importing skips clips you already have.")
+            }
+            .disabled(self.isArchiving)
+
             if let stats = self.stats, !stats.byKind.isEmpty {
                 Section("By type") {
                     ForEach(stats.byKind) { entry in
                         LabeledContent {
                             Text(entry.count.formatted())
                         } label: {
-                            Label(entry.kind.displayName, systemImage: entry.kind.symbolName)
+                            Label {
+                                Text(entry.kind.displayName)
+                            } icon: {
+                                // The one place the kind-identity ramp is the
+                                // subject rather than incidental decoration.
+                                Image(systemName: entry.kind.symbolName)
+                                    .foregroundStyle(Color(entry.kind.tintName))
+                            }
                         }
                     }
                 }
@@ -269,10 +316,10 @@ private struct HistorySettingsTab: View {
         }
         .formStyle(.grouped)
         .confirmationDialog(
-            "Clear clipboard history?",
+            ClearHistoryPrompt.title,
             isPresented: self.$confirmingClear
         ) {
-            Button("Clear History", role: .destructive) {
+            Button(ClearHistoryPrompt.confirm, role: .destructive) {
                 Task {
                     do {
                         try await self.store.purge(keepingLatest: 0)
@@ -285,10 +332,117 @@ private struct HistorySettingsTab: View {
                 }
             }
         } message: {
-            Text("All unpinned items will be deleted. This can't be undone.")
+            Text(ClearHistoryPrompt.message)
+        }
+        .alert(
+            self.archiveOutcome?.title ?? "",
+            isPresented: Binding(
+                get: { self.archiveOutcome != nil },
+                set: { if !$0 { self.archiveOutcome = nil } }
+            ),
+            presenting: self.archiveOutcome
+        ) { _ in
+            Button("OK", role: .cancel) {}
+        } message: { outcome in
+            Text(outcome.message)
         }
         .task {
             await self.refresh()
+        }
+    }
+
+    // MARK: - Backup
+
+    private func exportHistory() {
+        // AppKit panels rather than `.fileExporter`: the archive is a folder we
+        // write ourselves (JSON + blob files), not a single document SwiftUI
+        // can hand off.
+        let panel = NSSavePanel()
+        panel.title = String(localized: "Export History")
+        panel.prompt = String(localized: "Export")
+        panel.nameFieldStringValue = String(localized: "Overboard Export")
+        panel.canCreateDirectories = true
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        self.isArchiving = true
+        Task {
+            defer { self.isArchiving = false }
+            do {
+                let summary = try await self.store.export(to: url)
+                var message = String(
+                    localized: "Wrote \(CountPhrase.string(summary.itemCount, of: String(localized: "clip"))) to \(summary.directory.lastPathComponent)."
+                )
+                if summary.secretsExcluded > 0 {
+                    message += " " + String(
+                        localized: "\(CountPhrase.string(summary.secretsExcluded, of: String(localized: "detected secret"))) excluded."
+                    )
+                }
+                if summary.blobsMissing > 0 {
+                    message += " " + String(
+                        localized: "\(CountPhrase.string(summary.blobsMissing, of: String(localized: "attachment"))) could not be copied."
+                    )
+                }
+                self.archiveOutcome = ArchiveOutcome(
+                    title: String(localized: "Export Complete"), message: message
+                )
+            } catch {
+                settingsLogger.error("export failed: \(String(describing: error), privacy: .public)")
+                self.archiveOutcome = ArchiveOutcome(
+                    title: String(localized: "Export Failed"), message: error.localizedDescription
+                )
+            }
+        }
+    }
+
+    private func importHistory() {
+        let panel = NSOpenPanel()
+        panel.title = String(localized: "Import History")
+        panel.prompt = String(localized: "Import")
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        self.isArchiving = true
+        Task {
+            defer { self.isArchiving = false }
+            do {
+                let summary = try await self.store.import(from: url)
+                var parts = [String(
+                    localized: "Added \(CountPhrase.string(summary.imported, of: String(localized: "clip")))."
+                )]
+                if summary.duplicatesSkipped > 0 {
+                    parts.append(String(
+                        localized: "Skipped \(CountPhrase.string(summary.duplicatesSkipped, of: String(localized: "duplicate")))."
+                    ))
+                }
+                // Damage is reported rather than hidden: an archive with bad
+                // lines or missing payloads still imported everything it could.
+                if !summary.malformedLines.isEmpty {
+                    parts.append(String(
+                        localized: "Couldn’t read \(CountPhrase.string(summary.malformedLines.count, of: String(localized: "line")))."
+                    ))
+                }
+                if summary.missingBlobs > 0 {
+                    parts.append(String(
+                        localized: "\(CountPhrase.string(summary.missingBlobs, of: String(localized: "payload file"))) missing from the archive."
+                    ))
+                }
+                self.archiveOutcome = ArchiveOutcome(
+                    title: String(localized: "Import Complete"), message: parts.joined(separator: " ")
+                )
+                await self.refresh()
+            } catch {
+                settingsLogger.error("import failed: \(String(describing: error), privacy: .public)")
+                self.archiveOutcome = ArchiveOutcome(
+                    title: String(localized: "Import Failed"),
+                    // "Pick a folder written by Export History" is the whole
+                    // point of the message; `localizedDescription` on a plain
+                    // Swift error would flatten it to "The operation couldn't
+                    // be completed."
+                    message: (error as? ClipArchive.Failure)?.description ?? error.localizedDescription
+                )
+            }
         }
     }
 
@@ -408,7 +562,7 @@ private struct ActionsSettingsTab: View {
                                 if let condition = info.condition {
                                     Text(condition)
                                         .font(.caption2)
-                                        .foregroundStyle(.tertiary)
+                                        .contrastAwareForeground(.tertiary)
                                         .padding(.leading, 22)
                                 }
                             }
@@ -441,7 +595,7 @@ private struct ActionsSettingsTab: View {
                 .foregroundStyle(.green)
         } else {
             Text("–")
-                .foregroundStyle(.quaternary)
+                .contrastAwareForeground(.quaternary)
         }
     }
 
@@ -486,7 +640,7 @@ private struct AISettingsTab: View {
     }
 
     #Preview("General") {
-        GeneralSettingsTab()
+        GeneralSettingsTab(checkForUpdates: {})
             .frame(width: 600, height: 500)
     }
 

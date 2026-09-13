@@ -274,12 +274,14 @@ public final class LauncherPanelController {
 
     /// Only an explicit scope/preview change can resize the panel. Keep its
     /// top edge anchored and avoid resetting an unchanged AppKit frame.
+    /// Animates like the drawer's own resize, gated the same way on Reduce
+    /// Motion.
     private func resizePanel() {
         guard let panel, panel.isVisible else { return }
         let screen = panel.screen ?? self.screenWithMouse()
         let frame = self.frame(on: screen)
         guard panel.frame != frame else { return }
-        panel.setFrame(frame, display: true)
+        panel.setFrame(frame, display: true, animate: !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
     }
 
     /// The ⌘K palette fits inside the reserved result viewport.
@@ -305,17 +307,17 @@ public final class LauncherPanelController {
             // The ⌘K palette owns the keyboard while open (mirrors the drawer):
             // esc closes only the palette, ↑/↓ move its selection, ↩ runs it.
             if self.viewModel.isPaletteOpen {
-                switch event.keyCode {
-                case 53: // esc closes the palette, not the launcher
+                switch KeyCode(rawValue: event.keyCode) {
+                case .escape: // closes the palette, not the launcher
                     self.setPaletteOpen(false)
                     return nil
-                case 36, 76: // return runs the highlighted action
+                case .returnKey, .keypadEnter: // runs the highlighted action
                     self.viewModel.runPaletteAction()
                     return nil
-                case 126: // up
+                case .upArrow:
                     self.viewModel.movePaletteSelection(-1)
                     return nil
-                case 125: // down
+                case .downArrow:
                     self.viewModel.movePaletteSelection(1)
                     return nil
                 default: // typing filters
@@ -323,32 +325,47 @@ public final class LauncherPanelController {
                 }
             }
 
-            if event.modifierFlags.contains(.command), let index = [UInt16(18), 19, 20, 21].firstIndex(of: event.keyCode) {
+            let scopeKeys: [KeyCode] = [.one, .two, .three, .four]
+            if event.modifierFlags.contains(.command),
+               let index = scopeKeys.firstIndex(where: { $0.rawValue == event.keyCode })
+            {
                 self.viewModel.setScope(LauncherScope.allCases[index])
                 return nil
             }
-            switch event.keyCode {
-            case 16 where event.modifierFlags.contains(.command): // ⌘Y previews without consuming query spaces
+            switch KeyCode(rawValue: event.keyCode) {
+            case .y where event.modifierFlags.contains(.command): // ⌘Y previews without consuming query spaces
                 self.viewModel.togglePreview()
                 return nil
-            case 53: // esc
+            case .escape:
                 if self.viewModel.isPreviewVisible { self.viewModel.togglePreview(); return nil }
+                // Two-stage Esc (matches EmojiPanelController): a non-empty
+                // query is cleared first; only a second Esc, pressed once the
+                // bar is already empty, dismisses the panel. Record the query
+                // before blanking it: `hide()` also records, but by then it
+                // sees "" — without this, an abandoned search never reaches
+                // the recents list, and Esc is how most searches end.
+                if !self.viewModel.query.isEmpty {
+                    self.viewModel.recordCurrentQuery()
+                    self.viewModel.query = ""
+                    self.viewModel.scheduleSearch()
+                    return nil
+                }
                 self.hide()
                 return nil
-            case 126: // up
+            case .upArrow:
                 self.viewModel.moveSelection(-1)
                 return nil
-            case 125: // down
+            case .downArrow:
                 self.viewModel.moveSelection(1)
                 return nil
-            case 40 where event.modifierFlags.contains(.command): // ⌘K action palette
+            case .k where event.modifierFlags.contains(.command): // ⌘K action palette
                 self.setPaletteOpen(!self.viewModel.isPaletteOpen)
                 return nil
-            case 51 where event.modifierFlags.contains(.command): // ⌘⌫
+            case .delete where event.modifierFlags.contains(.command): // ⌘⌫
                 // Delete the highlighted recent search; fall through to normal
                 // text editing when the selected row isn't a recent.
                 return self.viewModel.deleteSelectedRecent() ? nil : event
-            case 36, 76: // return, keypad enter
+            case .returnKey, .keypadEnter:
                 let modifier: LauncherViewModel.CommitModifier = if event.modifierFlags.contains(.command) {
                     .command
                 } else if event.modifierFlags.contains(.option) {
