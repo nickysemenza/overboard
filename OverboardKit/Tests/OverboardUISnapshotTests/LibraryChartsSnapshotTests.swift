@@ -65,36 +65,36 @@ struct LibraryChartsSnapshotTests {
 
     // MARK: - Activity timeline
 
-    /// A fixed instant (not `Date()`) so the x-axis month/day labels the
-    /// chart formats through the default locale never drift between a
-    /// recording run and a later assertion run.
-    private static let fixedNow = Date(timeIntervalSince1970: 1_757_721_600)
+    /// A fixed instant (not `Date()`) so the x-axis month/day labels never
+    /// drift between a recording run and a later assertion run. It's *noon*
+    /// UTC on purpose: `startOfDay` below runs in the process time zone (see
+    /// `chartCalendar`), and noon UTC is the same calendar date everywhere
+    /// from UTC-12 to UTC+11, so every machine builds the same Aug 15–Sep 13.
+    private static let fixedNow = Date(timeIntervalSince1970: 1_757_764_800)
 
-    private static let utcZone = TimeZone(identifier: "UTC")!
     private static let enUS = Locale(identifier: "en_US")
 
-    private static var utc: Calendar {
+    /// Swift Charts bins `unit: .day` bars in the process time zone but reads
+    /// the *environment* calendar for tick placement, so the data has to be
+    /// built on process-local midnights or the weekly gridlines land a bar
+    /// off between a Pacific Mac and a UTC CI runner. Locale and
+    /// `firstWeekday` are pinned because they decide the label text and where
+    /// the weekly ticks fall, and both otherwise come from machine settings.
+    private static var chartCalendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = Self.utcZone
         calendar.locale = Self.enUS
+        calendar.firstWeekday = 1
         return calendar
     }
 
-    /// The day values above are UTC midnights, but Swift Charts bins and
-    /// labels a date axis in the *environment* calendar — so on a Pacific
-    /// Mac those instants fall at 5 pm the previous day and every weekly
-    /// gridline lands one bar to the right of where a UTC CI runner puts it.
-    /// The locale decides which weekday the weekly ticks snap to and how the
-    /// labels read. Pinning all three makes the snapshot identical everywhere.
-    private func pinnedToUTC(_ view: some View) -> some View {
+    private func pinned(_ view: some View) -> some View {
         view
-            .environment(\.calendar, Self.utc)
-            .environment(\.timeZone, Self.utcZone)
+            .environment(\.calendar, Self.chartCalendar)
             .environment(\.locale, Self.enUS)
     }
 
     private static let activity: DailyActivity = {
-        let calendar = Self.utc
+        let calendar = Self.chartCalendar
         let todayStart = calendar.startOfDay(for: Self.fixedNow)
         let days: [DailyActivity.Day] = (0 ..< 30).map { offset in
             let date = calendar.date(byAdding: .day, value: -(29 - offset), to: todayStart) ?? todayStart
@@ -108,7 +108,7 @@ struct LibraryChartsSnapshotTests {
 
     private func timelineHost(dark: Bool = false) -> NSImage {
         snapshotImage(
-            self.pinnedToUTC(ActivityTimelineChart(activity: Self.activity).padding(8).background(.background)),
+            self.pinned(ActivityTimelineChart(activity: Self.activity).padding(8).background(.background)),
             width: 480,
             height: 140 + 16,
             dark: dark
@@ -126,7 +126,7 @@ struct LibraryChartsSnapshotTests {
     // MARK: - Activity timeline — empty
 
     private func emptyTimelineHost(dark: Bool = false) -> NSImage {
-        let calendar = Self.utc
+        let calendar = Self.chartCalendar
         let todayStart = calendar.startOfDay(for: Self.fixedNow)
         let days: [DailyActivity.Day] = (0 ..< 30).map { offset in
             let date = calendar.date(byAdding: .day, value: -(29 - offset), to: todayStart) ?? todayStart
@@ -134,7 +134,7 @@ struct LibraryChartsSnapshotTests {
         }
         let activity = DailyActivity(days: days, total: 0)
         return snapshotImage(
-            self.pinnedToUTC(ActivityTimelineChart(activity: activity).padding(8).background(.background)),
+            self.pinned(ActivityTimelineChart(activity: activity).padding(8).background(.background)),
             width: 480,
             // The empty placeholder's default label style wants more room
             // than the chart's own 140pt — see the `minHeight` comment on
