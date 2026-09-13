@@ -114,8 +114,8 @@ public enum LinkMetadataParser {
             // "<link" doesn't match "<linkfoo".
             let after = open.upperBound
             if after < html.endIndex {
-                let c = html[after]
-                if !(c.isWhitespace || c == ">" || c == "/") {
+                let nextChar = html[after]
+                if !(nextChar.isWhitespace || nextChar == ">" || nextChar == "/") {
                     searchStart = after
                     continue
                 }
@@ -220,20 +220,25 @@ public enum LinkMetadataParser {
         return result
     }
 
+    /// Named entities, plus the two numeric spellings of `'` seen often enough
+    /// in the wild to shortcut through the table instead of the numeric parser.
+    private static let namedEntities: [Substring: Character] = [
+        "amp": "&", "lt": "<", "gt": ">", "quot": "\"", "apos": "'",
+        "#39": "'", "#x27": "'", "#X27": "'",
+    ]
+
     private static func decode(entity: Substring) -> Character? {
-        switch entity {
-        case "amp": return "&"
-        case "lt": return "<"
-        case "gt": return ">"
-        case "quot": return "\""
-        case "apos": return "'"
-        case "#39": return "'"
-        case "#x27", "#X27": return "'"
-        default: break
+        if let named = self.namedEntities[entity] {
+            return named
         }
+        return self.decodeNumericEntity(entity)
+    }
+
+    /// Decimal (`&#39;`) and hex (`&#x27;`) numeric character references.
+    private static func decodeNumericEntity(_ entity: Substring) -> Character? {
         guard entity.first == "#" else { return nil }
         let body = entity.dropFirst()
-        let scalar: UInt32? = if let f = body.first, f == "x" || f == "X" {
+        let scalar: UInt32? = if let firstChar = body.first, firstChar == "x" || firstChar == "X" {
             UInt32(body.dropFirst(), radix: 16)
         } else {
             UInt32(body, radix: 10)
