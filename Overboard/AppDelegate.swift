@@ -74,66 +74,82 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 let command = notification.object as? String
                 obTrace("debug command received: \(command ?? "nil")")
                 MainActor.assumeIsolated {
-                    let overlay = AppServices.shared.overlay
-                    let launcher = AppServices.shared.launcher
-                    let emoji = AppServices.shared.emojiPicker
-
-                    // "launcher-query:21*2" — payload after the first colon.
-                    if let command, command.hasPrefix("launcher-query:") {
-                        launcher.setQuery(String(command.dropFirst("launcher-query:".count)))
-                        return
-                    }
-                    if let command, command.hasPrefix("launcher-scope:"),
-                       let scope = LauncherScope(rawValue: String(command.dropFirst("launcher-scope:".count)))
-                    {
-                        AppServices.shared.launcherViewModel.setScope(scope)
-                        return
-                    }
-                    if let command, command.hasPrefix("emoji-query:") {
-                        emoji.setQuery(String(command.dropFirst("emoji-query:".count)))
-                        return
-                    }
-
-                    switch command {
-                    case "toggle": overlay.toggle()
-                    case "show": overlay.show()
-                    case "hide": overlay.hide()
-                    case "commit": overlay.commitSelection()
-                    case "commit-plain": overlay.commitSelection(mode: .plainText)
-                    case "pin": overlay.togglePinSelection()
-                    case "delete": overlay.deleteSelection()
-                    case "preview": overlay.togglePreviewSelection()
-                    case "next": overlay.moveSelection(1)
-                    case "prev": overlay.moveSelection(-1)
-                    case "extend": overlay.extendSelection(1)
-                    case "palette": overlay.togglePalette()
-                    case "stack": overlay.addSelectedToStack()
-                    case "appearance-light": NSApp.appearance = NSAppearance(named: .aqua)
-                    case "appearance-dark": NSApp.appearance = NSAppearance(named: .darkAqua)
-                    case "launcher-toggle": launcher.toggle()
-                    case "launcher-show": launcher.show()
-                    case "launcher-browse": launcher.show(scope: .clipboard, query: "")
-                    case "launcher-preview": AppServices.shared.launcherViewModel.togglePreview()
-                    case "launcher-palette": AppServices.shared.launcherViewModel.togglePalette()
-                    case "launcher-hide": launcher.hide()
-                    case "launcher-commit": launcher.commitSelection()
-                    case "launcher-commit-cmd": launcher.commitSelection(modifier: .command)
-                    case "launcher-commit-opt": launcher.commitSelection(modifier: .option)
-                    case "launcher-next": launcher.moveSelection(1)
-                    case "launcher-prev": launcher.moveSelection(-1)
-                    case "emoji-toggle": emoji.toggle()
-                    case "emoji-show": emoji.show()
-                    case "emoji-hide": emoji.hide()
-                    case "emoji-commit": emoji.commitSelection()
-                    case "emoji-commit-cmd": emoji.commitSelection(copyOnly: true)
-                    case "emoji-next": emoji.moveSelection(.right)
-                    case "emoji-prev": emoji.moveSelection(.left)
-                    case "emoji-down": emoji.moveSelection(.down)
-                    case "emoji-up": emoji.moveSelection(.up)
-                    default: break
-                    }
+                    Self.handleDebugCommand(command)
                 }
             }
+        }
+
+        /// Dispatches one debug command. The three query/scope commands carry a
+        /// payload after the first colon (e.g. "launcher-query:21*2"); every
+        /// other command is a fixed name looked up in a table so adding one
+        /// doesn't add a branch here. Keep the exact command names —
+        /// `scripts/demo-screenshots.sh` sends them.
+        @MainActor
+        private static func handleDebugCommand(_ command: String?) {
+            let overlay = AppServices.shared.overlay
+            let launcher = AppServices.shared.launcher
+            let emoji = AppServices.shared.emojiPicker
+
+            if let command, command.hasPrefix("launcher-query:") {
+                launcher.setQuery(String(command.dropFirst("launcher-query:".count)))
+                return
+            }
+            if let command, command.hasPrefix("launcher-scope:"),
+               let scope = LauncherScope(rawValue: String(command.dropFirst("launcher-scope:".count)))
+            {
+                AppServices.shared.launcherViewModel.setScope(scope)
+                return
+            }
+            if let command, command.hasPrefix("emoji-query:") {
+                emoji.setQuery(String(command.dropFirst("emoji-query:".count)))
+                return
+            }
+            guard let command else { return }
+            Self.debugCommandActions(overlay: overlay, launcher: launcher, emoji: emoji)[command]?()
+        }
+
+        private static func debugCommandActions(
+            overlay: OverlayController,
+            launcher: LauncherPanelController,
+            emoji: EmojiPanelController
+        ) -> [String: () -> Void] {
+            [
+                "toggle": { overlay.toggle() },
+                "show": { overlay.show() },
+                "hide": { overlay.hide() },
+                "commit": { overlay.commitSelection() },
+                "commit-plain": { overlay.commitSelection(mode: .plainText) },
+                "pin": { overlay.togglePinSelection() },
+                "delete": { overlay.deleteSelection() },
+                "preview": { overlay.togglePreviewSelection() },
+                "next": { overlay.moveSelection(1) },
+                "prev": { overlay.moveSelection(-1) },
+                "extend": { overlay.extendSelection(1) },
+                "palette": { overlay.togglePalette() },
+                "stack": { overlay.addSelectedToStack() },
+                "appearance-light": { NSApp.appearance = NSAppearance(named: .aqua) },
+                "appearance-dark": { NSApp.appearance = NSAppearance(named: .darkAqua) },
+                "launcher-toggle": { launcher.toggle() },
+                "launcher-show": { launcher.show() },
+                "launcher-browse": { launcher.show(scope: .clipboard, query: "") },
+                "launcher-preview": { AppServices.shared.launcherViewModel.togglePreview() },
+                "launcher-palette": { AppServices.shared.launcherViewModel.togglePalette() },
+                "launcher-hide": { launcher.hide() },
+                "launcher-commit": { launcher.commitSelection() },
+                "launcher-commit-cmd": { launcher.commitSelection(modifier: .command) },
+                "launcher-commit-opt": { launcher.commitSelection(modifier: .option) },
+                "launcher-next": { launcher.moveSelection(1) },
+                "launcher-prev": { launcher.moveSelection(-1) },
+                "emoji-toggle": { emoji.toggle() },
+                "emoji-show": { emoji.show() },
+                "emoji-hide": { emoji.hide() },
+                "emoji-commit": { emoji.commitSelection() },
+                "emoji-commit-cmd": { emoji.commitSelection(copyOnly: true) },
+                "emoji-next": { emoji.moveSelection(.right) },
+                "emoji-prev": { emoji.moveSelection(.left) },
+                "emoji-down": { emoji.moveSelection(.down) },
+                "emoji-up": { emoji.moveSelection(.up) },
+            ]
         }
     #endif
 }
