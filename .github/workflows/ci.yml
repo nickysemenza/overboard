@@ -58,7 +58,7 @@ jobs:
       # invalidates it automatically. Cuts most of the "resolve + fetch +
       # compile dependencies" time on a cache hit.
       - name: Cache SwiftPM dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             OverboardKit/.build
@@ -127,7 +127,7 @@ jobs:
         run: echo "id=$(swift --version 2>&1 | shasum | cut -c1-12)" >> "$GITHUB_OUTPUT"
 
       - name: Cache SwiftPM dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             OverboardKit/.build
