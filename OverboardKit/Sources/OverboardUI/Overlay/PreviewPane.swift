@@ -1,5 +1,4 @@
 import AppKit
-import MarkdownUI
 import OverboardCore
 import SwiftUI
 
@@ -7,16 +6,23 @@ import SwiftUI
 /// place of the card strip while the drawer panel is expanded.
 struct PreviewPane: View {
     @Bindable var viewModel: DrawerViewModel
-    @FocusState private var editorFocused: Bool
-    @Environment(\.colorScheme) private var colorScheme
-    @State private var fullText: String?
-    @State private var highlightedCode: NSAttributedString?
-    @State private var markdownSource: String?
-    @State private var showRawMarkdown = false
-    @State private var largeImage: NSImage?
-    @State private var related: [ClipItem] = []
+    /// `internal`: read/set from `content` in PreviewPane+Content.swift.
+    @FocusState var editorFocused: Bool
+    /// `internal`: read from `load()` in PreviewPane+Loading.swift.
+    @Environment(\.colorScheme) var colorScheme
+    /// `internal`: read from PreviewPane+Content.swift, set from
+    /// PreviewPane+Loading.swift.
+    @State var fullText: String?
+    @State var highlightedCode: NSAttributedString?
+    @State var markdownSource: String?
+    @State var showRawMarkdown = false
+    @State var largeImage: NSImage?
+    /// `internal`: set from `load()` in PreviewPane+Loading.swift.
+    @State var related: [ClipItem] = []
 
-    private var item: ClipItem? {
+    /// `internal`: read from PreviewPane+Content.swift and
+    /// PreviewPane+Loading.swift.
+    var item: ClipItem? {
         self.viewModel.selectedItem
     }
 
@@ -118,62 +124,6 @@ struct PreviewPane: View {
         .help("Open source page — \(source)")
     }
 
-    @ViewBuilder
-    private var content: some View {
-        if self.viewModel.previewState == .editing {
-            TextEditor(text: self.$viewModel.editText)
-                .font(.body)
-                .focused(self.$editorFocused)
-                .scrollContentBackground(.hidden)
-                .padding(6)
-                .background(.background.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
-        } else if let item {
-            switch item.kind {
-            case .text, .link, .file:
-                if let markdownSource, !self.showRawMarkdown {
-                    ScrollView {
-                        Markdown(markdownSource)
-                            .markdownTheme(.basic)
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(10)
-                    }
-                    .scrollEdgeEffectStyle(.soft, for: .top)
-                    .background(.background.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
-                } else if let highlightedCode {
-                    CodeTextView(attributed: highlightedCode)
-                        .background(.background.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
-                } else {
-                    ScrollView {
-                        Text(self.fullText ?? item.previewText ?? "")
-                            .font(item.kind == .file ? .body.monospaced() : .body)
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(10)
-                    }
-                    .scrollEdgeEffectStyle(.soft, for: .top)
-                    .background(.background.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
-                }
-            case .image:
-                if let largeImage {
-                    Image(nsImage: largeImage)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                } else {
-                    ProgressView()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
-            case .color:
-                Image(systemName: "paintpalette.fill")
-                    .font(.largeTitle)
-                    .contrastAwareForeground(.quaternary)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-        }
-    }
-
     private var relatedStrip: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Related")
@@ -227,56 +177,6 @@ struct PreviewPane: View {
         }
         parts.append(item.lastUsedAt.formatted(date: .abbreviated, time: .shortened))
         return parts.joined(separator: " · ")
-    }
-
-    private func load() async {
-        self.fullText = nil
-        self.highlightedCode = nil
-        self.markdownSource = nil
-        self.showRawMarkdown = false
-        self.largeImage = nil
-        self.related = []
-        guard let item else { return }
-        let store = self.viewModel.storeForCards
-
-        switch item.kind {
-        case .text, .link:
-            let text = try? await store.plainText(for: item.id)
-            self.fullText = text
-            if let text, item.kind == .text, !item.isSecret {
-                if item.category == "code" {
-                    let highlighted = await CodeHighlighter.highlight(text, dark: self.colorScheme == .dark)
-                    guard !Task.isCancelled else { return }
-                    self.highlightedCode = highlighted
-                } else if MarkdownDetector.looksLikeMarkdown(text) {
-                    // Checked before looksLikeCode: a README's fenced block
-                    // trips the code heuristic, and the clip would never
-                    // render as markdown.
-                    self.markdownSource = text
-                } else if CodeHighlighter.looksLikeCode(text) {
-                    let highlighted = await CodeHighlighter.highlight(text, dark: self.colorScheme == .dark)
-                    guard !Task.isCancelled else { return }
-                    self.highlightedCode = highlighted
-                }
-            }
-        case .file:
-            if let paths = try? await store.filePaths(for: item.id), !paths.isEmpty {
-                self.fullText = paths.joined(separator: "\n")
-            }
-        case .image:
-            if let rep = try? await store.representations(for: item.id)
-                .first(where: { $0.uti == WellKnownUTI.png }),
-                let data = try? await store.payload(for: rep)
-            {
-                self.largeImage = ItemCardView.thumbnail(from: data, maxPixel: 1600)
-            }
-        case .color:
-            break
-        }
-
-        // Similar items by embedding proximity. Silent-fail to empty — the
-        // strip simply doesn't render when there are no matches or no vector.
-        self.related = await (try? store.relatedItems(to: item.id)) ?? []
     }
 }
 
