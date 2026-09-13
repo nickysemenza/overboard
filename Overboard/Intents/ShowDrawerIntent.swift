@@ -11,7 +11,7 @@ struct ShowDrawerIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
-        AppServices.shared.overlay.show()
+        IntentDependencies.current.showDrawer()
         return .result()
     }
 }

@@ -48,16 +48,15 @@ final class AppServices {
     let captureState = CaptureState()
     let updates = UpdateChecker()
 
-    /// One long-lived link fetcher, reused for every preview. A per-fetch
-    /// `LinkMetadataFetcher()` builds a delegate-backed `URLSession` that retains
-    /// itself (and its `RedirectGuard`) until invalidated — which a value type
-    /// can't do in `deinit` — so constructing one per link leaked a session each
-    /// time. Sharing one session (safe for concurrent tasks) removes the leak.
-    private nonisolated static let linkFetcher = LinkMetadataFetcher()
-
     let store: ClipStore
     let monitor: ClipboardMonitor
     let pasteback: PastebackService
+    /// Post-ingest OCR / link / LLM enrichment, shared by the ingest loop and
+    /// the link-backfill job.
+    private let enrichment: ClipEnrichmentPipeline
+    /// Side effects for `ClipAction`, plus the shared copy/paste helpers the
+    /// launcher callbacks and the App Intents (via `copyString`) go through.
+    private let actions: ClipActionExecutor
     let overlay: OverlayController
     let launcher: LauncherPanelController
     let spotify: SpotifyNowPlayingMonitor
@@ -71,10 +70,9 @@ final class AppServices {
     let stack = PasteStack()
 
     private var ingestTask: Task<Void, Never>?
-    private var purgeTask: Task<Void, Never>?
-    private var secretSweepTask: Task<Void, Never>?
-    private var maintenanceTask: Task<Void, Never>?
-    private var linkBackfillTask: Task<Void, Never>?
+    /// Purge, secret expiry, blob/VACUUM sweep, and link backfill, as one
+    /// start/stop unit.
+    private let maintenance: MaintenanceScheduler
     private let logger = Logger(subsystem: "com.nickysemenza.overboard", category: "app")
 
     private init() {
@@ -123,6 +121,26 @@ final class AppServices {
         }
         self.monitor = ClipboardMonitor()
         self.pasteback = PastebackService(store: self.store)
+        self.enrichment = ClipEnrichmentPipeline(store: self.store) {
+            ClipEnrichmentPipeline.Settings(
+                richLinkPreviews: Defaults[.richLinkPreviews],
+                aiFeatures: Defaults[.aiFeatures]
+            )
+        }
+        let stack = self.stack
+        self.actions = ClipActionExecutor(
+            store: self.store,
+            pasteback: self.pasteback,
+            flash: { HUDController.shared.flash($0) },
+            addToStack: { items in
+                for item in items {
+                    stack.push(item)
+                }
+            }
+        )
+        self.maintenance = MaintenanceScheduler(
+            jobs: Self.maintenanceJobs(store: self.store, enrichment: self.enrichment, logger: self.logger)
+        )
         self.overlay = OverlayController(store: self.store, stack: self.stack)
         let spotify = SpotifyNowPlayingMonitor()
         self.spotify = spotify
@@ -223,10 +241,7 @@ final class AppServices {
     /// exits. Called from `AppDelegate.applicationWillTerminate`.
     func stop() {
         self.ingestTask?.cancel()
-        self.purgeTask?.cancel()
-        self.secretSweepTask?.cancel()
-        self.maintenanceTask?.cancel()
-        self.linkBackfillTask?.cancel()
+        self.maintenance.stop()
         self.updates.stop()
         if !Self.isDemo {
             self.monitor.stop()
@@ -260,6 +275,7 @@ final class AppServices {
         self.monitor.start()
 
         let store = store
+        let enrichment = self.enrichment
         let snapshots = self.monitor.snapshots
         self.ingestTask = Task(priority: .utility) { [logger] in
             for await snapshot in snapshots {
@@ -281,7 +297,7 @@ final class AppServices {
                         // Fire-and-forget so a slow OCR/LLM pass never delays
                         // capturing the next copy.
                         Task.detached(priority: .utility) {
-                            await AppServices.enrich(item: item, snapshot: snapshot, store: store)
+                            await enrichment.enrich(item: item, snapshot: snapshot)
                         }
                     }
                 } catch {
@@ -290,24 +306,37 @@ final class AppServices {
             }
         }
 
-        // Trim history (and orphaned blobs) on launch and hourly thereafter.
-        self.purgeTask = Task(priority: .background) { [logger] in
-            while !Task.isCancelled {
+        self.maintenance.start()
+    }
+
+    /// The recurring background chores, as data. `MaintenanceScheduler` owns
+    /// the cancel-aware loop and the sleeps; each job just does one pass and
+    /// says whether it wants another.
+    private nonisolated static func maintenanceJobs(
+        store: ClipStore,
+        enrichment: ClipEnrichmentPipeline,
+        logger: Logger
+    ) -> [MaintenanceJob] {
+        [
+            // Trim history (and orphaned blobs) on launch and hourly thereafter.
+            MaintenanceJob(name: "purge", interval: .seconds(3600)) {
                 let limit = Defaults[.historyLimit]
                 do {
                     try await store.purge(keepingLatest: max(limit, 100))
                 } catch {
                     logger.error("purge failed: \(String(describing: error), privacy: .public)")
                 }
-                try? await Task.sleep(for: .seconds(3600))
-            }
-        }
+                return .repeatLater
+            },
 
-        // Reclaim orphaned blob files and compact the DB on launch, then daily.
-        self.maintenanceTask = Task(priority: .background) { [logger] in
-            // Let launch settle before the first (VACUUM-heavy) pass.
-            try? await Task.sleep(for: .seconds(30))
-            while !Task.isCancelled {
+            // Reclaim orphaned blob files and compact the DB on launch, then
+            // daily — after letting launch settle, since the first pass is
+            // VACUUM-heavy.
+            MaintenanceJob(
+                name: "maintenance sweep",
+                interval: .seconds(24 * 3600),
+                initialDelay: .seconds(30)
+            ) {
                 do {
                     let result = try await store.maintenanceSweep()
                     if result.orphanedBlobsDeleted > 0 || result.missingBlobs > 0 {
@@ -319,45 +348,42 @@ final class AppServices {
                 } catch {
                     logger.error("maintenance sweep failed: \(String(describing: error), privacy: .public)")
                 }
-                try? await Task.sleep(for: .seconds(24 * 3600))
-            }
-        }
+                return .repeatLater
+            },
 
-        // Backfill rich-link metadata for existing links, once per launch.
-        // Runs 60s after launch (let capture/OCR settle first), then drains the
-        // queue in small batches with a pause between fetches to stay a polite
-        // network citizen. Stops when no links remain; picks up again next launch.
-        self.linkBackfillTask = Task(priority: .background) { [logger] in
-            try? await Task.sleep(for: .seconds(60))
-            guard Defaults[.richLinkPreviews] else { return }
-            while !Task.isCancelled {
+            // Backfill rich-link metadata for existing links, once per launch.
+            // Starts 60s after launch (let capture/OCR settle first), then drains
+            // the queue in small batches with a pause between fetches to stay a
+            // polite network citizen. Stops when no links remain; picks up again
+            // next launch.
+            MaintenanceJob(name: "link backfill", interval: .zero, initialDelay: .seconds(60)) {
+                guard Defaults[.richLinkPreviews] else { return .finished }
                 let links: [ClipItem]
                 do {
                     links = try await store.linksNeedingMetadata(limit: 25)
                 } catch {
                     logger.error("link backfill query failed: \(String(describing: error), privacy: .public)")
-                    return
+                    return .finished
                 }
-                guard !links.isEmpty else { return }
+                guard !links.isEmpty else { return .finished }
                 for link in links {
-                    if Task.isCancelled { return }
-                    await Self.fetchLinkMetadata(for: link, store: store)
+                    if Task.isCancelled { return .finished }
+                    await enrichment.fetchLinkMetadata(for: link)
                     try? await Task.sleep(for: .seconds(1))
                 }
-            }
-        }
+                return .repeatLater
+            },
 
-        // Detected secrets expire on a short leash, swept every minute.
-        self.secretSweepTask = Task(priority: .background) {
-            while !Task.isCancelled {
+            // Detected secrets expire on a short leash, swept every minute.
+            MaintenanceJob(name: "secret sweep", interval: .seconds(60)) {
                 let ttlMinutes = Defaults[.secretTTLMinutes]
                 if ttlMinutes > 0 {
                     let cutoff = Date().addingTimeInterval(-Double(ttlMinutes) * 60)
                     try? await store.purgeExpiredSecrets(olderThan: cutoff)
                 }
-                try? await Task.sleep(for: .seconds(60))
-            }
-        }
+                return .repeatLater
+            },
+        ]
     }
 
     /// Spotify now-playing: observe playback broadcasts, refresh an open panel
@@ -759,7 +785,7 @@ final class AppServices {
     /// alone; only the plain-text flavor — which is what the transforms target
     /// and what these rules exist to normalize — is rewritten. No matching rule
     /// (the common case) returns the snapshot untouched.
-    nonisolated static func applyingAutoTransforms(to snapshot: PasteboardSnapshot) -> PasteboardSnapshot {
+    private nonisolated static func applyingAutoTransforms(to snapshot: PasteboardSnapshot) -> PasteboardSnapshot {
         let rules = Preferences.currentAutoTransformRules()
         guard !rules.isEmpty,
               let index = snapshot.reps.firstIndex(where: { $0.uti == WellKnownUTI.plainText }),
@@ -772,200 +798,19 @@ final class AppServices {
         return adjusted
     }
 
-    /// Post-ingest enrichment: OCR for images (always), then LLM title +
-    /// category (Apple Intelligence + setting enabled). Runs off the ingest
-    /// loop; every step is best-effort.
-    /// @concurrent: OCR is sync CPU work and must not land on the main actor.
-    /// Plain `nonisolated async` would inherit the caller's actor under
-    /// NonisolatedNonsendingByDefault, so the hop off main is made explicit.
-    @concurrent
-    private nonisolated static func enrich(item: ClipItem, snapshot: PasteboardSnapshot, store: ClipStore) async {
-        // Only fresh, non-secret items; bumped duplicates are already enriched.
-        guard item.useCount == 1, !item.isSecret else { return }
-
-        var textForLabeling: String?
-
-        if item.kind == .image,
-           let png = snapshot.reps.first(where: { $0.uti == WellKnownUTI.png })?.data
-        {
-            // Attach even empty results so textless images are marked as
-            // OCR-attempted (searchText '' vs NULL).
-            let recognized = await ImageTextRecognizer.recognizeText(in: png) ?? ""
-            try? await store.attachRecognizedText(itemID: item.id, text: recognized)
-            textForLabeling = recognized.isEmpty ? nil : recognized
-        } else if item.kind == .text {
-            textForLabeling = snapshot.reps
-                .first { $0.uti == WellKnownUTI.plainText }
-                .flatMap { String(data: $0.data, encoding: .utf8) }
-        } else if item.kind == .link, Defaults[.richLinkPreviews] {
-            await Self.fetchLinkMetadata(for: item, store: store)
-        }
-
-        guard Defaults[.aiFeatures],
-              ClipEnricher.isAvailable,
-              let text = textForLabeling,
-              text.count >= 80
-        else { return }
-
-        guard let enrichment = try? await ClipEnricher.enrich(text: text) else { return }
-        // Short clips show fully on the card; a summary only earns its
-        // space once the preview truncates.
-        let summary = text.count >= ClipEnricher.summaryWorthwhileLength
-            ? enrichment.summary : nil
-        try? await store.attachEnrichment(
-            itemID: item.id,
-            title: enrichment.title,
-            category: enrichment.category,
-            summary: summary
-        )
-    }
-
-    /// Fetches rich-link metadata for one `.link` item and attaches it (or the
-    /// empty-title sentinel on failure, so it's marked attempted and won't be
-    /// retried by backfill). Guards on fetchability; nil-URL / unfetchable links
-    /// still get the sentinel. Shared by post-ingest enrichment and backfill.
-    @concurrent
-    private nonisolated static func fetchLinkMetadata(for item: ClipItem, store: ClipStore) async {
-        guard let preview = item.previewText,
-              let url = URL(string: preview.trimmingCharacters(in: .whitespacesAndNewlines)),
-              LinkMetadataFetcher.isFetchable(url)
-        else {
-            // Not fetchable → record the sentinel so we don't re-check every pass.
-            try? await store.attachLinkMetadata(
-                itemID: item.id, title: "", description: nil, faviconPNG: nil, previewImagePNG: nil
-            )
-            return
-        }
-        let metadata = await Self.linkFetcher.fetch(url)
-        try? await store.attachLinkMetadata(
-            itemID: item.id,
-            title: metadata?.title ?? "",
-            description: metadata?.description,
-            faviconPNG: metadata?.faviconPNG,
-            previewImagePNG: metadata?.previewImagePNG
-        )
-    }
-
-    /// Prefetches payloads, runs the pure action, then executes its effect.
+    /// Runs one action's side effects against the current selection.
     private func runAction(_ action: ClipAction, on items: [ClipItem], target: NSRunningApplication?) async {
-        var inputs: [ActionInput] = []
-        for item in items {
-            let text = try? await self.store.plainText(for: item.id)
-            var fileURLs: [URL] = []
-            if item.kind == .file,
-               let rep = try? await self.store.representations(for: item.id)
-               .first(where: { $0.uti == WellKnownUTI.fileURLs }),
-               let data = try? await self.store.payload(for: rep),
-               let strings = try? JSONDecoder().decode([String].self, from: data)
-            {
-                fileURLs = strings.compactMap(URL.init(string:))
-            }
-            inputs.append(ActionInput(item: item, plainText: text, fileURLs: fileURLs))
-        }
-
-        switch action.run(inputs) {
-        case let .pasteText(text):
-            self.pasteString(text, into: target)
-
-        case let .copyText(text, hud):
-            self.copyString(text, hud: hud)
-
-        case let .openURLs(urls):
-            for url in urls {
-                NSWorkspace.shared.open(url)
-            }
-
-        case let .revealFiles(urls):
-            NSWorkspace.shared.activateFileViewerSelecting(urls)
-
-        case let .saveImage(itemID):
-            await self.saveImageToDownloads(itemID: itemID)
-
-        case let .openImage(itemID):
-            await self.openImageInPreview(itemID: itemID)
-
-        case let .addToStack(items):
-            for item in items {
-                self.stack.push(item)
-            }
-            HUDController.shared.flash("\(items.count) items on the stack — ⌥⌘V to paste")
-
-        case let .showMessage(message):
-            HUDController.shared.flash(message)
-        }
+        await self.actions.run(action, on: items, target: target)
     }
 
-    private func openImageInPreview(itemID: String) async {
-        guard let rep = try? await self.store.representations(for: itemID)
-            .first(where: { $0.uti == WellKnownUTI.png }),
-            let data = try? await self.store.payload(for: rep)
-        else {
-            HUDController.shared.flash("Couldn't open image")
-            return
-        }
-        let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("Overboard-\(itemID).png")
-        do {
-            try data.write(to: url)
-        } catch {
-            HUDController.shared.flash("Couldn't open image")
-            return
-        }
-        // Force Preview.app to match the action's label, falling back to the
-        // system default PNG handler if it's somehow missing.
-        if let preview = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Preview") {
-            do {
-                _ = try await NSWorkspace.shared.open(
-                    [url],
-                    withApplicationAt: preview,
-                    configuration: NSWorkspace.OpenConfiguration()
-                )
-            } catch {
-                NSWorkspace.shared.open(url)
-            }
-        } else {
-            NSWorkspace.shared.open(url)
-        }
-    }
-
-    private func saveImageToDownloads(itemID: String) async {
-        guard let rep = try? await self.store.representations(for: itemID)
-            .first(where: { $0.uti == WellKnownUTI.png }),
-            let data = try? await self.store.payload(for: rep),
-            let downloads = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
-        else {
-            HUDController.shared.flash("Couldn't save image")
-            return
-        }
-        let stamp = Date().formatted(.iso8601.year().month().day().timeSeparator(.omitted).time(includingFractionalSeconds: false))
-        let url = downloads.appendingPathComponent("Overboard \(stamp).png")
-        do {
-            try data.write(to: url)
-            HUDController.shared.flash("Saved to Downloads")
-        } catch {
-            HUDController.shared.flash("Couldn't save image")
-        }
-    }
-
-    /// Writes to the pasteboard with the monitor's marker type so the copy
-    /// doesn't re-enter history, then flashes the HUD. Internal (not private)
-    /// so the App Intents in Intents/ can reuse the same copy path.
+    /// Marker-tagged copy + HUD. Internal (not private) so the App Intents in
+    /// Intents/ can reuse the same copy path.
     func copyString(_ text: String, hud: String) {
-        let pbItem = NSPasteboardItem()
-        pbItem.setString(text, forType: .string)
-        pbItem.setData(Data(), forType: ClipboardMonitor.markerType)
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.writeObjects([pbItem])
-        HUDController.shared.flash(hud)
+        self.actions.copyString(text, hud: hud)
     }
 
     private func pasteString(_ text: String, into target: NSRunningApplication?) {
-        let restore = Defaults[.restoreClipboard]
-        let outcome = self.pasteback.pasteText(text, into: target, restoreClipboard: restore)
-        if outcome == .copiedOnly {
-            HUDController.shared.flash("Copied — press ⌘V to paste")
-            PermissionService.promptIfNeeded()
-        }
+        self.actions.pasteString(text, into: target)
     }
 
     /// Shared paste path: applies per-app plain-text rules, falls back to

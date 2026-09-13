@@ -20,15 +20,18 @@ struct SearchClipboardIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<String> & ProvidesDialog {
-        let store = AppServices.shared.store
+        let store = IntentDependencies.current.store
         // The store's own FTS/frecency search; a few extra results are pulled
         // so a secret sitting above the true best (text) match doesn't block it.
-        let results = try await store.search(self.query, limit: 10)
-        guard let item = results.first(where: { !$0.isSecret }) else {
+        let results = try await store.search(self.query, limit: ClipLookup.searchScanLimit)
+        guard let item = ClipLookup.firstUsable(in: results) else {
             return .result(value: "", dialog: "No matching clip found in Overboard")
         }
 
-        let text = await (try? store.plainText(for: item.id)) ?? item.previewText ?? ""
-        return .result(value: text, dialog: "Found a match in Overboard")
+        let text = try? await store.plainText(for: item.id)
+        return .result(
+            value: ClipLookup.resultText(plainText: text, fallback: item.previewText),
+            dialog: "Found a match in Overboard"
+        )
     }
 }

@@ -10,7 +10,7 @@ struct ShowLauncherIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
-        AppServices.shared.launcher.show()
+        IntentDependencies.current.showLauncher()
         return .result()
     }
 }
