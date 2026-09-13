@@ -5,18 +5,24 @@ import SwiftUI
 /// Owns the launcher panel lifecycle: summon, position, key handling,
 /// dismiss. Same shape as OverlayController, but centered Spotlight-style
 /// and with a vertical-list keyboard model.
+///
+/// Split across extensions in this directory: `LauncherPanelController+Panel.swift`
+/// (NSPanel/window sizing and positioning) and `LauncherPanelController+Keys.swift`
+/// (keyboard event handling). A few stored properties below are `internal`
+/// rather than `private` purely so those extensions can read/write them;
+/// none of that widening reaches past this module's public API.
 public final class LauncherPanelController {
-    private let viewModel: LauncherViewModel
-    private let store: ClipStore
-    private var panel: OverlayPanel?
-    private var keyMonitor: Any?
-    private var clickMonitor: Any?
-    private var resignObserver: NSObjectProtocol?
+    let viewModel: LauncherViewModel
+    let store: ClipStore
+    var panel: OverlayPanel?
+    var keyMonitor: Any?
+    var clickMonitor: Any?
+    var resignObserver: NSObjectProtocol?
 
     /// When the launcher was last dismissed; reopening within `resumeWindow`
     /// resumes the previous text, otherwise the bar opens fresh.
     private var lastHiddenAt: Date?
-    private static let resumeWindow: TimeInterval = 10
+    static let resumeWindow: TimeInterval = 10
 
     /// The app that was frontmost when the launcher was summoned — i.e.
     /// where a pasted calculator result should land.
@@ -52,94 +58,103 @@ public final class LauncherPanelController {
     /// Called as the launcher is dismissed (stops running-app observation).
     public var onWillHide: () -> Void = {}
 
-    private enum Metrics {
-        static let panelWidth: CGFloat = 740
-        /// Reserve the result viewport before showing the window. Rows and
-        /// section headings scroll inside it instead of moving the search field.
-        static let panelHeight: CGFloat = 612
-        static let previewWidth: CGFloat = 1020
-        static let previewHeight: CGFloat = 650
-        static let clipboardFilterHeight: CGFloat = 36
-    }
-
     public init(store: ClipStore, viewModel: LauncherViewModel) {
         self.store = store
         self.viewModel = viewModel
-        viewModel.onCopyText = { [weak self] text in
+        self.configureFileActions()
+        self.configureClipActions()
+        self.configureMiscActions()
+    }
+
+    /// Wires the callbacks whose completion is "hide the panel, then hand the
+    /// file/text payload to the app layer". Split out of `init` (along with
+    /// `configureClipActions`/`configureMiscActions` below) purely to keep
+    /// each function's cyclomatic complexity down — every closure here is the
+    /// same `guard let self else { return }` shape `init` used to repeat inline.
+    private func configureFileActions() {
+        self.viewModel.onCopyText = { [weak self] text in
             guard let self else { return }
             self.hide()
             self.onCopyText(text)
         }
-        viewModel.onPasteText = { [weak self] text in
+        self.viewModel.onPasteText = { [weak self] text in
             guard let self else { return }
             let target = self.targetApp
             self.hide()
             self.onPasteText(text, target)
         }
-        viewModel.onOpenFile = { [weak self] url in
+        self.viewModel.onOpenFile = { [weak self] url in
             guard let self else { return }
             self.hide()
             self.onOpenFile(url)
         }
-        viewModel.onRevealFile = { [weak self] url in
+        self.viewModel.onRevealFile = { [weak self] url in
             guard let self else { return }
             self.hide()
             self.onRevealFile(url)
         }
-        viewModel.onCopyPath = { [weak self] path in
+        self.viewModel.onCopyPath = { [weak self] path in
             guard let self else { return }
             self.hide()
             self.onCopyPath(path)
         }
-        viewModel.onOpenWebSearch = { [weak self] url in
+        self.viewModel.onOpenWebSearch = { [weak self] url in
             guard let self else { return }
             self.hide()
             self.onOpenWebSearch(url)
         }
-        viewModel.onOpenSystemSetting = { [weak self] url in
+    }
+
+    /// See `configureFileActions`: the clipboard/snippet/command callbacks.
+    private func configureClipActions() {
+        self.viewModel.onOpenSystemSetting = { [weak self] url in
             guard let self else { return }
             self.hide()
             self.onOpenSystemSetting(url)
         }
-        viewModel.onPasteClip = { [weak self] item, mode in
+        self.viewModel.onPasteClip = { [weak self] item, mode in
             guard let self else { return }
             // Capture before hide() — hiding clears targetApp.
             let target = self.targetApp
             self.hide()
             self.onPasteClip(item, mode, target)
         }
-        viewModel.onCopyClip = { [weak self] item in
+        self.viewModel.onCopyClip = { [weak self] item in
             guard let self else { return }
             self.hide()
             self.onCopyClip(item)
         }
-        viewModel.onPasteSnippet = { [weak self] snippet in
+        self.viewModel.onPasteSnippet = { [weak self] snippet in
             guard let self else { return }
             let target = self.targetApp
             self.hide()
             self.onPasteSnippet(snippet, target)
         }
-        viewModel.onCopySnippet = { [weak self] snippet in
+        self.viewModel.onCopySnippet = { [weak self] snippet in
             guard let self else { return }
             self.hide()
             self.onCopySnippet(snippet)
         }
-        viewModel.onRunCommand = { [weak self] command in
+        self.viewModel.onRunCommand = { [weak self] command in
             guard let self else { return }
             self.hide()
             self.onRunCommand(command)
         }
-        viewModel.onCopyNowPlayingLink = { [weak self] track in
+    }
+
+    /// See `configureFileActions`: now-playing/AI/app and layout callbacks.
+    private func configureMiscActions() {
+        self.viewModel.onCopyNowPlayingLink = { [weak self] track in
             guard let self else { return }
             self.hide()
             self.onCopyNowPlayingLink(track)
         }
-        viewModel.onOpenSpotify = { [weak self] track in
+        self.viewModel.onOpenSpotify = { [weak self] track in
             guard let self else { return }
             self.hide()
             self.onOpenSpotify(track)
         }
-        viewModel.onAskAI = { [weak self] prompt, delivery in
+        self.viewModel.onAskAI = { [weak self] prompt, delivery in
             guard let self else { return }
             // Capture before hide() — hiding clears targetApp — so a pasted
             // result lands in the app that was frontmost when we were summoned.
@@ -147,17 +162,17 @@ public final class LauncherPanelController {
             self.hide()
             self.onAskAI(prompt, delivery, target)
         }
-        viewModel.onQuitApp = { [weak self] url in
+        self.viewModel.onQuitApp = { [weak self] url in
             guard let self else { return }
             self.hide()
             self.onQuitApp(url)
         }
-        viewModel.onOpenClipLink = { [weak self] url in
+        self.viewModel.onOpenClipLink = { [weak self] url in
             guard let self else { return }
             self.hide()
             self.onOpenClipLink(url)
         }
-        viewModel.onLayoutChanged = { [weak self] in
+        self.viewModel.onLayoutChanged = { [weak self] in
             self?.resizePanel()
         }
     }
@@ -253,184 +268,5 @@ public final class LauncherPanelController {
         self.panel?.orderOut(nil)
         self.targetApp = nil
         self.lastHiddenAt = Date()
-    }
-
-    // MARK: - Setup
-
-    private func makePanel() -> OverlayPanel {
-        let panel = OverlayPanel(
-            contentRect: NSRect(x: 0, y: 0, width: Metrics.panelWidth, height: Metrics.panelHeight)
-        )
-        let hosting = NSHostingView(
-            rootView: LauncherView(viewModel: self.viewModel, store: self.store)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        )
-        panel.contentView = hosting
-        return panel
-    }
-
-    private func frame(on screen: NSScreen) -> NSRect {
-        let visible = screen.visibleFrame
-        let width = min(self.viewModel.showsPreview ? Metrics.previewWidth : Metrics.panelWidth, visible.width - 40)
-        var height = self.viewModel.showsPreview ? Metrics.previewHeight : Metrics.panelHeight
-        if self.viewModel.scope == .clipboard {
-            height += Metrics.clipboardFilterHeight
-        }
-        height = min(height, visible.height - 60)
-        let compactHeight = min(Metrics.panelHeight, visible.height - 60)
-        let top = min(visible.maxY - 30, visible.midY + compactHeight / 2 + 60)
-        return NSRect(
-            x: visible.midX - width / 2,
-            y: max(visible.minY + 30, top - height),
-            width: width,
-            height: height
-        )
-    }
-
-    /// Only an explicit scope/preview change can resize the panel. Keep its
-    /// top edge anchored and avoid resetting an unchanged AppKit frame.
-    /// Animates like the drawer's own resize, gated the same way on Reduce
-    /// Motion.
-    private func resizePanel() {
-        guard let panel, panel.isVisible else { return }
-        let screen = panel.screen ?? self.screenWithMouse()
-        let frame = self.frame(on: screen)
-        guard panel.frame != frame else { return }
-        panel.setFrame(frame, display: true, animate: !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
-    }
-
-    /// The ⌘K palette fits inside the reserved result viewport.
-    private func setPaletteOpen(_ open: Bool) {
-        guard open != self.viewModel.isPaletteOpen else { return }
-        self.viewModel.togglePalette()
-    }
-
-    private func screenWithMouse() -> NSScreen {
-        let mouse = NSEvent.mouseLocation
-        return NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) }
-            ?? NSScreen.main
-            ?? NSScreen.screens[0]
-    }
-
-    // MARK: - Event monitors
-
-    private func installMonitors() {
-        // Everything not handled here falls through to the text field.
-        self.keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self, let panel = self.panel, event.window === panel else { return event }
-
-            // The ⌘K palette owns the keyboard while open (mirrors the drawer):
-            // esc closes only the palette, ↑/↓ move its selection, ↩ runs it.
-            if self.viewModel.isPaletteOpen {
-                switch KeyCode(rawValue: event.keyCode) {
-                case .escape: // closes the palette, not the launcher
-                    self.setPaletteOpen(false)
-                    return nil
-                case .returnKey, .keypadEnter: // runs the highlighted action
-                    self.viewModel.runPaletteAction()
-                    return nil
-                case .upArrow:
-                    self.viewModel.movePaletteSelection(-1)
-                    return nil
-                case .downArrow:
-                    self.viewModel.movePaletteSelection(1)
-                    return nil
-                default: // typing filters
-                    return event
-                }
-            }
-
-            let scopeKeys: [KeyCode] = [.one, .two, .three, .four]
-            if event.modifierFlags.contains(.command),
-               let index = scopeKeys.firstIndex(where: { $0.rawValue == event.keyCode })
-            {
-                self.viewModel.setScope(LauncherScope.allCases[index])
-                return nil
-            }
-            switch KeyCode(rawValue: event.keyCode) {
-            case .y where event.modifierFlags.contains(.command): // ⌘Y previews without consuming query spaces
-                self.viewModel.togglePreview()
-                return nil
-            case .escape:
-                if self.viewModel.isPreviewVisible {
-                    self.viewModel.togglePreview(); return nil
-                }
-                // Two-stage Esc (matches EmojiPanelController): a non-empty
-                // query is cleared first; only a second Esc, pressed once the
-                // bar is already empty, dismisses the panel. Record the query
-                // before blanking it: `hide()` also records, but by then it
-                // sees "" — without this, an abandoned search never reaches
-                // the recents list, and Esc is how most searches end.
-                if !self.viewModel.query.isEmpty {
-                    self.viewModel.recordCurrentQuery()
-                    self.viewModel.query = ""
-                    self.viewModel.scheduleSearch()
-                    return nil
-                }
-                self.hide()
-                return nil
-            case .upArrow:
-                self.viewModel.moveSelection(-1)
-                return nil
-            case .downArrow:
-                self.viewModel.moveSelection(1)
-                return nil
-            case .k where event.modifierFlags.contains(.command): // ⌘K action palette
-                self.setPaletteOpen(!self.viewModel.isPaletteOpen)
-                return nil
-            case .delete where event.modifierFlags.contains(.command): // ⌘⌫
-                // Delete the highlighted recent search; fall through to normal
-                // text editing when the selected row isn't a recent.
-                return self.viewModel.deleteSelectedRecent() ? nil : event
-            case .returnKey, .keypadEnter:
-                let modifier: LauncherViewModel.CommitModifier = if event.modifierFlags.contains(.command) {
-                    .command
-                } else if event.modifierFlags.contains(.option) {
-                    .option
-                } else {
-                    .none
-                }
-                self.viewModel.commit(modifier: modifier)
-                return nil
-            default:
-                return event
-            }
-        }
-
-        // Click anywhere outside the panel dismisses.
-        self.clickMonitor = NSEvent.addGlobalMonitorForEvents(
-            matching: [.leftMouseDown, .rightMouseDown]
-        ) { [weak self] _ in
-            MainActor.assumeIsolated {
-                self?.hide()
-            }
-        }
-
-        // Per-panel object: also hides us when the drawer steals key, which
-        // is the drawer↔launcher mutual exclusion.
-        self.resignObserver = NotificationCenter.default.addObserver(
-            forName: NSWindow.didResignKeyNotification,
-            object: self.panel,
-            queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated {
-                self?.hide()
-            }
-        }
-    }
-
-    private func removeMonitors() {
-        if let keyMonitor {
-            NSEvent.removeMonitor(keyMonitor)
-        }
-        if let clickMonitor {
-            NSEvent.removeMonitor(clickMonitor)
-        }
-        if let resignObserver {
-            NotificationCenter.default.removeObserver(resignObserver)
-        }
-        self.keyMonitor = nil
-        self.clickMonitor = nil
-        self.resignObserver = nil
     }
 }
