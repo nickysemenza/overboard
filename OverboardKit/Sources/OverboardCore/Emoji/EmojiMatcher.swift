@@ -20,28 +20,28 @@ public enum EmojiMatcher {
     /// How `query` matches one emoji's name/keywords, or nil for no match.
     /// Query and fields are folded so "café" and "cafe" behave the same.
     public static func score(query: String, emoji: Emoji) -> Match? {
-        let q = AppMatcher.fold(query)
-        guard !q.isEmpty else { return nil }
+        let foldedQuery = AppMatcher.fold(query)
+        guard !foldedQuery.isEmpty else { return nil }
         let name = AppMatcher.fold(emoji.name)
         // Exact beats prefix so "fire" selects 🔥, not whichever fire-prefixed
         // name (firefighter) happens to come first in catalog order.
-        if name == q {
+        if name == foldedQuery {
             return .nameExact
         }
-        if name.hasPrefix(q) {
+        if name.hasPrefix(foldedQuery) {
             return .namePrefix
         }
-        if name.split(separator: " ").dropFirst().contains(where: { $0.hasPrefix(q) }) {
+        if name.split(separator: " ").dropFirst().contains(where: { $0.hasPrefix(foldedQuery) }) {
             return .nameWordPrefix
         }
-        if name.contains(q) {
+        if name.contains(foldedQuery) {
             return .nameSubstring
         }
         let keywords = emoji.keywords.lazy.map { AppMatcher.fold($0) }
-        if keywords.contains(where: { $0.hasPrefix(q) }) {
+        if keywords.contains(where: { $0.hasPrefix(foldedQuery) }) {
             return .keywordPrefix
         }
-        if keywords.contains(where: { $0.contains(q) }) {
+        if keywords.contains(where: { $0.contains(foldedQuery) }) {
             return .keywordSubstring
         }
         return nil
@@ -50,11 +50,11 @@ public enum EmojiMatcher {
     /// Matching emoji, best first; ties keep catalog (CLDR display) order so
     /// results are stable and the canonical emoji for a word leads its variants.
     public static func rank(query: String, in emoji: [Emoji], limit: Int = 120) -> [Emoji] {
-        let q = query.trimmingCharacters(in: .whitespaces)
-        guard !q.isEmpty else { return [] }
+        let trimmedQuery = query.trimmingCharacters(in: .whitespaces)
+        guard !trimmedQuery.isEmpty else { return [] }
 
         let scored: [(index: Int, match: Match)] = emoji.enumerated().compactMap { index, candidate in
-            guard let match = score(query: q, emoji: candidate) else { return nil }
+            guard let match = score(query: trimmedQuery, emoji: candidate) else { return nil }
             return (index, match)
         }
 

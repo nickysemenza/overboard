@@ -65,7 +65,7 @@ public struct EmojiCatalog: Sendable {
     public static func load(isRenderable: (String) -> Bool = { _ in true }) -> EmojiCatalog {
         guard let url = Bundle.module.url(forResource: "emoji", withExtension: "json"),
               let data = try? Data(contentsOf: url),
-              let entries = try? JSONDecoder().decode([Entry].self, from: data)
+              let entries = try? JSONDecoder().decode([EmojiCatalogEntry].self, from: data)
         else {
             assertionFailure("bundled emoji.json missing or malformed")
             return EmojiCatalog(all: [])
@@ -104,20 +104,37 @@ public struct EmojiCatalog: Sendable {
         }
         return unsupported
     }
+}
 
-    /// Compact on-disk schema — see scripts/generate-emoji-data.swift.
-    private struct Entry: Decodable {
-        let e: String
-        let n: String
-        let k: [String]
-        let c: String
-        let v: Double
+/// Compact on-disk schema — see scripts/generate-emoji-data.swift.
+private struct EmojiCatalogEntry: Decodable {
+    let emojiCharacter: String
+    let name: String
+    let keywords: [String]
+    let categoryRawValue: String
+    let version: Double
 
-        /// nil for unknown category raw values, so a dataset regenerated
-        /// against a newer emojibase can't crash an older app build.
-        var emoji: Emoji? {
-            guard let category = EmojiCategory(rawValue: self.c) else { return nil }
-            return Emoji(character: self.e, name: self.n, keywords: self.k, category: category, version: self.v)
-        }
+    /// Swift property names read naturally; the raw JSON keys (`e`, `n`,
+    /// `k`, `c`, `v`) match scripts/generate-emoji-data.swift's compact
+    /// on-disk schema byte-for-byte.
+    enum CodingKeys: String, CodingKey {
+        case emojiCharacter = "e"
+        case name = "n"
+        case keywords = "k"
+        case categoryRawValue = "c"
+        case version = "v"
+    }
+
+    /// nil for unknown category raw values, so a dataset regenerated
+    /// against a newer emojibase can't crash an older app build.
+    var emoji: Emoji? {
+        guard let category = EmojiCategory(rawValue: self.categoryRawValue) else { return nil }
+        return Emoji(
+            character: self.emojiCharacter,
+            name: self.name,
+            keywords: self.keywords,
+            category: category,
+            version: self.version
+        )
     }
 }
