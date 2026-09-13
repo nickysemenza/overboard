@@ -274,12 +274,14 @@ public final class LauncherPanelController {
 
     /// Only an explicit scope/preview change can resize the panel. Keep its
     /// top edge anchored and avoid resetting an unchanged AppKit frame.
+    /// Animates like the drawer's own resize, gated the same way on Reduce
+    /// Motion.
     private func resizePanel() {
         guard let panel, panel.isVisible else { return }
         let screen = panel.screen ?? self.screenWithMouse()
         let frame = self.frame(on: screen)
         guard panel.frame != frame else { return }
-        panel.setFrame(frame, display: true)
+        panel.setFrame(frame, display: true, animate: !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
     }
 
     /// The ⌘K palette fits inside the reserved result viewport.
@@ -336,6 +338,14 @@ public final class LauncherPanelController {
                 return nil
             case .escape:
                 if self.viewModel.isPreviewVisible { self.viewModel.togglePreview(); return nil }
+                // Two-stage Esc (matches EmojiPanelController): a non-empty
+                // query is cleared first; only a second Esc, pressed once the
+                // bar is already empty, dismisses the panel.
+                if !self.viewModel.query.isEmpty {
+                    self.viewModel.query = ""
+                    self.viewModel.scheduleSearch()
+                    return nil
+                }
                 self.hide()
                 return nil
             case .upArrow:

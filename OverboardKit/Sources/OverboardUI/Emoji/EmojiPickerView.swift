@@ -7,6 +7,10 @@ import SwiftUI
 public struct EmojiPickerView: View {
     @Bindable var viewModel: EmojiPickerViewModel
     @FocusState private var fieldFocused: Bool
+    /// The mouse-hovered cell, tracked separately from `viewModel.selectedIndex`
+    /// so resting the pointer over the grid can no longer steal the keyboard
+    /// selection — only a click (or ↩) commits.
+    @State private var hoveredIndex: Int?
 
     public init(viewModel: EmojiPickerViewModel) {
         self.viewModel = viewModel
@@ -66,12 +70,15 @@ public struct EmojiPickerView: View {
                                 let flatIndex = section.start + offset
                                 EmojiCell(
                                     emoji: emoji,
-                                    isSelected: flatIndex == self.viewModel.selectedIndex
+                                    isSelected: flatIndex == self.viewModel.selectedIndex,
+                                    isHovered: flatIndex == self.hoveredIndex
                                 )
                                 .id(EmojiPickerViewModel.cellID(section: sectionIndex, character: emoji.character))
                                 .onHover { hovering in
                                     if hovering {
-                                        self.viewModel.selectedIndex = flatIndex
+                                        self.hoveredIndex = flatIndex
+                                    } else if self.hoveredIndex == flatIndex {
+                                        self.hoveredIndex = nil
                                     }
                                 }
                                 .onTapGesture {
@@ -112,20 +119,24 @@ public struct EmojiPickerView: View {
 struct EmojiCell: View {
     let emoji: Emoji
     let isSelected: Bool
+    var isHovered: Bool = false
 
     var body: some View {
         Text(self.emoji.character)
             .font(.system(size: 24))
             .frame(maxWidth: .infinity)
             .frame(height: 38)
-            .background(
-                self.isSelected ? Color.accentColor.opacity(0.22) : .clear,
-                in: RoundedRectangle(cornerRadius: 8)
-            )
+            .background(self.fill, in: RoundedRectangle(cornerRadius: 8))
             .contentShape(RoundedRectangle(cornerRadius: 8))
             .help(self.emoji.name)
             .accessibilityLabel(self.emoji.name)
             .accessibilityAddTraits(self.isSelected ? .isSelected : [])
+    }
+
+    private var fill: Color {
+        if self.isSelected { return Color.accentColor.opacity(0.22) }
+        if self.isHovered { return Color.primary.opacity(0.06) }
+        return .clear
     }
 }
 

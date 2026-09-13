@@ -24,17 +24,42 @@ struct LauncherScopeTests {
         #expect(!model.isSearching)
     }
 
-    @Test func firstSelectionTracksBestResultUntilUserNavigates() async {
+    /// Regression test for a selection-stability bug in `setResults`: a
+    /// slower secondary provider landing after the instant pass could
+    /// re-sort a *better* match to the top of the list and silently move the
+    /// selection onto it — so a row read a moment ago could commit a
+    /// different one by the time ↩ was pressed. The fix anchors to the
+    /// previous top row across a same-generation splice (`resultsAreStale`
+    /// stays false through it) and only resets to index 0 on a genuinely new
+    /// query. This test used to assert the opposite (selection "tracking" the
+    /// newly best-ranked row) — that was the bug, not the intended behavior.
+    @Test func selectionStaysOnTheInitialTopResultAcrossALateResort() async {
         let file = LauncherResult.file(name: "hello.txt", url: URL(fileURLWithPath: "/tmp/hello.txt"))
         let model = LauncherViewModel(secondaryProviders: [DelayedLauncherProvider(rows: [file], delay: .milliseconds(40))])
         model.query = "hello"
         model.scheduleSearch()
         await self.waitForSearch(model)
-        #expect(model.selectedResult == file)
+        // The delayed file provider outranks the instant pass's lone
+        // web-search row once it lands and re-sorts the list...
+        #expect(model.results.first == file)
+        // ...but the selection must stay put rather than silently follow it.
+        guard case .webSearch = model.selectedResult else {
+            Issue.record("expected the instant pass's web row to still be selected, got \(String(describing: model.selectedResult))")
+            return
+        }
         var opened: URL?
         model.onOpenFile = { opened = $0 }
+        var searched = false
+        model.onOpenWebSearch = { _ in searched = true }
         model.commit()
-        #expect(opened?.lastPathComponent == "hello.txt")
+        #expect(searched)
+        #expect(opened == nil)
+
+        // Moving the selection still works normally once the user acts. The
+        // file row now sorts first, so moving "up" from the still-selected
+        // web row (last, since there are only two rows) reaches it.
+        model.moveSelection(-1)
+        #expect(model.selectedResult == file)
     }
 
     @Test func lateResultsCannotReplaceManualSelection() async {

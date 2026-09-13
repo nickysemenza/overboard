@@ -19,7 +19,6 @@ struct ItemCardView: View {
     var onPreview: () -> Void = {}
 
     @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var thumbnail: NSImage?
     @State private var hovering = false
     @State private var miniCode: NSAttributedString?
@@ -64,16 +63,9 @@ struct ItemCardView: View {
             radius: self.isSelected ? 9 : 0,
             y: 4
         )
-        .animation(.spring(response: 0.25, dampingFraction: 0.7), value: self.isSelected)
-        .onHover { isHovering in
-            if self.reduceMotion {
-                self.hovering = isHovering
-            } else {
-                withAnimation(.easeOut(duration: 0.12)) {
-                    self.hovering = isHovering
-                }
-            }
-        }
+        .motion(.spring(response: 0.25, dampingFraction: 0.7), value: self.isSelected)
+        .motion(.easeOut(duration: 0.12), value: self.hovering)
+        .onHover { self.hovering = $0 }
         .task(id: self.item.id) {
             await self.loadThumbnailIfNeeded()
         }

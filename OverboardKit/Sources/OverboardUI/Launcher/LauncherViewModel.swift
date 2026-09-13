@@ -458,6 +458,15 @@ public final class LauncherViewModel {
         return LauncherActions.actions(for: self.results[self.selectedIndex], context: self.actionContext)
     }
 
+    /// Actions for an arbitrary row, not just the selected one — powers each
+    /// row's VoiceOver accessibility actions (a non-selected row must still
+    /// list what it can do), sharing `selectedActions`' running-app context
+    /// rule for app rows.
+    public func actions(for result: LauncherResult) -> [LauncherAction] {
+        let isRunning: Bool = if case let .app(_, url) = result { self.runningAppPaths.contains(url.path) } else { false }
+        return LauncherActions.actions(for: result, context: LauncherActionContext(isAppRunning: isRunning))
+    }
+
     /// The row's primary (↩) action — what the footer bar advertises.
     public var primaryAction: LauncherAction? {
         self.selectedActions.first
@@ -654,7 +663,27 @@ public final class LauncherViewModel {
     }
 
     private func setResults(_ newResults: [LauncherResult], preserveSelection: Bool = false) {
-        let anchor = preserveSelection && self.userSelected ? self.selectedResult?.id : nil
+        // Anchoring, in priority order:
+        //  - A manual selection always wins: re-find that row by id.
+        //  - Otherwise, as long as the on-screen list still belongs to the
+        //    current query (`!resultsAreStale`), keep whatever row was on
+        //    top instead of snapping to whatever now sorts first. Without
+        //    this, a slower provider's later bucket could re-sort the list
+        //    and swap the top row out from under the user between reading it
+        //    and pressing ↩ — `resultsAreStale` is exactly the signal for
+        //    "this is a same-generation splice, not a fresh query": it's set
+        //    true by `scheduleSearch`'s reset and only cleared by the first
+        //    `setResults` call that lands for the new query, so a later
+        //    splice within that same search always sees it false.
+        //  - A genuinely new query (`resultsAreStale` still true) falls
+        //    through to index 0, same as before.
+        let anchor: String? = if preserveSelection, self.userSelected {
+            self.selectedResult?.id
+        } else if preserveSelection, !self.resultsAreStale {
+            self.results.first?.id
+        } else {
+            nil
+        }
         let prefix = AppMatcher.fold(self.query.trimmingCharacters(in: .whitespacesAndNewlines)) + "\u{1F}"
         let usage = Dictionary(uniqueKeysWithValues: Defaults[.launcherSelectionUsage].compactMap { key, value in
             key.hasPrefix(prefix) ? (String(key.dropFirst(prefix.count)), value) : nil

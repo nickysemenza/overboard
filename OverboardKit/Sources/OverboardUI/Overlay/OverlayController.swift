@@ -260,6 +260,14 @@ public final class OverlayController {
 
             switch KeyCode(rawValue: event.keyCode) {
             case .escape:
+                // Two-stage Esc (matches EmojiPanelController/LauncherPanelController):
+                // a non-empty query is cleared first; the drawer only dismisses
+                // once Esc is pressed again with an already-empty query.
+                if !self.viewModel.query.isEmpty {
+                    self.viewModel.query = ""
+                    self.viewModel.scheduleSearch()
+                    return nil
+                }
                 self.hide()
                 return nil
             case .space where self.viewModel.query.isEmpty && self.viewModel.mode == .history: // previews

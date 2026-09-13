@@ -36,6 +36,15 @@ extension View {
         modifier(CardEntrance(index: index))
     }
 
+    /// Applies `animation` to changes in `value`, unless Reduce Motion is
+    /// enabled — in which case the change lands instantly, same as passing
+    /// `nil` to `.animation(_:value:)` directly. Centralizes that check so
+    /// call sites (selection tint, card hover) don't each read
+    /// `accessibilityReduceMotion` themselves.
+    func motion(_ animation: Animation, value: some Equatable) -> some View {
+        modifier(ReducedMotionAnimation(animation: animation, value: value))
+    }
+
     /// Liquid Glass panel chrome shared by every summonable surface.
     ///
     /// Pass `id` + `namespace` when this shape sits alongside a sibling glass
@@ -50,6 +59,52 @@ extension View {
     /// (the HUD's capsule).
     func glassPanel(shape: some Shape, id: String? = nil, in namespace: Namespace.ID? = nil) -> some View {
         modifier(AccessibleGlassPanel(shape: shape, id: id, namespace: namespace))
+    }
+}
+
+private struct ReducedMotionAnimation<Value: Equatable>: ViewModifier {
+    let animation: Animation
+    let value: Value
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content.animation(self.reduceMotion ? nil : self.animation, value: self.value)
+    }
+}
+
+/// Button chrome for the launcher's selectable rows: a selected tint
+/// (`Color.accentColor.opacity(0.20)` per DESIGN.md), a quiet hover tint, and a
+/// slightly stronger pressed tint. The tint lives in a nested `RowBody` view
+/// (rather than reading `configuration.isPressed` straight in `makeBody`)
+/// because that's what lets the style track hover state — `ButtonStyle`
+/// itself can't hold `@State`.
+struct LauncherRowButtonStyle: ButtonStyle {
+    let isSelected: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        RowBody(configuration: configuration, isSelected: self.isSelected)
+    }
+
+    private struct RowBody: View {
+        let configuration: ButtonStyleConfiguration
+        let isSelected: Bool
+        @State private var isHovering = false
+
+        var body: some View {
+            self.configuration.label
+                .background(self.fill, in: RoundedRectangle(cornerRadius: 8))
+                .onHover { self.isHovering = $0 }
+                .motion(.snappy(duration: 0.12), value: self.isSelected)
+        }
+
+        private var fill: Color {
+            if self.isSelected {
+                return self.configuration.isPressed ? Color.accentColor.opacity(0.28) : Color.accentColor.opacity(0.20)
+            }
+            if self.configuration.isPressed { return Color.primary.opacity(0.10) }
+            if self.isHovering { return Color.primary.opacity(0.06) }
+            return .clear
+        }
     }
 }
 
