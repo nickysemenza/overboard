@@ -12,9 +12,9 @@ private func textSnapshot(_ text: String, source: String? = "com.apple.TextEdit"
     )
 }
 
-private func fileSnapshot(_ paths: [String]) -> PasteboardSnapshot {
+private func fileSnapshot(_ paths: [String]) throws -> PasteboardSnapshot {
     let urls = paths.map { URL(fileURLWithPath: $0).absoluteString }
-    let data = try! JSONEncoder().encode(urls)
+    let data = try JSONEncoder().encode(urls)
     return PasteboardSnapshot(
         reps: [
             .init(uti: WellKnownUTI.fileURLs, data: data),
@@ -53,8 +53,8 @@ struct ClassifierTests {
         #expect(result?.kind == .text)
     }
 
-    @Test func classifiesFiles() {
-        let result = CaptureClassifier.classify(fileSnapshot(["/tmp/report.pdf", "/tmp/notes.txt"]))
+    @Test func classifiesFiles() throws {
+        let result = try CaptureClassifier.classify(fileSnapshot(["/tmp/report.pdf", "/tmp/notes.txt"]))
         #expect(result?.kind == .file)
         #expect(result?.previewText == "report.pdf, notes.txt")
         #expect(result?.searchText == "report.pdf notes.txt")
@@ -70,11 +70,11 @@ struct ClassifierTests {
     }
 
     @Test func hashIsStableAndContentBased() {
-        let a = CaptureClassifier.classify(textSnapshot("same content", source: "com.app.one"))
-        let b = CaptureClassifier.classify(textSnapshot("same content", source: "com.app.two"))
-        let c = CaptureClassifier.classify(textSnapshot("different content"))
-        #expect(a?.contentHash == b?.contentHash)
-        #expect(a?.contentHash != c?.contentHash)
+        let first = CaptureClassifier.classify(textSnapshot("same content", source: "com.app.one"))
+        let second = CaptureClassifier.classify(textSnapshot("same content", source: "com.app.two"))
+        let third = CaptureClassifier.classify(textSnapshot("different content"))
+        #expect(first?.contentHash == second?.contentHash)
+        #expect(first?.contentHash != third?.contentHash)
     }
 
     @Test func sameBytesDifferentKindHashDifferently() {
@@ -191,9 +191,9 @@ struct ClipStoreTests {
     @Test func purgeTrimsHistoryAndKeepsPinned() async throws {
         let store = try makeStore()
         var pinnedID: String?
-        for i in 0 ..< 10 {
-            let item = try await store.ingest(textSnapshot("clip number \(i)"))
-            if i == 0 {
+        for index in 0 ..< 10 {
+            let item = try await store.ingest(textSnapshot("clip number \(index)"))
+            if index == 0 {
                 pinnedID = item?.id
             }
         }
@@ -220,10 +220,12 @@ struct ClipStoreTests {
 
         func bigImage(_ byte: UInt8) -> PasteboardSnapshot {
             PasteboardSnapshot(
-                reps: [.init(
-                    uti: WellKnownUTI.png,
-                    data: Data(repeating: byte, count: Representation.inlineThreshold + 1)
-                )],
+                reps: [
+                    .init(
+                        uti: WellKnownUTI.png,
+                        data: Data(repeating: byte, count: Representation.inlineThreshold + 1)
+                    ),
+                ],
                 sourceBundleID: "com.example.app",
                 sourceAppName: "Example"
             )
@@ -237,8 +239,8 @@ struct ClipStoreTests {
         let survivorHash = try #require(await store.representations(for: survivor.id).first?.blobHash)
 
         // Push the victim past the keep window with small (inline) text clips.
-        for i in 0 ..< 5 {
-            _ = try await store.ingest(textSnapshot("filler \(i)"))
+        for index in 0 ..< 5 {
+            _ = try await store.ingest(textSnapshot("filler \(index)"))
         }
         #expect(blobs.exists(hash: victimHash))
 
