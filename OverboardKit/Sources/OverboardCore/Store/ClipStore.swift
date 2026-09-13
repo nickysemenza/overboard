@@ -41,6 +41,25 @@ public struct LibraryStats: Sendable {
 
 /// The single owner of all persistence: items, representations, FTS index,
 /// embeddings, and blob files. Everything mutating goes through this actor.
+///
+/// Still an actor, but for its *executor*, not for exclusion. Every query and
+/// mutation now goes through GRDB's async API, so the actor is released the
+/// moment the I/O starts: an `ingest` no longer pins the actor (and a
+/// cooperative-pool thread) for the whole write, and a `search` typed
+/// underneath it enters immediately and runs on one of `DatabasePool`'s WAL
+/// readers alongside it. The actor survives the conversion because this package
+/// builds with `NonisolatedNonsendingByDefault` — a plain `Sendable` final
+/// class would run each method's body (capture classification, cosine scoring,
+/// blob file reads) on the *caller's* executor, which for the launcher, drawer,
+/// and every intent is the main actor. Actor isolation is what keeps that work
+/// off the main thread; `embeddingCache` is the only mutable state it guards.
+///
+/// What the old synchronous bodies got for free is now explicit: since every
+/// method suspends, actor atomicity no longer separates blob writes from blob
+/// deletions. GRDB's single writer does that instead — **every blob-file
+/// mutation happens inside a `dbWriter` write block** (`ingest`, `purge`,
+/// `purgeExpiredSecrets`, `reconcileOrphanBlobs`), so a fresh blob can never be
+/// reclaimed as an orphan between its file appearing and its row landing.
 public actor ClipStore {
     private let dbWriter: any DatabaseWriter
     private let blobs: BlobStore
@@ -68,24 +87,29 @@ public actor ClipStore {
     /// Classifies, dedupes, and persists a snapshot.
     /// Returns the stored (or bumped) item, or nil if the snapshot was skipped.
     @discardableResult
-    public func ingest(_ snapshot: PasteboardSnapshot) throws -> ClipItem? {
+    public func ingest(_ snapshot: PasteboardSnapshot) async throws -> ClipItem? {
         guard let classified = CaptureClassifier.classify(snapshot) else { return nil }
 
-        // Write large payloads to the blob store first. Content-addressing
-        // makes this idempotent, so an orphaned blob from a failed transaction
-        // is harmless and reclaimed by purge.
-        var reps: [(uti: String, data: Data?, blobHash: String?, byteSize: Int)] = []
-        for rep in snapshot.reps {
-            if rep.data.count < Representation.inlineThreshold {
-                reps.append((rep.uti, rep.data, nil, rep.data.count))
-            } else {
-                let hash = try blobs.store(rep.data)
-                reps.append((rep.uti, nil, hash, rep.data.count))
-            }
-        }
-
         let now = snapshot.capturedAt
-        let stored: (item: ClipItem, isNew: Bool)? = try self.dbWriter.write { db in
+        let blobs = self.blobs
+        let snapshotReps = snapshot.reps
+        let stored: (item: ClipItem, isNew: Bool)? = try await self.dbWriter.write { db in
+            // Write large payloads to the blob store first. Content-addressing
+            // makes this idempotent, so an orphaned blob from a failed transaction
+            // is harmless and reclaimed by purge. Inside the write block on
+            // purpose: holding GRDB's single writer is what now keeps a fresh
+            // blob from being reclaimed by a concurrent `purge` or sweep before
+            // its representation row exists (see the type's doc comment).
+            var reps: [(uti: String, data: Data?, blobHash: String?, byteSize: Int)] = []
+            for rep in snapshotReps {
+                if rep.data.count < Representation.inlineThreshold {
+                    reps.append((rep.uti, rep.data, nil, rep.data.count))
+                } else {
+                    let hash = try blobs.store(rep.data)
+                    reps.append((rep.uti, nil, hash, rep.data.count))
+                }
+            }
+
             // Dedupe: same content already live → bump it to the top.
             if let existing = try ClipItem
                 .filter(sql: "contentHash = ? AND deletedAt IS NULL", arguments: [classified.contentHash])
@@ -168,7 +192,7 @@ public actor ClipStore {
         {
             // Best-effort; semantic search simply won't find this item if the
             // model is unavailable.
-            try? self.storeEmbedding(itemID: stored.item.id, text: searchText)
+            try? await self.storeEmbedding(itemID: stored.item.id, text: searchText)
         }
         return stored.item
     }
@@ -184,8 +208,8 @@ public actor ClipStore {
     static let frecencyOrderSQL =
         "isPinned DESC, (julianday(lastUsedAt) + 0.04 * min(useCount, 8)) DESC"
 
-    public func recent(limit: Int = 100) throws -> [ClipItem] {
-        try self.dbWriter.read { db in
+    public func recent(limit: Int = 100) async throws -> [ClipItem] {
+        try await self.dbWriter.read { db in
             try ClipItem
                 .filter(sql: "deletedAt IS NULL")
                 .order(sql: Self.frecencyOrderSQL)
@@ -196,8 +220,8 @@ public actor ClipStore {
 
     /// Counts of live items grouped by kind and by source app, plus the
     /// heaviest items, for the History settings tab.
-    public func libraryStats(topSources: Int = 5, topLargest: Int = 5) throws -> LibraryStats {
-        try self.dbWriter.read { db in
+    public func libraryStats(topSources: Int = 5, topLargest: Int = 5) async throws -> LibraryStats {
+        try await self.dbWriter.read { db in
             let total = try Int.fetchOne(
                 db, sql: "SELECT COUNT(*) FROM item WHERE deletedAt IS NULL"
             ) ?? 0
@@ -254,16 +278,18 @@ public actor ClipStore {
 
     /// FTS search ranked by bm25 blended with recency. The query may carry
     /// `kind:` / `app:` / `category:` operators (see ParsedQuery).
-    public func search(_ query: String, limit: Int = 100) throws -> [ClipItem] {
+    public func search(_ query: String, limit: Int = 100) async throws -> [ClipItem] {
         let state = self.searchSignposter.beginInterval("ClipStore.search")
         defer { self.searchSignposter.endInterval("ClipStore.search", state) }
         let parsed = ParsedQuery.parse(query)
         let match = FTSQuery.match(for: parsed.text)
 
-        guard match != nil || parsed.hasFilters else { return try self.recent(limit: limit) }
+        guard match != nil || parsed.hasFilters else { return try await self.recent(limit: limit) }
 
         var conditions = ["item.deletedAt IS NULL"]
-        var arguments: [DatabaseValueConvertible] = []
+        // Optional element type so `StatementArguments(_:)` below resolves to the
+        // non-failable initializer without a contextual type to steer it.
+        var arguments: [(any DatabaseValueConvertible)?] = []
         if let literal = SearchMatcher.literalTerm(parsed.text) {
             conditions.append("instr(LOWER(item.searchText), ?) > 0")
             arguments.append(literal)
@@ -306,17 +332,22 @@ public actor ClipStore {
         }
         arguments.append(limit)
 
-        return try self.dbWriter.read { db in
-            try ClipItem.fetchAll(db, sql: sql, arguments: StatementArguments(arguments))
+        // `arguments` is an array of existentials; bind it before the closure so
+        // only the `Sendable` StatementArguments crosses into GRDB's reader.
+        let bound = StatementArguments(arguments)
+        return try await self.dbWriter.read { db in
+            try ClipItem.fetchAll(db, sql: sql, arguments: bound)
         }
     }
 
     /// Browser filters are applied before LIMIT, including OCR-backed FTS hits.
-    public func browseHistory(_ query: String, filter: ClipboardFilter = ClipboardFilter(), limit: Int = 200) throws -> [ClipItem] {
+    public func browseHistory(_ query: String, filter: ClipboardFilter = ClipboardFilter(), limit: Int = 200) async throws -> [ClipItem] {
         let parsed = ParsedQuery.parse(query)
         let match = FTSQuery.match(for: parsed.text)
         var conditions = ["item.deletedAt IS NULL", "item.isSecret = 0"]
-        var arguments: [DatabaseValueConvertible] = []
+        // Optional element type so `StatementArguments(_:)` below resolves to the
+        // non-failable initializer without a contextual type to steer it.
+        var arguments: [(any DatabaseValueConvertible)?] = []
         if let literal = SearchMatcher.literalTerm(parsed.text) {
             conditions.append("instr(LOWER(item.searchText), ?) > 0")
             arguments.append(literal)
@@ -355,8 +386,10 @@ public actor ClipStore {
             order = "item.lastUsedAt DESC"
         }
         arguments.append(limit)
-        return try self.dbWriter.read { db in
-            try ClipItem.fetchAll(db, sql: "SELECT item.* FROM item \(join) WHERE \(conditions.joined(separator: " AND ")) ORDER BY \(order) LIMIT ?", arguments: StatementArguments(arguments))
+        let sql = "SELECT item.* FROM item \(join) WHERE \(conditions.joined(separator: " AND ")) ORDER BY \(order) LIMIT ?"
+        let bound = StatementArguments(arguments)
+        return try await self.dbWriter.read { db in
+            try ClipItem.fetchAll(db, sql: sql, arguments: bound)
         }
     }
 
@@ -364,10 +397,10 @@ public actor ClipStore {
     /// to fetch these one row at a time (a per-row `.task`, dozens of
     /// concurrent SQLite calls while typing); it now batches every visible
     /// clip row into a single query.
-    public func matchExcerpts(itemIDs: [String], query: String) throws -> [String: String] {
+    public func matchExcerpts(itemIDs: [String], query: String) async throws -> [String: String] {
         guard !itemIDs.isEmpty, let match = FTSQuery.match(for: ParsedQuery.parse(query).text) else { return [:] }
         let placeholders = Array(repeating: "?", count: itemIDs.count).joined(separator: ",")
-        return try self.dbWriter.read { db in
+        return try await self.dbWriter.read { db in
             let rows = try Row.fetchAll(db, sql: """
             SELECT item.id AS id, snippet(item_fts, 0, '', '', ' … ', 18) AS excerpt
             FROM item_fts JOIN item ON item.rowid = item_fts.rowid
@@ -383,8 +416,8 @@ public actor ClipStore {
         }
     }
 
-    public func representations(for itemID: String) throws -> [Representation] {
-        try self.dbWriter.read { db in
+    public func representations(for itemID: String) async throws -> [Representation] {
+        try await self.dbWriter.read { db in
             try Representation
                 .filter(sql: "itemID = ?", arguments: [itemID])
                 .fetchAll(db)
@@ -410,8 +443,8 @@ public actor ClipStore {
 
     // MARK: - Mutations
 
-    public func markUsed(id: String) throws {
-        try self.dbWriter.write { db in
+    public func markUsed(id: String) async throws {
+        try await self.dbWriter.write { db in
             try db.execute(
                 sql: """
                 UPDATE item
@@ -423,8 +456,8 @@ public actor ClipStore {
         }
     }
 
-    public func setPinned(id: String, _ pinned: Bool) throws {
-        try self.dbWriter.write { db in
+    public func setPinned(id: String, _ pinned: Bool) async throws {
+        try await self.dbWriter.write { db in
             try db.execute(
                 sql: "UPDATE item SET isPinned = ?, updatedAt = ?, lamport = lamport + 1 WHERE id = ?",
                 arguments: [pinned, Date(), id]
@@ -433,8 +466,8 @@ public actor ClipStore {
     }
 
     /// Tombstones an item (kept for future sync) and drops it from the FTS index.
-    public func delete(id: String) throws {
-        try self.dbWriter.write { db in
+    public func delete(id: String) async throws {
+        try await self.dbWriter.write { db in
             try Self.removeFromFTS(db, itemID: id)
             try db.execute(
                 sql: "UPDATE item SET deletedAt = ?, updatedAt = ?, lamport = lamport + 1 WHERE id = ?",
@@ -445,63 +478,73 @@ public actor ClipStore {
 
     /// Hard-deletes tombstones and trims history beyond `keepingLatest`
     /// (pinned items are never trimmed), then removes orphaned blobs.
-    public func purge(keepingLatest: Int) throws {
-        let candidateHashes: Set<String> = try dbWriter.write { db in
-            let victims = try String.fetchAll(
-                db,
-                sql: """
-                SELECT id FROM item WHERE deletedAt IS NOT NULL
-                UNION
-                SELECT id FROM item
-                WHERE deletedAt IS NULL AND isPinned = 0 AND id NOT IN (
-                    SELECT id FROM item
-                    WHERE deletedAt IS NULL AND isPinned = 0
-                    ORDER BY \(Self.frecencyOrderSQL)
-                    LIMIT ?
-                )
-                """,
-                arguments: [keepingLatest]
-            )
-            guard !victims.isEmpty else { return [] }
-
-            // Batched blob lookup + delete instead of a per-victim round trip:
-            // history can hold thousands of tombstones/overflow rows, and a
-            // purge used to issue two queries per row. Chunked at 500 to stay
-            // under SQLite's default ~999 bound-parameter limit.
-            var hashes: Set<String> = []
-            for chunk in victims.chunked(into: 500) {
-                let placeholders = Self.placeholders(chunk.count)
-                let chunkHashes = try String.fetchAll(
+    public func purge(keepingLatest: Int) async throws {
+        let blobs = self.blobs
+        // `writeWithoutTransaction` + an explicit transaction rather than
+        // `write`: the on-disk deletion must happen after the rows are gone
+        // *and* while this still holds GRDB's single writer, so a concurrent
+        // `ingest` can't content-address its way onto a blob that is about to
+        // be unlinked.
+        try await self.dbWriter.writeWithoutTransaction { db in
+            var candidateHashes: Set<String> = []
+            try db.inTransaction {
+                let victims = try String.fetchAll(
                     db,
-                    sql: "SELECT DISTINCT blobHash FROM representation WHERE itemID IN (\(placeholders)) AND blobHash IS NOT NULL",
-                    arguments: StatementArguments(chunk)
+                    sql: """
+                    SELECT id FROM item WHERE deletedAt IS NOT NULL
+                    UNION
+                    SELECT id FROM item
+                    WHERE deletedAt IS NULL AND isPinned = 0 AND id NOT IN (
+                        SELECT id FROM item
+                        WHERE deletedAt IS NULL AND isPinned = 0
+                        ORDER BY \(Self.frecencyOrderSQL)
+                        LIMIT ?
+                    )
+                    """,
+                    arguments: [keepingLatest]
                 )
-                hashes.formUnion(chunkHashes)
-            }
+                guard !victims.isEmpty else { return .commit }
 
-            // FTS removal needs each row's own (rowid, searchText) pair for the
-            // contentless-delete command, so it stays one call per victim.
-            for id in victims {
-                try Self.removeFromFTS(db, itemID: id)
-            }
+                // Batched blob lookup + delete instead of a per-victim round trip:
+                // history can hold thousands of tombstones/overflow rows, and a
+                // purge used to issue two queries per row. Chunked at 500 to stay
+                // under SQLite's default ~999 bound-parameter limit.
+                var hashes: Set<String> = []
+                for chunk in victims.chunked(into: 500) {
+                    let placeholders = Self.placeholders(chunk.count)
+                    let chunkHashes = try String.fetchAll(
+                        db,
+                        sql: "SELECT DISTINCT blobHash FROM representation WHERE itemID IN (\(placeholders)) AND blobHash IS NOT NULL",
+                        arguments: StatementArguments(chunk)
+                    )
+                    hashes.formUnion(chunkHashes)
+                }
 
-            for chunk in victims.chunked(into: 500) {
-                let placeholders = Self.placeholders(chunk.count)
-                try db.execute(
-                    sql: "DELETE FROM item WHERE id IN (\(placeholders))",
-                    arguments: StatementArguments(chunk)
+                // FTS removal needs each row's own (rowid, searchText) pair for the
+                // contentless-delete command, so it stays one call per victim.
+                for id in victims {
+                    try Self.removeFromFTS(db, itemID: id)
+                }
+
+                for chunk in victims.chunked(into: 500) {
+                    let placeholders = Self.placeholders(chunk.count)
+                    try db.execute(
+                        sql: "DELETE FROM item WHERE id IN (\(placeholders))",
+                        arguments: StatementArguments(chunk)
+                    )
+                }
+                // A blob is only deletable if no surviving representation references it.
+                let stillReferenced = try String.fetchSet(
+                    db,
+                    sql: "SELECT DISTINCT blobHash FROM representation WHERE blobHash IS NOT NULL"
                 )
+                candidateHashes = hashes.subtracting(stillReferenced)
+                return .commit
             }
-            // A blob is only deletable if no surviving representation references it.
-            let stillReferenced = try String.fetchSet(
-                db,
-                sql: "SELECT DISTINCT blobHash FROM representation WHERE blobHash IS NOT NULL"
-            )
-            return hashes.subtracting(stillReferenced)
-        }
 
-        for hash in candidateHashes {
-            try? self.blobs.delete(hash: hash)
+            for hash in candidateHashes {
+                try? blobs.delete(hash: hash)
+            }
         }
     }
 
@@ -526,20 +569,9 @@ public actor ClipStore {
     /// and compacts the database. Safe to run repeatedly (idempotent). Meant for
     /// startup + a daily timer; complements `purge`, which only reclaims blobs
     /// of items it deletes and can't see files left by a failed write.
-    /// `async` only so the VACUUM below runs through GRDB's async writer instead
-    /// of a synchronous actor-blocking call (VACUUM rewrites the whole file and
-    /// would otherwise hold the ClipStore actor and a cooperative-pool thread for
-    /// its full duration). The blob reconciliation stays synchronous — see
-    /// `reconcileOrphanBlobs`.
     @discardableResult
     public func maintenanceSweep() async throws -> SweepResult {
-        // Reconcile blobs synchronously so this stays atomic on the actor. If it
-        // suspended between reading the referenced set and deleting orphans, a
-        // concurrent `ingest` (also actor-isolated and synchronous) could write a
-        // new blob + representation in the gap — and that fresh blob, present on
-        // disk but absent from the now-stale referenced set, would be deleted as
-        // an orphan, corrupting the just-captured clip.
-        let result = try self.reconcileOrphanBlobs()
+        let result = try await self.reconcileOrphanBlobs()
 
         // Reclaim page space from purged rows; best-effort. The VACUUM touches no
         // blob files, so releasing the actor here is safe.
@@ -560,28 +592,36 @@ public actor ClipStore {
     }
 
     /// Deletes on-disk blobs no live representation references, and counts
-    /// references whose file is missing. Synchronous on purpose: it must not
-    /// interleave with `ingest` (see `maintenanceSweep`).
-    private func reconcileOrphanBlobs() throws -> SweepResult {
-        let referenced: Set<String> = try self.dbWriter.read { db in
-            try String.fetchSet(
+    /// references whose file is missing. The whole read → delete pass runs
+    /// inside `writeWithoutTransaction`, holding GRDB's single writer: were it
+    /// to suspend between reading the referenced set and deleting orphans, a
+    /// concurrent `ingest` could write a new blob + representation in the gap —
+    /// and that fresh blob, present on disk but absent from the now-stale
+    /// referenced set, would be deleted as an orphan, corrupting the
+    /// just-captured clip. `ingest` writes its blobs inside its own write block,
+    /// so the writer queue is what serialises the two. No transaction is opened:
+    /// this reads rows and mutates only files.
+    private func reconcileOrphanBlobs() async throws -> SweepResult {
+        let blobs = self.blobs
+        return try await self.dbWriter.writeWithoutTransaction { db in
+            let referenced = try String.fetchSet(
                 db,
                 sql: "SELECT DISTINCT blobHash FROM representation WHERE blobHash IS NOT NULL"
             )
+
+            // On-disk files no live representation points at → safe to delete.
+            let onDisk = blobs.allHashes()
+            let orphans = onDisk.subtracting(referenced)
+            var deleted = 0
+            for hash in orphans where (try? blobs.delete(hash: hash)) != nil {
+                deleted += 1
+            }
+
+            // References pointing at a file that isn't there → unrecoverable gap.
+            let missing = referenced.subtracting(onDisk).count
+
+            return SweepResult(orphanedBlobsDeleted: deleted, missingBlobs: missing)
         }
-
-        // On-disk files no live representation points at → safe to delete.
-        let onDisk = self.blobs.allHashes()
-        let orphans = onDisk.subtracting(referenced)
-        var deleted = 0
-        for hash in orphans where (try? self.blobs.delete(hash: hash)) != nil {
-            deleted += 1
-        }
-
-        // References pointing at a file that isn't there → unrecoverable gap.
-        let missing = referenced.subtracting(onDisk).count
-
-        return SweepResult(orphanedBlobsDeleted: deleted, missingBlobs: missing)
     }
 
     private static func removeFromFTS(_ db: GRDB.Database, itemID: String) throws {
@@ -601,12 +641,12 @@ public actor ClipStore {
 
     // MARK: - Semantic search
 
-    private func storeEmbedding(itemID: String, text: String) throws {
+    private func storeEmbedding(itemID: String, text: String) async throws {
         guard let embedding = sentenceEmbedding,
               let vector = embedding.vector(for: String(text.prefix(300)))
         else { return }
         let blob = EmbeddingCoder.encode(vector)
-        try self.dbWriter.write { db in
+        try await self.dbWriter.write { db in
             try db.execute(
                 sql: "INSERT OR REPLACE INTO item_embedding (itemID, vector) VALUES (?, ?)",
                 arguments: [itemID, blob]
@@ -621,7 +661,7 @@ public actor ClipStore {
         _ query: String,
         limit: Int = 10,
         minSimilarity: Double = 0.75
-    ) throws -> [ClipItem] {
+    ) async throws -> [ClipItem] {
         guard let embedding = sentenceEmbedding,
               let queryVector = embedding.vector(for: query)
         else { return [] }
@@ -630,7 +670,9 @@ public actor ClipStore {
         // whole embedding table in Swift: recent items are what people
         // actually search for, and the cap bounds memory at ~3 MB (1000 ×
         // ~768 dims × 4 bytes) regardless of how large history grows.
-        let rows = try self.dbWriter.read { db in
+        // GRDB `Row`s are not `Sendable`, so they are projected onto plain
+        // values inside the closure rather than handed back across it.
+        let rows: [(id: String, vector: Data)] = try await self.dbWriter.read { db in
             try Row.fetchAll(db, sql: """
             SELECT e.itemID, e.vector
             FROM item_embedding e
@@ -638,21 +680,21 @@ public actor ClipStore {
             WHERE i.deletedAt IS NULL
             ORDER BY i.lastUsedAt DESC
             LIMIT 1000
-            """)
+            """).map { (id: $0["itemID"] as String, vector: $0["vector"] as Data) }
         }
 
         let query32 = queryVector.map(Float.init)
         let scored: [(id: String, score: Float)] = rows.compactMap { row in
-            let vector = EmbeddingCoder.decode(row["vector"] as Data)
+            let vector = EmbeddingCoder.decode(row.vector)
             guard !vector.isEmpty else { return nil }
             let score = EmbeddingCoder.cosineSimilarity(query32, vector)
-            return score >= Float(minSimilarity) ? (row["itemID"] as String, score) : nil
+            return score >= Float(minSimilarity) ? (row.id, score) : nil
         }
 
         let topIDs = scored.sorted { $0.score > $1.score }.prefix(limit).map(\.id)
         guard !topIDs.isEmpty else { return [] }
 
-        let items = try self.dbWriter.read { db in
+        let items = try await self.dbWriter.read { db in
             try ClipItem
                 .filter(sql: "deletedAt IS NULL")
                 .filter(keys: topIDs)
@@ -673,8 +715,8 @@ public actor ClipStore {
         to itemID: String,
         limit: Int = 5,
         minSimilarity: Double = 0.8
-    ) throws -> [ClipItem] {
-        let (target, neighbours): ([Float], [(id: String, vector: Data)]) = try self.dbWriter.read { db in
+    ) async throws -> [ClipItem] {
+        let (target, neighbours): ([Float], [(id: String, vector: Data)]) = try await self.dbWriter.read { db in
             guard let targetRow = try Row.fetchOne(db, sql: """
             SELECT i.contentHash AS contentHash, e.vector AS vector
             FROM item_embedding e
@@ -716,7 +758,7 @@ public actor ClipStore {
         let topIDs = scored.sorted { $0.score > $1.score }.prefix(limit).map(\.id)
         guard !topIDs.isEmpty else { return [] }
 
-        let items = try self.dbWriter.read { db in
+        let items = try await self.dbWriter.read { db in
             try ClipItem
                 .filter(sql: "deletedAt IS NULL")
                 .filter(keys: topIDs)
@@ -734,9 +776,9 @@ public actor ClipStore {
     /// screenshots become findable by their contents.
     /// Empty text still sets the column (to "") so textless images are marked
     /// as attempted and don't get re-OCR'd by every backfill pass.
-    public func attachRecognizedText(itemID: String, text: String) throws {
+    public func attachRecognizedText(itemID: String, text: String) async throws {
         let capped = String(text.prefix(CaptureClassifier.searchTextLimit))
-        let attached: Bool = try self.dbWriter.write { db in
+        let attached: Bool = try await self.dbWriter.write { db in
             guard let row = try Row.fetchOne(
                 db,
                 sql: "SELECT rowid, searchText FROM item WHERE id = ? AND deletedAt IS NULL",
@@ -756,7 +798,7 @@ public actor ClipStore {
             return !capped.isEmpty
         }
         if attached {
-            try? self.storeEmbedding(itemID: itemID, text: capped)
+            try? await self.storeEmbedding(itemID: itemID, text: capped)
         }
     }
 
@@ -769,8 +811,8 @@ public actor ClipStore {
         title: String,
         category: String,
         summary: String? = nil
-    ) throws {
-        try self.dbWriter.write { db in
+    ) async throws {
+        try await self.dbWriter.write { db in
             guard let row = try Row.fetchOne(
                 db,
                 sql: "SELECT rowid, searchText FROM item WHERE id = ? AND aiTitle IS NULL AND deletedAt IS NULL",
@@ -823,8 +865,8 @@ public actor ClipStore {
         description: String?,
         faviconPNG: Data?,
         previewImagePNG: Data?
-    ) throws {
-        try self.dbWriter.write { db in
+    ) async throws {
+        try await self.dbWriter.write { db in
             guard let row = try Row.fetchOne(
                 db,
                 sql: "SELECT rowid, searchText FROM item WHERE id = ? AND linkTitle IS NULL AND deletedAt IS NULL",
@@ -870,8 +912,8 @@ public actor ClipStore {
     /// Live `.link` items that haven't had a metadata fetch attempted yet
     /// (`linkTitle IS NULL`), newest first, for the startup backfill pass.
     /// Secrets are excluded — their URLs never leave the machine.
-    public func linksNeedingMetadata(limit: Int) throws -> [ClipItem] {
-        try self.dbWriter.read { db in
+    public func linksNeedingMetadata(limit: Int) async throws -> [ClipItem] {
+        try await self.dbWriter.read { db in
             try ClipItem
                 .filter(sql: "kind = 'link' AND linkTitle IS NULL AND isSecret = 0 AND deletedAt IS NULL")
                 .order(sql: "createdAt DESC")
@@ -893,54 +935,61 @@ public actor ClipStore {
     /// false-positive match. And the cutoff runs from the later of capture and
     /// last use, so the TTL is a leash on *idle* secrets — an item you keep
     /// pasting stays until ten minutes after you stop.
-    public func purgeExpiredSecrets(olderThan cutoff: Date) throws {
-        let candidateHashes: Set<String> = try dbWriter.write { db in
-            let victims = try String.fetchAll(
-                db,
-                sql: """
-                SELECT id FROM item
-                WHERE isSecret = 1 AND isPinned = 0 AND max(createdAt, lastUsedAt) < ?
-                """,
-                arguments: [cutoff]
-            )
-            guard !victims.isEmpty else { return [] }
-
-            // Same batching as `purge`: one blob lookup and one delete per
-            // 500-id chunk instead of two queries per victim.
-            var hashes: Set<String> = []
-            for chunk in victims.chunked(into: 500) {
-                let placeholders = Self.placeholders(chunk.count)
-                let chunkHashes = try String.fetchAll(
+    public func purgeExpiredSecrets(olderThan cutoff: Date) async throws {
+        let blobs = self.blobs
+        // Same writer-held shape as `purge`: rows first, then the files, all
+        // without letting go of GRDB's single writer.
+        try await self.dbWriter.writeWithoutTransaction { db in
+            var candidateHashes: Set<String> = []
+            try db.inTransaction {
+                let victims = try String.fetchAll(
                     db,
-                    sql: "SELECT DISTINCT blobHash FROM representation WHERE itemID IN (\(placeholders)) AND blobHash IS NOT NULL",
-                    arguments: StatementArguments(chunk)
+                    sql: """
+                    SELECT id FROM item
+                    WHERE isSecret = 1 AND isPinned = 0 AND max(createdAt, lastUsedAt) < ?
+                    """,
+                    arguments: [cutoff]
                 )
-                hashes.formUnion(chunkHashes)
-            }
-            for chunk in victims.chunked(into: 500) {
-                let placeholders = Self.placeholders(chunk.count)
-                try db.execute(
-                    sql: "DELETE FROM item WHERE id IN (\(placeholders))",
-                    arguments: StatementArguments(chunk)
-                )
-            }
-            let stillReferenced = try String.fetchSet(
-                db,
-                sql: "SELECT DISTINCT blobHash FROM representation WHERE blobHash IS NOT NULL"
-            )
-            return hashes.subtracting(stillReferenced)
-        }
+                guard !victims.isEmpty else { return .commit }
 
-        for hash in candidateHashes {
-            try? self.blobs.delete(hash: hash)
+                // Same batching as `purge`: one blob lookup and one delete per
+                // 500-id chunk instead of two queries per victim.
+                var hashes: Set<String> = []
+                for chunk in victims.chunked(into: 500) {
+                    let placeholders = Self.placeholders(chunk.count)
+                    let chunkHashes = try String.fetchAll(
+                        db,
+                        sql: "SELECT DISTINCT blobHash FROM representation WHERE itemID IN (\(placeholders)) AND blobHash IS NOT NULL",
+                        arguments: StatementArguments(chunk)
+                    )
+                    hashes.formUnion(chunkHashes)
+                }
+                for chunk in victims.chunked(into: 500) {
+                    let placeholders = Self.placeholders(chunk.count)
+                    try db.execute(
+                        sql: "DELETE FROM item WHERE id IN (\(placeholders))",
+                        arguments: StatementArguments(chunk)
+                    )
+                }
+                let stillReferenced = try String.fetchSet(
+                    db,
+                    sql: "SELECT DISTINCT blobHash FROM representation WHERE blobHash IS NOT NULL"
+                )
+                candidateHashes = hashes.subtracting(stillReferenced)
+                return .commit
+            }
+
+            for hash in candidateHashes {
+                try? blobs.delete(hash: hash)
+            }
         }
     }
 
     // MARK: - Payload helpers
 
     /// The plain-text payload of an item, if it has one (for transforms).
-    public func plainText(for itemID: String) throws -> String? {
-        let reps = try self.representations(for: itemID)
+    public func plainText(for itemID: String) async throws -> String? {
+        let reps = try await self.representations(for: itemID)
         guard let rep = reps.first(where: { $0.uti == WellKnownUTI.plainText }) else { return nil }
         return try String(data: self.payload(for: rep), encoding: .utf8)
     }
@@ -948,8 +997,8 @@ public actor ClipStore {
     /// Absolute filesystem paths for a `.file` clip, decoded from the stored
     /// `fileURLs` representation. Empty for non-file clips or when the payload
     /// is missing. Used by the CLI's `get` to print paths for file clips.
-    public func filePaths(for itemID: String) throws -> [String] {
-        let reps = try self.representations(for: itemID)
+    public func filePaths(for itemID: String) async throws -> [String] {
+        let reps = try await self.representations(for: itemID)
         guard let rep = reps.first(where: { $0.uti == WellKnownUTI.fileURLs }) else { return [] }
         let data = try self.payload(for: rep)
         guard let strings = try? JSONDecoder().decode([String].self, from: data) else { return [] }
@@ -958,8 +1007,8 @@ public actor ClipStore {
 
     // MARK: - Snippets
 
-    public func snippets() throws -> [Snippet] {
-        try self.dbWriter.read { db in
+    public func snippets() async throws -> [Snippet] {
+        try await self.dbWriter.read { db in
             try Snippet
                 .filter(sql: "deletedAt IS NULL")
                 .order(sql: "title COLLATE NOCASE")
@@ -967,10 +1016,10 @@ public actor ClipStore {
         }
     }
 
-    public func searchSnippets(_ query: String) throws -> [Snippet] {
+    public func searchSnippets(_ query: String) async throws -> [Snippet] {
         let trimmed = query.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { return try self.snippets() }
-        return try self.dbWriter.read { db in
+        guard !trimmed.isEmpty else { return try await self.snippets() }
+        return try await self.dbWriter.read { db in
             try Snippet
                 .filter(
                     sql: "deletedAt IS NULL AND (title LIKE ? OR body LIKE ?)",
@@ -981,17 +1030,18 @@ public actor ClipStore {
         }
     }
 
-    public func saveSnippet(_ snippet: Snippet) throws {
+    public func saveSnippet(_ snippet: Snippet) async throws {
         var updated = snippet
         updated.updatedAt = Date()
         updated.lamport += 1
-        try self.dbWriter.write { db in
-            try updated.save(db)
+        let record = updated
+        try await self.dbWriter.write { db in
+            try record.save(db)
         }
     }
 
-    public func deleteSnippet(id: String) throws {
-        try self.dbWriter.write { db in
+    public func deleteSnippet(id: String) async throws {
+        try await self.dbWriter.write { db in
             try db.execute(
                 sql: "UPDATE snippet SET deletedAt = ?, updatedAt = ?, lamport = lamport + 1 WHERE id = ?",
                 arguments: [Date(), Date(), id]

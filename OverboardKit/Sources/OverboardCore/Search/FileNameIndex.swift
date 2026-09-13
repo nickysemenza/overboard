@@ -39,6 +39,13 @@ public struct IndexedFile: Codable, Sendable, FetchableRecord, PersistableRecord
 
 /// Rebuildable, metadata-only database, separate from irreplaceable clipboard
 /// history. Trigram retrieval runs in SQLite; Swift ranks only the candidates.
+///
+/// Every method reaches SQLite through GRDB's async API, so the actor is
+/// released for the duration of each query rather than pinned to it — a
+/// per-keystroke `search` no longer sits behind an FSEvents-driven `upsert`
+/// batch. The actor remains because this package builds with
+/// `NonisolatedNonsendingByDefault`: a nonisolated async method would run its
+/// body on the caller's executor, which for the launcher is the main actor.
 public actor FileNameIndex {
     private let database: DatabaseQueue
     /// Makes `search` visible in Instruments alongside the launcher's own
@@ -76,18 +83,20 @@ public actor FileNameIndex {
         }
     }
 
-    public func upsert(_ files: [IndexedFile]) throws {
-        try self.database.write { db in
+    /// One transaction for the whole batch — the FSEvents refresh path feeds
+    /// this in chunks and a per-row transaction would fsync each one.
+    public func upsert(_ files: [IndexedFile]) async throws {
+        try await self.database.write { db in
             for file in files {
                 try file.upsert(db)
             }
         }
     }
 
-    public func finishScan(root: String, generation: String, under path: String? = nil) throws {
+    public func finishScan(root: String, generation: String, under path: String? = nil) async throws {
         let root = root.precomposedStringWithCanonicalMapping
         let path = path?.precomposedStringWithCanonicalMapping
-        try self.database.write { db in
+        try await self.database.write { db in
             if let path {
                 try db.execute(sql: "DELETE FROM file_entry WHERE root = ? AND generation != ? AND (path = ? OR substr(path, 1, length(?)) = ?)", arguments: [root, generation, path, path + "/", path + "/"])
             } else {
@@ -96,33 +105,48 @@ public actor FileNameIndex {
         }
     }
 
-    public func reset() throws {
-        try self.database.write { db in try db.execute(sql: "DELETE FROM file_entry") }
+    public func reset() async throws {
+        try await self.database.write { db in try db.execute(sql: "DELETE FROM file_entry") }
     }
 
-    public func retainRoots(_ roots: [String]) throws {
-        try self.database.write { db in
+    public func retainRoots(_ roots: [String]) async throws {
+        try await self.database.write { db in
             let slots = Array(repeating: "?", count: roots.count).joined(separator: ",")
             try db.execute(sql: "DELETE FROM file_entry WHERE root NOT IN (\(slots))", arguments: StatementArguments(roots.map(\.precomposedStringWithCanonicalMapping)))
         }
     }
 
-    public func count() throws -> Int {
-        try self.database.read { db in try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM file_entry") ?? 0 }
+    public func count() async throws -> Int {
+        try await self.database.read { db in try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM file_entry") ?? 0 }
     }
 
-    public func search(_ query: String, limit: Int = 60) throws -> [LauncherResult] {
+    /// `@concurrent nonisolated` so the actor is held only for the SQLite
+    /// fetch: the ranking pass below scores up to ~2000 rows per keystroke, and
+    /// leaving it on the actor would make concurrent searches queue, while
+    /// leaving it merely `nonisolated` would (under this package's
+    /// `NonisolatedNonsendingByDefault` setting) run it on the launcher's main
+    /// actor. Both halves therefore run on the cooperative pool.
+    @concurrent
+    public nonisolated func search(_ query: String, limit: Int = 60) async throws -> [LauncherResult] {
         let state = self.searchSignposter.beginInterval("FileNameIndex.search")
         defer { self.searchSignposter.endInterval("FileNameIndex.search", state) }
-        let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let candidates = try await self.candidates(for: trimmed, limit: limit)
+        guard !trimmed.isEmpty else { return candidates.map(\.result) }
+        return Self.rank(candidates, query: trimmed, limit: limit)
+    }
+
+    /// The retrieval half of `search`: everything that touches SQLite, and
+    /// nothing that doesn't. An empty query is the plain recency listing.
+    private func candidates(for query: String, limit: Int) async throws -> [IndexedFile] {
         let tokens = SearchMatcher.tokens(query)
         guard !query.isEmpty else {
-            return try self.database.read { db in
-                try IndexedFile.fetchAll(db, sql: "SELECT * FROM file_entry ORDER BY modifiedAt DESC LIMIT ?", arguments: [limit]).map(\.result)
+            return try await self.database.read { db in
+                try IndexedFile.fetchAll(db, sql: "SELECT * FROM file_entry ORDER BY modifiedAt DESC LIMIT ?", arguments: [limit])
             }
         }
         let indexedTokens = tokens.filter { $0.count >= 3 }
-        var candidates = try self.database.read { db -> [IndexedFile] in
+        var candidates = try await self.database.read { db -> [IndexedFile] in
             func retrieve(_ match: String) throws -> [IndexedFile] {
                 try IndexedFile.fetchAll(db, sql: """
                 SELECT file_entry.* FROM file_fts JOIN file_entry ON file_entry.rowid = file_fts.rowid
@@ -148,11 +172,17 @@ public actor FileNameIndex {
         // Four-letter typos can share no trigram ("nots" -> "notes").
         // A bounded SQLite scan recovers these without widening every query.
         if tokens.count == 1, let token = tokens.first, token.count == 4 {
-            let extra = try self.database.read { db in
+            let extra = try await self.database.read { db in
                 try IndexedFile.fetchAll(db, sql: "SELECT * FROM file_entry WHERE foldedName LIKE ? OR foldedName LIKE ? ORDER BY length(name) LIMIT 500", arguments: [String(token.prefix(2)) + "%", "%" + String(token.suffix(2)) + "%"])
             }
             candidates += extra
         }
+        return candidates
+    }
+
+    /// Scores and orders retrieved candidates. Pure — no actor state, no I/O —
+    /// so it can run wherever the caller is, and is directly unit-testable.
+    nonisolated static func rank(_ candidates: [IndexedFile], query: String, limit: Int) -> [LauncherResult] {
         var seen = Set<String>()
         let prepared = SearchMatcher.PreparedQuery(query)
         return candidates.compactMap { file -> (IndexedFile, SearchMatch)? in
