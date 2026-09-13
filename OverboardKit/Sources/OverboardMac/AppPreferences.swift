@@ -63,6 +63,14 @@ public nonisolated extension Defaults.Keys {
     /// Emoji picked in the emoji picker, most-recent first, capped by
     /// EmojiRecents.cap — drives the picker's "Recently Used" section.
     static let emojiRecents = Key<[String]>("emojiRecents", default: [])
+    /// False until the Welcome window has been seen (Done, or closed any other
+    /// way). Gates the first-launch Welcome window; the menu item reopens it
+    /// regardless.
+    static let hasCompletedOnboarding = Key<Bool>("hasCompletedOnboarding", default: false)
+    /// How many times the copy-only paste HUD has explained the missing
+    /// Accessibility permission. Past `PermissionService`'s limit the HUD
+    /// shrinks back to the short reminder.
+    static let accessibilityHintsShown = Key<Int>("accessibilityHintsShown", default: 0)
 }
 
 /// Parsed views over the newline-list preference keys.

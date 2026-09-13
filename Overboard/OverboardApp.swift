@@ -63,6 +63,11 @@ struct OverboardApp: App {
                 NSApp.orderFrontStandardAboutPanel(nil)
             }
 
+            Button("Welcome…") {
+                self.openWindow(id: AppServices.welcomeWindowID)
+                NSApp.activate(ignoringOtherApps: true)
+            }
+
             Divider()
 
             // Not SettingsLink: it can't raise an already-open Settings window
@@ -83,7 +88,26 @@ struct OverboardApp: App {
                 updates: self.updates,
                 captureState: self.captureState
             )
+            // The menu-bar label is the only view SwiftUI renders at launch, so
+            // it's where `openWindow` first becomes reachable — see
+            // `AppServices.openWindowByID`.
+            .onAppear {
+                AppServices.shared.openWindowByID = { self.openWindow(id: $0) }
+            }
         }
+
+        Window("Welcome to Overboard", id: AppServices.welcomeWindowID) {
+            WelcomeView(
+                openShortcutSettings: { AppServices.openSettings(tab: .general) },
+                onDone: { Defaults[.hasCompletedOnboarding] = true }
+            )
+            // Closing the window any other way still counts as seen — this
+            // isn't a gate, and re-showing it every launch would be a nag.
+            .onDisappear { Defaults[.hasCompletedOnboarding] = true }
+        }
+        .defaultSize(width: 460, height: 520)
+        .windowResizability(.contentSize)
+        .restorationBehavior(.disabled)
 
         #if DEBUG
             Window("Overboard History", id: "history") {

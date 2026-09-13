@@ -20,12 +20,11 @@ struct FileSearchSettingsTab: View {
 
     var body: some View {
         Form {
-            Section("Index") {
+            Section {
                 LabeledContent("Status", value: self.service.status)
                 if self.service.isIndexing { ProgressView().controlSize(.small) }
-                ForEach(self.service.issues.prefix(6), id: \.self) { issue in
-                    Text(issue).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
-                }
+            } header: { Text("Index") } footer: {
+                Text("Permission problems are listed under Permissions.")
             }
             Section {
                 TextEditor(text: self.$roots).font(.body.monospaced()).frame(height: 120)

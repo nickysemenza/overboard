@@ -105,7 +105,7 @@ public final class ClipActionExecutor {
         let restore = Defaults[.restoreClipboard]
         let outcome = self.pasteback.pasteText(text, into: target, restoreClipboard: restore)
         if outcome == .copiedOnly {
-            self.flash("Copied — press ⌘V to paste")
+            self.flash(PermissionService.copyOnlyPasteMessage())
             PermissionService.promptIfNeeded()
         }
     }

@@ -28,6 +28,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         AppServices.shared.start()
         self.servicesStarted = true
+        // A menu-bar app opens nothing on launch, so a first-time user would
+        // otherwise be left with a boat in the menu bar and no idea what it
+        // does. Once only; the menu's "Welcome…" reopens it.
+        AppServices.shared.showWelcomeIfNeeded()
 
         #if DEBUG
             self.installDebugHooks()

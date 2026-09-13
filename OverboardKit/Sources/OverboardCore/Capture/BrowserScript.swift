@@ -12,24 +12,34 @@ public enum BrowserScript {
         case chromium
     }
 
+    /// One browser Overboard knows how to script, with the name to show a user.
+    public struct Browser: Sendable, Equatable {
+        public let name: String
+        public let bundleID: String
+        public let dialect: Dialect
+    }
+
+    /// Every browser we can ask for a front-tab URL, newest-first within each
+    /// family. The single source of truth for both the provenance lookup below
+    /// and the per-app Automation rows in Settings → Permissions, so the two
+    /// can't list different browsers. Firefox is absent deliberately: it has no
+    /// AppleScript URL support.
+    public static let scriptableBrowsers: [Browser] = [
+        Browser(name: "Safari", bundleID: "com.apple.Safari", dialect: .safari),
+        Browser(name: "Safari Technology Preview", bundleID: "com.apple.SafariTechnologyPreview", dialect: .safari),
+        Browser(name: "Chrome", bundleID: "com.google.Chrome", dialect: .chromium),
+        Browser(name: "Chrome Canary", bundleID: "com.google.Chrome.canary", dialect: .chromium),
+        Browser(name: "Arc", bundleID: "company.thebrowser.Browser", dialect: .chromium),
+        Browser(name: "Brave", bundleID: "com.brave.Browser", dialect: .chromium),
+        Browser(name: "Edge", bundleID: "com.microsoft.edgemac", dialect: .chromium),
+        Browser(name: "Vivaldi", bundleID: "com.vivaldi.Vivaldi", dialect: .chromium),
+        Browser(name: "Chromium", bundleID: "org.chromium.Chromium", dialect: .chromium),
+    ]
+
     /// Maps a source bundle identifier to the browser dialect that can script
-    /// it, or nil for apps that can't (or that we won't) ask for a URL —
-    /// including Firefox, which has no AppleScript URL support.
+    /// it, or nil for apps that can't (or that we won't) ask for a URL.
     public static func dialect(forBundleID id: String) -> Dialect? {
-        switch id {
-        case "com.apple.Safari", "com.apple.SafariTechnologyPreview":
-            .safari
-        case "com.google.Chrome",
-             "com.google.Chrome.canary",
-             "com.brave.Browser",
-             "com.microsoft.edgemac",
-             "com.vivaldi.Vivaldi",
-             "company.thebrowser.Browser", // Arc
-             "org.chromium.Chromium":
-            .chromium
-        default:
-            nil
-        }
+        self.scriptableBrowsers.first { $0.bundleID == id }?.dialect
     }
 
     /// AppleScript source returning "URL<tab>title" for the browser's front

@@ -4,6 +4,39 @@ import Darwin
 import Observation
 import OverboardCore
 
+/// One line of `FileIndexService.issues`, split into the location it names and
+/// the reason. The scanner formats failures as "<path>: <reason>" (a bare
+/// message when the failure isn't about one path), which is fine to read but
+/// not enough to act on — parsing it back gives Settings → Permissions a folder
+/// to reveal.
+public nonisolated struct FileIndexIssue: Identifiable, Sendable, Equatable {
+    /// The raw line, which is unique enough to identify a row.
+    public let id: String
+    public let url: URL?
+    public let message: String
+
+    public init(raw: String) {
+        self.id = raw
+        // Only an absolute path is a location we can act on; anything else is
+        // a whole-index failure whose text is already the whole message.
+        guard raw.hasPrefix("/"), let separator = raw.range(of: ": ") else {
+            self.url = nil
+            self.message = raw
+            return
+        }
+        self.url = URL(fileURLWithPath: String(raw[raw.startIndex ..< separator.lowerBound]))
+        self.message = String(raw[separator.upperBound...])
+    }
+
+    /// Shows the folder in Finder. A no-op when the issue names no path, or
+    /// when the path is gone — which is itself an answer.
+    @MainActor
+    public func revealInFinder() {
+        guard let url else { return }
+        NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
+}
+
 /// Owns the OS-facing lifecycle. The database and ranking run on the core
 /// actor; directory enumeration runs on a utility task and never reads bytes.
 @MainActor

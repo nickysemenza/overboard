@@ -35,16 +35,19 @@ Building from source signs with *your* Apple Development identity — set your
 team in Xcode's Signing settings, or pass `CODE_SIGNING_ALLOWED=NO` (see the
 signing note below for the TCC consequences).
 
-Overboard lives in the menu bar (no Dock icon). On first run, grant
-**Accessibility** when prompted (System Settings → Privacy & Security) —
-paste-back synthesizes ⌘V into the target app and falls back to copy-only
+Overboard lives in the menu bar (no Dock icon). First launch opens a Welcome
+window with the three shortcuts and an Accessibility button; grant
+**Accessibility** there or when prompted (System Settings → Privacy & Security)
+— paste-back synthesizes ⌘V into the target app and falls back to copy-only
 without it. The first time you copy from a browser, macOS also prompts for
 **Automation** permission for that browser — this powers Back-to-source
 (capturing the page URL/title); declining just skips provenance for that
-browser. No analytics, no account. Network is used only for two
-opt-outable features: fetching link-preview metadata (page title, favicon,
-description, og:image — toggle in Settings → General), and checking for app
-updates. All clipboard data stays on your machine.
+browser. Settings → Permissions shows every one of these, plus any folders the
+file index couldn't read, and can ask for them again. No analytics, no
+account. Network is used only for two opt-outable features: fetching
+link-preview metadata (page title, favicon, description, og:image — toggle in
+Settings → General), and checking for app updates. All clipboard data stays on
+your machine.
 
 ### Network activity
 

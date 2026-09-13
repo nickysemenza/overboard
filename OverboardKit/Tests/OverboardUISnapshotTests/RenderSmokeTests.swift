@@ -1,6 +1,7 @@
 import AppKit
 import OverboardCore
 import OverboardFilePreview
+import OverboardMac
 @testable import OverboardUI
 import SwiftUI
 import Testing
@@ -71,6 +72,28 @@ struct RenderSmokeTests {
                 #expect(self.rendersNonEmpty(snapshotHost(view, width: model.showsPreview ? 1020 : 740, height: 650, dark: dark)))
             }
         }
+    }
+
+    @Test func welcomeRendersInBothAppearances() {
+        for dark in [false, true] {
+            let view = WelcomeView(
+                permissions: PermissionService(accessibility: .denied),
+                openShortcutSettings: {},
+                onDone: {}
+            )
+            #expect(self.rendersNonEmpty(snapshotHost(view, width: 460, height: 520, dark: dark)))
+        }
+    }
+
+    @Test func permissionsTabRendersEveryState() {
+        let view = PermissionsSettingsTab(
+            permissions: PermissionService(
+                accessibility: .granted,
+                automation: ["com.apple.Safari": .granted, "com.google.Chrome": .denied]
+            ),
+            fileIssues: { ["/Users/overboard/Library/Mail: Permission denied.", "File index unavailable."] }
+        )
+        #expect(self.rendersNonEmpty(snapshotHost(view, width: 560, height: 520)))
     }
 
     @Test func snippetCardRenders() {

@@ -114,6 +114,7 @@ let package = Package(
             dependencies: [
                 "OverboardUI",
                 "OverboardCore",
+                "OverboardMac",
                 "OverboardFilePreview",
                 .product(name: "SnapshotTesting", package: "swift-snapshot-testing"),
             ],

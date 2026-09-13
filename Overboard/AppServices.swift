@@ -69,6 +69,21 @@ final class AppServices {
     let runningApps = RunningApps()
     let stack = PasteStack()
 
+    /// SwiftUI hands out `openWindow` only inside a view, but whether to show
+    /// the Welcome window is decided in `applicationDidFinishLaunching`, before
+    /// any of our windows exist. The menu-bar label — the one view SwiftUI
+    /// renders at launch — installs this, and anything asked for earlier is
+    /// flushed the moment it arrives.
+    var openWindowByID: ((String) -> Void)? {
+        didSet {
+            guard let pending = self.pendingWindowID else { return }
+            self.pendingWindowID = nil
+            self.showWindow(id: pending)
+        }
+    }
+
+    private var pendingWindowID: String?
+
     private var ingestTask: Task<Void, Never>?
     /// Purge, secret expiry, blob/VACUUM sweep, and link backfill, as one
     /// start/stop unit.
@@ -609,6 +624,29 @@ final class AppServices {
         }
     }
 
+    /// The Welcome window's scene id, shared by the first-run open and the
+    /// menu item that reopens it.
+    static let welcomeWindowID = "welcome"
+
+    /// Shows Welcome on the very first launch. A menu-bar app has nothing else
+    /// to show a new user, so this is their only introduction; every later
+    /// launch skips it and the menu item reopens it on demand.
+    func showWelcomeIfNeeded() {
+        guard !Defaults[.hasCompletedOnboarding] else { return }
+        self.showWindow(id: Self.welcomeWindowID)
+    }
+
+    /// Raises one of the app's `Window` scenes, queuing the request when
+    /// SwiftUI hasn't handed us `openWindow` yet.
+    func showWindow(id: String) {
+        guard let open = self.openWindowByID else {
+            self.pendingWindowID = id
+            return
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        open(id)
+    }
+
     /// SwiftUI's stable identifier for the `Settings` scene's window.
     private static let settingsWindowID = "com_apple_SwiftUI_Settings_window"
 
@@ -839,7 +877,7 @@ final class AppServices {
                 case .pasted:
                     onPasted?()
                 case .copiedOnly:
-                    HUDController.shared.flash("Copied — press ⌘V to paste")
+                    HUDController.shared.flash(PermissionService.copyOnlyPasteMessage())
                     PermissionService.promptIfNeeded()
                 }
             } catch {

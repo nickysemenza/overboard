@@ -36,7 +36,7 @@ extension ItemKind {
 /// Identifies one Settings tab, so callers outside the view (a launcher
 /// command, a menu item) can deep-link to a specific one.
 public enum SettingsTab: Hashable, Sendable {
-    case general, history, files, apps, actions, ai
+    case general, history, files, apps, actions, permissions, ai
 }
 
 /// Shared, externally-settable tab selection for the Settings scene. SwiftUI
@@ -95,6 +95,9 @@ public struct SettingsView: View {
             Tab("Actions", systemImage: "wand.and.stars", value: SettingsTab.actions) {
                 ActionsSettingsTab()
             }
+            Tab("Permissions", systemImage: "lock.shield", value: SettingsTab.permissions) {
+                PermissionsSettingsTab()
+            }
             Tab("AI", systemImage: "sparkles", value: SettingsTab.ai) {
                 AISettingsTab()
             }
@@ -119,8 +122,6 @@ private struct GeneralSettingsTab: View {
     @Default(.launcherAppAliases) private var launcherAppAliases
     @Default(.updateCheckEnabled) private var updateCheckEnabled
     @Default(.richLinkPreviews) private var richLinkPreviews
-    @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
-    @State private var accessibilityGranted = PermissionService.isTrusted
 
     var body: some View {
         Form {
@@ -152,10 +153,7 @@ private struct GeneralSettingsTab: View {
             }
 
             Section {
-                Toggle("Launch at login", isOn: self.$launchAtLogin)
-                    .onChange(of: self.launchAtLogin) {
-                        self.applyLaunchAtLogin()
-                    }
+                LaunchAtLoginToggle()
                 Toggle("Restore previous clipboard after paste", isOn: self.$restoreClipboard)
             }
 
@@ -163,22 +161,6 @@ private struct GeneralSettingsTab: View {
                 Toggle("Fetch link titles and icons", isOn: self.$richLinkPreviews)
             } footer: {
                 Text("Connects to the URLs you copy to fetch each page’s title, description, favicon, and preview image, rendered on link cards. Requests come only from your Mac; nothing is sent anywhere else. Turn this off to keep Overboard fully offline.")
-            }
-
-            Section {
-                LabeledContent("Accessibility") {
-                    if self.accessibilityGranted {
-                        Label("Granted", systemImage: "checkmark.circle.fill")
-                            .foregroundStyle(.green)
-                    } else {
-                        Button("Open System Settings…") {
-                            let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
-                            NSWorkspace.shared.open(url)
-                        }
-                    }
-                }
-            } footer: {
-                Text("Needed only for direct paste (⌘V into the previous app). Everything else works without it.")
             }
 
             Section {
@@ -213,12 +195,22 @@ private struct GeneralSettingsTab: View {
             }
         }
         .formStyle(.grouped)
-        .onAppear {
-            self.accessibilityGranted = PermissionService.isTrusted
-        }
+    }
+}
+
+/// The login-item toggle, shared by Settings → General and the Welcome window
+/// so the register/unregister handling (and its failure re-sync) lives once.
+struct LaunchAtLoginToggle: View {
+    @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
+
+    var body: some View {
+        Toggle("Launch at login", isOn: self.$launchAtLogin)
+            .onChange(of: self.launchAtLogin) {
+                self.apply()
+            }
     }
 
-    private func applyLaunchAtLogin() {
+    private func apply() {
         do {
             if self.launchAtLogin {
                 try SMAppService.mainApp.register()
