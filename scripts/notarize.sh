@@ -11,6 +11,9 @@ OUT_ZIP=${2:?usage: scripts/notarize.sh <path/to/Overboard.app> <out.zip>}
 : "${NOTARY_KEY_PATH:?}" "${NOTARY_KEY_ID:?}" "${NOTARY_ISSUER_ID:?}"
 KEY=(--key "$NOTARY_KEY_PATH" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER_ID")
 
+# Fail here, in seconds, rather than after a notary round trip.
+codesign --verify --deep --strict "$APP"
+
 TMP=$(mktemp -d -t overboard-notarize)
 trap 'rm -rf "$TMP"' EXIT
 ditto -c -k --keepParent "$APP" "$TMP/Overboard.zip"

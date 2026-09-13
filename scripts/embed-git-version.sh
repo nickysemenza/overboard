@@ -1,7 +1,12 @@
 #!/bin/sh
 #
 # Bakes git state into the built Info.plist, read back at runtime by
-# AppVersion (OverboardCore). Run from the "Embed git version" build phase.
+# AppVersion (OverboardCore). Run from the "Embed git version" build phase of
+# BOTH the app and the Quick Look extension: each target stamps its own plist
+# before it is code-signed. Rewriting an embedded extension's plist from the
+# app target instead would happen after the appex was signed and copied, and
+# the notary service rejects the broken seal ("signature of the binary is
+# invalid").
 #
 # CFBundleShortVersionString comes from the nearest git tag, not from a
 # checked-in MARKETING_VERSION. The checked-in value silently went stale
@@ -73,13 +78,3 @@ if [ "$highest" = "$version" ]; then
     set_key CFBundleShortVersionString "$version"
 fi
 
-# Embedded app extensions are copied before this phase runs and have no
-# phase of their own — this is the only place their release version is set.
-# It must match the containing app so signing/notarization and Quick Look
-# registration never observe a mismatched bundle pair.
-final_version=$(get_key CFBundleShortVersionString)
-for extension_plist in "$TARGET_BUILD_DIR/$WRAPPER_NAME/Contents/PlugIns/"*.appex/Contents/Info.plist; do
-    [ -f "$extension_plist" ] || continue
-    /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string $final_version" "$extension_plist" 2>/dev/null \
-        || /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $final_version" "$extension_plist"
-done

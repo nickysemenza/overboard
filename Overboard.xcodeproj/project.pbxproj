@@ -122,7 +122,7 @@
 		0B420000000000000000F002 /* OverboardQuickLook */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 0B4200000000000000002003 /* Build configuration list for PBXNativeTarget "OverboardQuickLook" */;
-			buildPhases = (0B420000000000000000C012 /* Sources */, 0B420000000000000000C011 /* Frameworks */, 0B420000000000000000C013 /* Resources */, );
+			buildPhases = (0B420000000000000000C012 /* Sources */, 0B420000000000000000C011 /* Frameworks */, 0B420000000000000000C013 /* Resources */, 0B420000000000000000C014 /* Embed git version */, );
 			buildRules = ();
 			dependencies = ();
 			fileSystemSynchronizedGroups = (0B420000000000000000B002 /* OverboardQuickLook */, );
@@ -199,6 +199,18 @@
 			name = "Embed git version";
 			outputPaths = (
 			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${SRCROOT}/scripts/embed-git-version.sh\"\n";
+		};
+		0B420000000000000000C014 /* Embed git version */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = ();
+			inputPaths = ("$(TARGET_BUILD_DIR)/$(INFOPLIST_PATH)", );
+			name = "Embed git version";
+			outputPaths = ();
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "\"${SRCROOT}/scripts/embed-git-version.sh\"\n";
