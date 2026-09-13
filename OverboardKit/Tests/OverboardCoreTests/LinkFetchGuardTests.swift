@@ -65,8 +65,8 @@ struct LinkFetchGuardTests {
 
     @Test func rejectsMissingHost() {
         // A scheme-only URL with no host.
-        if let u = URL(string: "https:///path") {
-            #expect(!LinkMetadataFetcher.isFetchable(u))
+        if let url = URL(string: "https:///path") {
+            #expect(!LinkMetadataFetcher.isFetchable(url))
         }
     }
 

@@ -18,11 +18,11 @@ struct SearchPerformanceTests {
         let store = try ClipStore(dbWriter: queue, blobs: BlobStore(directory: dir))
 
         var generator = SystemRandomNumberGenerator()
-        for i in 0 ..< count {
+        for index in 0 ..< count {
             let wordCount = Int.random(in: 3 ... 25, using: &generator)
             let text = (0 ..< wordCount)
                 .map { _ in Self.words.randomElement(using: &generator)! }
-                .joined(separator: " ") + " #\(i)"
+                .joined(separator: " ") + " #\(index)"
             let snapshot = PasteboardSnapshot(
                 reps: [.init(uti: WellKnownUTI.plainText, data: Data(text.utf8))],
                 sourceBundleID: "com.test.seeder",

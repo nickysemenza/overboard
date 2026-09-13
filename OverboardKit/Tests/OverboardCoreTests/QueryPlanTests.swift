@@ -62,8 +62,8 @@ struct QueryPlanTests {
     /// "fixed" with an expression index that isn't demonstrably justified.
     @Test func recentQueryPlan() throws {
         let queue = try makeQueue()
-        for i in 0 ..< 20 {
-            try self.seed(queue, id: "item-\(i)")
+        for index in 0 ..< 20 {
+            try self.seed(queue, id: "item-\(index)")
         }
 
         let sql = "SELECT * FROM item WHERE deletedAt IS NULL ORDER BY \(ClipStore.frecencyOrderSQL) LIMIT ?"
@@ -82,8 +82,8 @@ struct QueryPlanTests {
     /// indexed search, no scan or temp sort at all.
     @Test func browseHistoryKindFilterQueryPlan() throws {
         let queue = try makeQueue()
-        for i in 0 ..< 20 {
-            try self.seed(queue, id: "item-\(i)", kind: i.isMultiple(of: 2) ? "text" : "image")
+        for index in 0 ..< 20 {
+            try self.seed(queue, id: "item-\(index)", kind: index.isMultiple(of: 2) ? "text" : "image")
         }
 
         let sql = """
@@ -117,8 +117,8 @@ struct QueryPlanTests {
     /// `recentQueryPlan` for the final ORDER BY.
     @Test func purgeVictimSelectionQueryPlan() throws {
         let queue = try makeQueue()
-        for i in 0 ..< 20 {
-            try self.seed(queue, id: "item-\(i)")
+        for index in 0 ..< 20 {
+            try self.seed(queue, id: "item-\(index)")
         }
 
         let sql = """
