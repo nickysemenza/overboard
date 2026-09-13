@@ -70,10 +70,27 @@ struct LibraryChartsSnapshotTests {
     /// recording run and a later assertion run.
     private static let fixedNow = Date(timeIntervalSince1970: 1_757_721_600)
 
+    private static let utcZone = TimeZone(identifier: "UTC")!
+    private static let enUS = Locale(identifier: "en_US")
+
     private static var utc: Calendar {
         var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(identifier: "UTC")!
+        calendar.timeZone = Self.utcZone
+        calendar.locale = Self.enUS
         return calendar
+    }
+
+    /// The day values above are UTC midnights, but Swift Charts bins and
+    /// labels a date axis in the *environment* calendar — so on a Pacific
+    /// Mac those instants fall at 5 pm the previous day and every weekly
+    /// gridline lands one bar to the right of where a UTC CI runner puts it.
+    /// The locale decides which weekday the weekly ticks snap to and how the
+    /// labels read. Pinning all three makes the snapshot identical everywhere.
+    private func pinnedToUTC(_ view: some View) -> some View {
+        view
+            .environment(\.calendar, Self.utc)
+            .environment(\.timeZone, Self.utcZone)
+            .environment(\.locale, Self.enUS)
     }
 
     private static let activity: DailyActivity = {
@@ -91,7 +108,7 @@ struct LibraryChartsSnapshotTests {
 
     private func timelineHost(dark: Bool = false) -> NSImage {
         snapshotImage(
-            ActivityTimelineChart(activity: Self.activity).padding(8).background(.background),
+            self.pinnedToUTC(ActivityTimelineChart(activity: Self.activity).padding(8).background(.background)),
             width: 480,
             height: 140 + 16,
             dark: dark
@@ -117,7 +134,7 @@ struct LibraryChartsSnapshotTests {
         }
         let activity = DailyActivity(days: days, total: 0)
         return snapshotImage(
-            ActivityTimelineChart(activity: activity).padding(8).background(.background),
+            self.pinnedToUTC(ActivityTimelineChart(activity: activity).padding(8).background(.background)),
             width: 480,
             // The empty placeholder's default label style wants more room
             // than the chart's own 140pt — see the `minHeight` comment on
