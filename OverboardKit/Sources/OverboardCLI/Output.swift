@@ -74,13 +74,12 @@ enum Output {
         return formatter.localizedString(for: date, relativeTo: now)
     }
 
-    /// Shared encoder: ISO8601 dates, sorted keys, pretty-printed — stable
-    /// output that diffs cleanly and reads well in a terminal.
+    /// Stable output that diffs cleanly and reads well in a terminal. Shared
+    /// with the archive writer in `ClipJSONCoding`, which settles how clips are
+    /// serialized in both places; only the *shapes* differ, deliberately — this
+    /// projection never carries payloads, an archive has to be lossless.
     static func jsonEncoder() -> JSONEncoder {
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        return encoder
+        ClipJSONCoding.cliEncoder()
     }
 
     static func jsonArray(_ items: [ClipItem]) throws -> String {

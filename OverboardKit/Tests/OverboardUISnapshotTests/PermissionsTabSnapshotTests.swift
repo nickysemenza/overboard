@@ -8,11 +8,10 @@ import Testing
 /// permission granted, one Automation target refused, one unreadable folder.
 /// The stubbed `PermissionService` is what keeps this reproducible — the real
 /// one reports whichever browsers this particular Mac happens to have.
-@Suite(.localOnly)
 @MainActor
 struct PermissionsTabSnapshotTests {
-    private func host(dark: Bool = false) -> NSView {
-        snapshotHost(
+    private func host(dark: Bool = false) -> NSImage {
+        snapshotImage(
             PermissionsSettingsTab(
                 permissions: PermissionService(
                     accessibility: .granted,

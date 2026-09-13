@@ -118,9 +118,14 @@ is cached to disk.
 - **Launcher commands**: `:stats` (word/char/line stats), `:pause` / `:resume`
   (toggles clipboard capture; menu-bar indicator), `:clear` (clears history,
   keeps pins), `:settings`, `:version`. Plus `:` to open the commands palette.
-- **CLI**: `overboard history|search|get|copy` with `--json` for scripts and
-  agents; read-only against the app's database, copy goes through the clipboard
-  so the app captures it. Install via `scripts/install-cli.sh`.
+- **CLI**: `overboard history|search|get|copy|export` with `--json` for scripts
+  and agents; read-only against the app's database, copy goes through the
+  clipboard so the app captures it. Install via `scripts/install-cli.sh`.
+- **Backup**: Settings → History exports the library to a folder of NDJSON plus
+  the large payloads it references, and imports one back (skipping clips you
+  already have, by content hash). Detected secrets are left out unless asked
+  for — they're TTL-limited on purpose. `overboard export <dir>` writes the same
+  archive from the shell; restoring is app-only, since it writes to the store.
 - **Shortcuts, Siri & Spotlight**: App Intents for Copy Latest Clip, Search
   Clipboard History, Copy Snippet (with a snippet picker), Set Clipboard
   Capture, Show Drawer, and Show Launcher. Clips themselves are never exposed
@@ -274,6 +279,21 @@ swap the new build into `/Applications` and relaunch it. `--no-build` explicitly
 reuses an existing app; combine it with `--release` to reuse the Release build.
 Build duration is printed, and full diagnostics plus Xcode's timing summary are
 saved to `build/dogfood/dogfood-Debug.log` or `dogfood-Release.log`.
+
+### Snapshot tests
+
+The pixel suites in `OverboardUISnapshotTests` run everywhere, CI included.
+They capture through an `NSHostingView` into a bitmap the test builds at a
+fixed 2× pixel size, so the reference images no longer depend on the host's
+backing scale — which is what used to make them local-only, since the CI VM
+renders at 1×. Re-record after an intentional visual change:
+
+```sh
+OVERBOARD_RECORD_SNAPSHOTS=1 swift test --package-path OverboardKit
+```
+
+Review the resulting PNG diff before committing; without the variable, the
+references are asserted.
 
 ### Filename search performance
 

@@ -158,31 +158,7 @@ public actor ClipStore {
                 sourceURL: sourceURL,
                 sourceTitle: sourceTitle
             )
-            try db.execute(
-                sql: """
-                INSERT INTO item (id, contentHash, kind, previewText, searchText,
-                                  sourceBundleID, sourceAppName, byteSize, isPinned, isSecret,
-                                  useCount, createdAt, lastUsedAt, updatedAt, lamport, deletedAt,
-                                  charCount, lineCount, pixelWidth, pixelHeight, fileCount,
-                                  sourceURL, sourceTitle)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 1, ?, ?, ?, 0, NULL, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                arguments: [
-                    item.id, item.contentHash, item.kind.rawValue, item.previewText,
-                    classified.searchText, item.sourceBundleID, item.sourceAppName,
-                    item.byteSize, item.isSecret, now, now, now,
-                    item.charCount, item.lineCount, item.pixelWidth, item.pixelHeight, item.fileCount,
-                    item.sourceURL, item.sourceTitle,
-                ]
-            )
-
-            if let searchText = classified.searchText {
-                let rowid = db.lastInsertedRowID
-                try db.execute(
-                    sql: "INSERT INTO item_fts (rowid, searchText) VALUES (?, ?)",
-                    arguments: [rowid, searchText]
-                )
-            }
+            try Self.insertIndexed(db, item: item, searchText: classified.searchText)
 
             for rep in reps {
                 try Representation(
@@ -635,6 +611,27 @@ public actor ClipStore {
         }
     }
 
+    /// The one INSERT that puts an item row *and* its FTS entry in place.
+    /// `ingest` and ``import(from:)`` both go through here: `item_fts` is a
+    /// contentless index, so a row inserted without this second write is
+    /// invisible to `search` forever — there is no reindex to fall back on.
+    /// `searchText` is a column of `item` that ``ClipItem`` deliberately doesn't
+    /// model (it's derived, and enrichment rewrites it), so it's passed
+    /// alongside and written here.
+    static func insertIndexed(_ db: GRDB.Database, item: ClipItem, searchText: String?) throws {
+        try item.insert(db)
+        guard let searchText else { return }
+        let rowid = db.lastInsertedRowID
+        try db.execute(
+            sql: "UPDATE item SET searchText = ? WHERE rowid = ?",
+            arguments: [searchText, rowid]
+        )
+        try db.execute(
+            sql: "INSERT INTO item_fts (rowid, searchText) VALUES (?, ?)",
+            arguments: [rowid, searchText]
+        )
+    }
+
     private static func removeFromFTS(_ db: GRDB.Database, itemID: String) throws {
         // Contentless-delete needs the original indexed text.
         let row = try Row.fetchOne(
@@ -1058,6 +1055,111 @@ public actor ClipStore {
                 arguments: [Date(), Date(), id]
             )
         }
+    }
+
+    // MARK: - Archive support
+
+    //
+    // The store-side half of `ClipArchive.swift`: everything that needs the
+    // private `dbWriter` / `blobs` lives here, the format itself lives there.
+
+    /// Live item ids in frecency order, so an archive reads top-of-history
+    /// first. `secretClause` is a caller-built SQL fragment (`""` or
+    /// `" AND isSecret = 0"`), never user input.
+    func exportableIDs(secretClause: String) async throws -> [String] {
+        try await self.dbWriter.read { db in
+            try String.fetchAll(db, sql: """
+            SELECT id FROM item WHERE deletedAt IS NULL\(secretClause)
+            ORDER BY \(Self.frecencyOrderSQL)
+            """)
+        }
+    }
+
+    func liveSecretCount() async throws -> Int {
+        try await self.dbWriter.read { db in
+            try Int.fetchOne(
+                db, sql: "SELECT COUNT(*) FROM item WHERE deletedAt IS NULL AND isSecret = 1"
+            ) ?? 0
+        }
+    }
+
+    /// Archive records for `ids`, in the order given.
+    func exportRecords(ids: [String]) async throws -> [ClipArchive.Record] {
+        guard !ids.isEmpty else { return [] }
+        let placeholders = Self.placeholders(ids.count)
+        return try await self.dbWriter.read { db in
+            let rows = try Row.fetchAll(
+                db,
+                sql: "SELECT * FROM item WHERE id IN (\(placeholders))",
+                arguments: StatementArguments(ids)
+            )
+            let reps = try Representation.fetchAll(
+                db,
+                sql: "SELECT * FROM representation WHERE itemID IN (\(placeholders))",
+                arguments: StatementArguments(ids)
+            )
+            let repsByItem = Dictionary(grouping: reps, by: \.itemID)
+            var byID: [String: ClipArchive.Record] = [:]
+            for row in rows {
+                let item = try ClipItem(row: row)
+                byID[item.id] = ClipArchive.Record(
+                    item: item,
+                    searchText: row["searchText"],
+                    representations: repsByItem[item.id] ?? []
+                )
+            }
+            return ids.compactMap { byID[$0] }
+        }
+    }
+
+    /// The archive's copy source for a blob, or nil when the file is gone.
+    func blobFileURL(for hash: String) -> URL? {
+        let url = self.blobs.url(for: hash)
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
+
+    /// Inserts one archived record, skipping it when its content is already
+    /// live. Blob payloads are re-stored inside the write block for the same
+    /// reason `ingest` does it there: holding GRDB's single writer is what keeps
+    /// a concurrent `purge` from reclaiming a fresh blob before its row lands.
+    func insertImported(
+        record: ClipArchive.Record, payloads: [ArchivePayload]
+    ) async throws -> ImportOutcome {
+        let blobs = self.blobs
+        return try await self.dbWriter.write { db in
+            let isDuplicate = try ClipItem
+                .filter(sql: "contentHash = ? AND deletedAt IS NULL", arguments: [record.contentHash])
+                .fetchCount(db) > 0
+            guard !isDuplicate else { return .duplicate }
+
+            // Keep the archived id when it's free — it's the handle a user may
+            // have in a script or an export diff — but an id can still be taken
+            // by a tombstone the contentHash check above doesn't see.
+            let taken = try ClipItem.filter(key: record.id).fetchCount(db) > 0
+            let id = taken ? UUID().uuidString : record.id
+            guard let item = record.clipItem(id: id) else { return .malformed }
+
+            try Self.insertIndexed(db, item: item, searchText: record.searchText)
+            for payload in payloads {
+                // Same inline/blob split as capture, re-derived rather than
+                // trusted from the archive, so one rule decides where payloads live.
+                let inline = payload.bytes.count < Representation.inlineThreshold
+                try Representation(
+                    itemID: id,
+                    uti: payload.uti,
+                    data: inline ? payload.bytes : nil,
+                    blobHash: inline ? nil : blobs.store(payload.bytes),
+                    byteSize: payload.bytes.count
+                ).insert(db)
+            }
+            return .inserted(id)
+        }
+    }
+
+    /// `storeEmbedding` for callers outside this file (the importer), with the
+    /// same best-effort contract: a missing model costs semantic hits, nothing else.
+    func storeEmbeddingIfPossible(itemID: String, text: String) async throws {
+        try await self.storeEmbedding(itemID: itemID, text: text)
     }
 
     // MARK: - Observation

@@ -6,11 +6,11 @@ import OverboardMac
 import SwiftUI
 import Testing
 
-/// CI-safe counterpart to the (local-only) snapshot suites: it renders the card
-/// view bodies headlessly and asserts they produce a non-empty image, without
-/// the Retina-sensitive pixel comparison. This catches crashes, force-unwraps,
-/// and layout traps in the render paths on CI, where the image assertions are
-/// skipped. Not marked `.localOnly` — it runs everywhere.
+/// Breadth counterpart to the pixel suites: it renders view bodies the
+/// recorded snapshots don't cover — every launcher scope, both appearances,
+/// each file-preview variant — and only asserts they produce a non-empty
+/// image. Catching a crash, force-unwrap, or layout trap in those paths is
+/// worth far less ceremony than a reference PNG per combination.
 @MainActor
 struct RenderSmokeTests {
     private let store: ClipStore
@@ -64,9 +64,7 @@ struct RenderSmokeTests {
         for scope in LauncherScope.allCases {
             model.scope = scope
             model.scheduleSearch()
-            for _ in 0 ..< 100 where model.isSearching {
-                try? await Task.sleep(for: .milliseconds(5))
-            }
+            await model.settle()
             for dark in [false, true] {
                 let view = LauncherView(viewModel: model, store: self.store)
                 #expect(self.rendersNonEmpty(snapshotHost(view, width: model.showsPreview ? 1020 : 740, height: 650, dark: dark)))

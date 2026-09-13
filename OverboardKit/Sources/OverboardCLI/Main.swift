@@ -39,7 +39,7 @@ struct Overboard: AsyncParsableCommand {
         `copy` sets the system clipboard directly — run the app to capture it \
         into history.
         """,
-        subcommands: [History.self, Search.self, Get.self, Copy.self]
+        subcommands: [History.self, Search.self, Get.self, Copy.self, Export.self]
     )
 
     /// `overboard` with no subcommand is a malformed command line, not a help
@@ -187,6 +187,27 @@ struct Overboard: AsyncParsableCommand {
         return .ok
     }
 
+    /// Writes an archive folder and reports what landed in it. Read-only:
+    /// exporting only reads the database, so the CLI's read-only open is
+    /// enough. There is no matching `import` — restores mutate the store's
+    /// blobs and FTS index, and the app owns those.
+    static func export(store: ClipStore, directory: String, includeSecrets: Bool) async throws -> ExitCode {
+        let url = URL(fileURLWithPath: (directory as NSString).expandingTildeInPath)
+        let summary = try await store.export(to: url, includeSecrets: includeSecrets)
+        var line = "Exported \(CountPhrase.string(summary.itemCount, of: "item"))"
+        if summary.blobCount > 0 {
+            line += " and \(CountPhrase.string(summary.blobCount, of: "blob"))"
+        }
+        line += " to \(summary.directory.path)"
+        FileHandle.standardOutput.printLine(line)
+        if summary.secretsExcluded > 0 {
+            FileHandle.standardError.printLine(
+                "overboard: excluded \(CountPhrase.string(summary.secretsExcluded, of: "secret")) — pass --include-secrets to export them."
+            )
+        }
+        return summary.itemCount == 0 ? .notFound : .ok
+    }
+
     static func copy(stdin wantsStdin: Bool, text positional: [String]) -> ExitCode {
         let text: String
         if wantsStdin || (positional.isEmpty && isatty(0) == 0) {
@@ -291,6 +312,26 @@ struct Get: AsyncParsableCommand {
     func run() async throws {
         try await Overboard.finish(Overboard.runReading { store in
             try await Overboard.get(store: store, index: self.index, options: self.options)
+        })
+    }
+}
+
+struct Export: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        abstract: "Write clipboard history to a folder as items.ndjson + blobs/."
+    )
+
+    @Flag(name: .long, help: "Include detected secrets, which are excluded by default.")
+    var includeSecrets = false
+
+    @Argument(help: ArgumentHelp("Folder to write the archive into.", valueName: "dir"))
+    var directory: String
+
+    func run() async throws {
+        try await Overboard.finish(Overboard.runReading { store in
+            try await Overboard.export(
+                store: store, directory: self.directory, includeSecrets: self.includeSecrets
+            )
         })
     }
 }

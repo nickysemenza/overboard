@@ -5,7 +5,6 @@ import SnapshotTesting
 import SwiftUI
 import Testing
 
-@Suite(.localOnly)
 @MainActor
 struct LauncherSectionSnapshotTests {
     /// Mixed rows show consistent section headers (type is conveyed by the
@@ -25,12 +24,10 @@ struct LauncherSectionSnapshotTests {
         )
         viewModel.query = "demo"
         viewModel.scheduleSearch()
-        while viewModel.results.isEmpty {
-            try? await Task.sleep(for: .milliseconds(10))
-        }
+        await viewModel.settle()
 
         let view = LauncherView(viewModel: viewModel, store: store)
-        assertSnapshot(of: snapshotHost(view, width: 740, height: 370), as: snapshotImageStrategy, record: snapshotRecordingMode)
+        assertSnapshot(of: snapshotImage(view, width: 740, height: 370), as: snapshotImageStrategy, record: snapshotRecordingMode)
     }
 
     /// An app row whose bundle path is in `runningAppPaths` shows the small
@@ -45,12 +42,10 @@ struct LauncherSectionSnapshotTests {
         viewModel.runningAppPaths = [appURL.path]
         viewModel.query = "demo"
         viewModel.scheduleSearch()
-        while viewModel.results.isEmpty {
-            try? await Task.sleep(for: .milliseconds(10))
-        }
+        await viewModel.settle()
 
         let view = LauncherView(viewModel: viewModel, store: store)
-        assertSnapshot(of: snapshotHost(view, width: 740, height: 316), as: snapshotImageStrategy, record: snapshotRecordingMode)
+        assertSnapshot(of: snapshotImage(view, width: 740, height: 316), as: snapshotImageStrategy, record: snapshotRecordingMode)
     }
 
     /// The persistent footer bar renders even with zero result rows: brand on
@@ -63,11 +58,9 @@ struct LauncherSectionSnapshotTests {
         // Empty query, no history or apps → no rows, footer only.
         viewModel.query = ""
         viewModel.scheduleSearch()
-        for _ in 0 ..< 100 where viewModel.isSearching {
-            try? await Task.sleep(for: .milliseconds(5))
-        }
+        await viewModel.settle()
 
         let view = LauncherView(viewModel: viewModel, store: store)
-        assertSnapshot(of: snapshotHost(view, width: 740, height: 316), as: snapshotImageStrategy, record: snapshotRecordingMode)
+        assertSnapshot(of: snapshotImage(view, width: 740, height: 316), as: snapshotImageStrategy, record: snapshotRecordingMode)
     }
 }

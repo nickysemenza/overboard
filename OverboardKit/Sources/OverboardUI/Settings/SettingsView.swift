@@ -210,6 +210,16 @@ private struct HistorySettingsTab: View {
     @State private var diskUsage: String?
     @State private var stats: LibraryStats?
     @State private var confirmingClear = false
+    @State private var archiveOutcome: ArchiveOutcome?
+    @State private var isArchiving = false
+
+    /// The result of an export or import, shown once in an alert. Carries its
+    /// own title so success and failure share one presentation.
+    private struct ArchiveOutcome: Identifiable {
+        let id = UUID()
+        let title: String
+        let message: String
+    }
 
     var body: some View {
         Form {
@@ -243,6 +253,20 @@ private struct HistorySettingsTab: View {
             } footer: {
                 Text("Clearing removes all unpinned items. Pinned items and snippets are kept.")
             }
+
+            Section {
+                Button("Export History…") {
+                    self.exportHistory()
+                }
+                Button("Import History…") {
+                    self.importHistory()
+                }
+            } header: {
+                Text("Backup")
+            } footer: {
+                Text("An export is a folder of readable JSON plus the large payloads it references. Detected secrets are left out — they expire on purpose. Importing skips clips you already have.")
+            }
+            .disabled(self.isArchiving)
 
             if let stats = self.stats, !stats.byKind.isEmpty {
                 Section("By type") {
@@ -310,8 +334,110 @@ private struct HistorySettingsTab: View {
         } message: {
             Text(ClearHistoryPrompt.message)
         }
+        .alert(
+            self.archiveOutcome?.title ?? "",
+            isPresented: Binding(
+                get: { self.archiveOutcome != nil },
+                set: { if !$0 { self.archiveOutcome = nil } }
+            ),
+            presenting: self.archiveOutcome
+        ) { _ in
+            Button("OK", role: .cancel) {}
+        } message: { outcome in
+            Text(outcome.message)
+        }
         .task {
             await self.refresh()
+        }
+    }
+
+    // MARK: - Backup
+
+    private func exportHistory() {
+        // AppKit panels rather than `.fileExporter`: the archive is a folder we
+        // write ourselves (JSON + blob files), not a single document SwiftUI
+        // can hand off.
+        let panel = NSSavePanel()
+        panel.title = String(localized: "Export History")
+        panel.prompt = String(localized: "Export")
+        panel.nameFieldStringValue = String(localized: "Overboard Export")
+        panel.canCreateDirectories = true
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        self.isArchiving = true
+        Task {
+            defer { self.isArchiving = false }
+            do {
+                let summary = try await self.store.export(to: url)
+                var message = String(
+                    localized: "Wrote \(CountPhrase.string(summary.itemCount, of: String(localized: "clip"))) to \(summary.directory.lastPathComponent)."
+                )
+                if summary.secretsExcluded > 0 {
+                    message += " " + String(
+                        localized: "\(CountPhrase.string(summary.secretsExcluded, of: String(localized: "detected secret"))) excluded."
+                    )
+                }
+                self.archiveOutcome = ArchiveOutcome(
+                    title: String(localized: "Export Complete"), message: message
+                )
+            } catch {
+                settingsLogger.error("export failed: \(String(describing: error), privacy: .public)")
+                self.archiveOutcome = ArchiveOutcome(
+                    title: String(localized: "Export Failed"), message: error.localizedDescription
+                )
+            }
+        }
+    }
+
+    private func importHistory() {
+        let panel = NSOpenPanel()
+        panel.title = String(localized: "Import History")
+        panel.prompt = String(localized: "Import")
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        self.isArchiving = true
+        Task {
+            defer { self.isArchiving = false }
+            do {
+                let summary = try await self.store.import(from: url)
+                var parts = [String(
+                    localized: "Added \(CountPhrase.string(summary.imported, of: String(localized: "clip")))."
+                )]
+                if summary.duplicatesSkipped > 0 {
+                    parts.append(String(
+                        localized: "Skipped \(CountPhrase.string(summary.duplicatesSkipped, of: String(localized: "duplicate")))."
+                    ))
+                }
+                // Damage is reported rather than hidden: an archive with bad
+                // lines or missing payloads still imported everything it could.
+                if !summary.malformedLines.isEmpty {
+                    parts.append(String(
+                        localized: "Couldn’t read \(CountPhrase.string(summary.malformedLines.count, of: String(localized: "line")))."
+                    ))
+                }
+                if summary.missingBlobs > 0 {
+                    parts.append(String(
+                        localized: "\(CountPhrase.string(summary.missingBlobs, of: String(localized: "payload file"))) missing from the archive."
+                    ))
+                }
+                self.archiveOutcome = ArchiveOutcome(
+                    title: String(localized: "Import Complete"), message: parts.joined(separator: " ")
+                )
+                await self.refresh()
+            } catch {
+                settingsLogger.error("import failed: \(String(describing: error), privacy: .public)")
+                self.archiveOutcome = ArchiveOutcome(
+                    title: String(localized: "Import Failed"),
+                    // "Pick a folder written by Export History" is the whole
+                    // point of the message; `localizedDescription` on a plain
+                    // Swift error would flatten it to "The operation couldn't
+                    // be completed."
+                    message: (error as? ClipArchive.Failure)?.description ?? error.localizedDescription
+                )
+            }
         }
     }
 

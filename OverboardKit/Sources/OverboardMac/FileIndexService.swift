@@ -60,6 +60,9 @@ public final class FileIndexService {
 
     private let rootsOverride: [URL]?
     private let exclusionsOverride: [String]?
+    /// Callers parked in ``nextReconcile()``, resumed by ``signalReconcile()``
+    /// or, one at a time, by cancellation — hence keyed rather than a list.
+    private var reconcileWaiters: [UUID: CheckedContinuation<Void, Never>] = [:]
 
     public init(index: FileNameIndex? = nil, roots: [URL]? = nil, exclusions: [String]? = nil) {
         self.index = index
@@ -152,6 +155,7 @@ public final class FileIndexService {
                 self.isIndexing = false
                 self.status = self.issues.isEmpty ? "\(self.fileCount.formatted()) files ready" : "\(self.fileCount.formatted()) files · some locations unavailable"
                 self.onChange()
+                self.signalReconcile()
                 if !self.dirtyPaths.isEmpty { self.scheduleRefresh() }
             } catch is CancellationError {
                 // A successor owns the status.
@@ -161,7 +165,49 @@ public final class FileIndexService {
                 self.status = "File index unavailable. Rebuild in Settings → Files."
                 self.issues = [error.localizedDescription]
                 self.onChange()
+                self.signalReconcile()
             }
+        }
+    }
+
+    /// Returns when the next index pass finishes — the initial scan, or a
+    /// reconcile triggered by filesystem events.
+    ///
+    /// FSEvents delivery and the refresh debounce are genuinely asynchronous,
+    /// so a test can't avoid waiting; what it *can* avoid is guessing how long
+    /// to wait. Parking on this instead of polling `isIndexing` on a sleep loop
+    /// means a test wakes exactly when the index is consistent again. Park
+    /// before making the change you want reconciled: everything here is
+    /// main-actor, so a `FileManager` call followed by `await nextReconcile()`
+    /// can't miss the signal. A pass abandoned by cancellation signals nothing,
+    /// since its successor owns the outcome.
+    public func nextReconcile() async {
+        let id = UUID()
+        // Cancellable on purpose: a caller that races this against a deadline
+        // (or is torn down) would otherwise leave a continuation parked here
+        // forever, and its task group would wait on that child for good.
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                if Task.isCancelled {
+                    continuation.resume()
+                } else {
+                    self.reconcileWaiters[id] = continuation
+                }
+            }
+        } onCancel: {
+            Task { @MainActor in self.resumeReconcileWaiter(id) }
+        }
+    }
+
+    private func resumeReconcileWaiter(_ id: UUID) {
+        self.reconcileWaiters.removeValue(forKey: id)?.resume()
+    }
+
+    private func signalReconcile() {
+        let waiters = self.reconcileWaiters
+        self.reconcileWaiters.removeAll()
+        for waiter in waiters.values {
+            waiter.resume()
         }
     }
 
@@ -193,6 +239,7 @@ public final class FileIndexService {
             self.isIndexing = true
             defer {
                 self.isIndexing = false
+                self.signalReconcile()
                 if !Task.isCancelled, !self.dirtyPaths.isEmpty { self.scheduleRefresh() }
             }
             for directory in directories {

@@ -18,9 +18,7 @@ private struct DelayedLauncherProvider: LauncherProvider {
 @MainActor
 struct LauncherScopeTests {
     private func waitForSearch(_ model: LauncherViewModel) async {
-        for _ in 0 ..< 300 where model.isSearching {
-            try? await Task.sleep(for: .milliseconds(5))
-        }
+        await model.settle()
         #expect(!model.isSearching)
     }
 
@@ -43,6 +41,9 @@ struct LauncherScopeTests {
         let model = LauncherViewModel(instantProviders: [DelayedLauncherProvider(rows: [app])], secondaryProviders: [DelayedLauncherProvider(rows: [file], delay: .milliseconds(80))])
         model.query = "hello"
         model.scheduleSearch()
+        // Deliberately *not* `settle()`: the point is to navigate while the
+        // slow secondary provider is still in flight, and settling would wait
+        // for exactly the results this test must select ahead of.
         for _ in 0 ..< 100 where model.results.count < 2 {
             try? await Task.sleep(for: .milliseconds(1))
         }

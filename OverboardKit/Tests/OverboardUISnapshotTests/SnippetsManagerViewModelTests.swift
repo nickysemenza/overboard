@@ -3,8 +3,7 @@ import OverboardCore
 @testable import OverboardUI
 import Testing
 
-/// Pure view-model logic, not rendering — doesn't need `.localOnly` and runs
-/// everywhere `swift test` does.
+/// Pure view-model logic, not rendering — no snapshot references involved.
 @MainActor
 struct SnippetsManagerViewModelTests {
     private func makeStore() throws -> ClipStore {

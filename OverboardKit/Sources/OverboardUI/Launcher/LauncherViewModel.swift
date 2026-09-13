@@ -406,6 +406,35 @@ public final class LauncherViewModel {
     private func finishSearch(_ generation: Int) {
         guard self.searchGeneration == generation else { return }
         self.isSearching = false
+        let waiters = self.settleWaiters
+        self.settleWaiters.removeAll()
+        for waiter in waiters {
+            waiter.resume()
+        }
+    }
+
+    /// Parked `settle()` callers, resumed by `finishSearch`. A list rather than
+    /// a single continuation because several waiters can be outstanding.
+    private var settleWaiters: [CheckedContinuation<Void, Never>] = []
+
+    /// Returns once the search pipeline is idle: the current `searchTask` has
+    /// finished and, if it handed off to the debounced secondary pass, that
+    /// pass has landed too.
+    ///
+    /// This exists so tests can wait on the real end of a search instead of
+    /// polling `isSearching` on a sleep loop — a loop that is both slower than
+    /// it needs to be and, on a loaded machine, capable of timing out while the
+    /// search is still perfectly healthy. Everything is main-actor, so
+    /// `scheduleSearch(); await settle()` cannot miss the signal: nothing can
+    /// run between the call that sets `isSearching` and the `await` that parks.
+    /// The loop re-checks the flag because a newer keystroke may have claimed a
+    /// fresh generation while this caller was parked.
+    public func settle() async {
+        while self.isSearching {
+            await withCheckedContinuation { continuation in
+                self.settleWaiters.append(continuation)
+            }
+        }
     }
 
     public func moveSelection(_ delta: Int) {

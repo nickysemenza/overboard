@@ -125,6 +125,36 @@ struct CommandTests {
         #expect(try await Overboard.search(store: store, query: ["nomatch"], options: options) == .notFound)
     }
 
+    // MARK: - export contract
+
+    @Test func exportWritesAnArchiveAndReportsEmptiness() async throws {
+        let store = try self.makeStore()
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("overboard-cli-export-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        // Nothing to export is a well-formed request that found nothing.
+        #expect(try await Overboard.export(
+            store: store, directory: directory.path, includeSecrets: false
+        ) == .notFound)
+
+        _ = try await store.ingest(self.textSnapshot("exported clip"))
+        #expect(try await Overboard.export(
+            store: store, directory: directory.path, includeSecrets: false
+        ) == .ok)
+        #expect(FileManager.default.fileExists(
+            atPath: directory.appendingPathComponent(ClipArchive.itemsFileName).path
+        ))
+    }
+
+    @Test func exportParsesItsDirectoryAndFlag() throws {
+        #expect(try Export.parse(["/tmp/backup"]).directory == "/tmp/backup")
+        #expect(try Export.parse(["--include-secrets", "/tmp/backup"]).includeSecrets)
+        #expect(try !(Export.parse(["/tmp/backup"]).includeSecrets))
+        // The directory is required — `export` with no argument is a usage error.
+        #expect(throws: (any Error).self) { try Export.parse([]) }
+    }
+
     // MARK: - Environment recovery detection
 
     @Test func recoveryErrorsAreRecognized() {
