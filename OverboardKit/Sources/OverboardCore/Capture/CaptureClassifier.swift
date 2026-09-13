@@ -231,7 +231,9 @@ public enum CaptureClassifier {
             sourceBundleID: "com.apple.Safari",
             sourceAppName: "Safari"
         )
-        let fileURLs = try! JSONEncoder().encode(["file:///Users/nicky/Desktop/notes.txt"])
+        // Precomputed JSON for `["file:///Users/nicky/Desktop/notes.txt"]` — avoids
+        // a force-tried JSONEncoder call for a string literal that can't fail.
+        let fileURLs = Data(#"["file:///Users/nicky/Desktop/notes.txt"]"#.utf8)
         let file = PasteboardSnapshot(
             reps: [.init(uti: WellKnownUTI.fileURLs, data: fileURLs)],
             sourceBundleID: "com.apple.finder",
