@@ -175,7 +175,7 @@ public struct SnippetsManagerView: View {
                 HStack {
                     Text("Placeholders: {date} {time} {datetime} {uuid} {clipboard}")
                         .font(.caption)
-                        .foregroundStyle(.tertiary)
+                        .contrastAwareForeground(.tertiary)
                     Spacer()
                     Button("Save") {
                         self.viewModel.saveDraft()

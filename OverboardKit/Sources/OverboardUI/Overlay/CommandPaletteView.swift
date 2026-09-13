@@ -47,7 +47,7 @@ struct CommandPaletteView: View {
             if self.items.isEmpty {
                 Text(self.emptyMessage)
                     .font(.callout)
-                    .foregroundStyle(.tertiary)
+                    .contrastAwareForeground(.tertiary)
                     .padding(14)
             } else {
                 ScrollViewReader { proxy in
@@ -126,7 +126,7 @@ struct CommandPaletteView: View {
                 // palette) keep the old highlighted-row-only ↩ affordance.
                 Image(systemName: "return")
                     .font(.caption)
-                    .foregroundStyle(.tertiary)
+                    .contrastAwareForeground(.tertiary)
                     .accessibilityHidden(true)
             }
         }

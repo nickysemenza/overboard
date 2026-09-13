@@ -18,6 +18,8 @@ let mainActorByDefault: [SwiftSetting] = approachableConcurrency + [
 
 let package = Package(
     name: "OverboardKit",
+    // Required before any target can carry a String Catalog.
+    defaultLocalization: "en",
     platforms: [.macOS(.v26)],
     products: [
         .library(name: "OverboardCore", targets: ["OverboardCore"]),
@@ -71,6 +73,10 @@ let package = Package(
                 .product(name: "Defaults", package: "Defaults"),
                 .product(name: "AsyncAlgorithms", package: "swift-async-algorithms"),
                 .product(name: "MarkdownUI", package: "swift-markdown-ui"),
+            ],
+            resources: [
+                // English-only String Catalog; the build extracts keys into it.
+                .process("Resources"),
             ],
             swiftSettings: mainActorByDefault
         ),

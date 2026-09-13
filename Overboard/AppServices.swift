@@ -200,7 +200,7 @@ final class AppServices {
                 dynamicSubtitle: { command in
                     guard command == .stats else { return nil }
                     guard let stats = try? await store.libraryStats() else { return nil }
-                    return Self.statsSubtitle(stats)
+                    return stats.subtitle
                 }
             ),
             // "Ask AI" fallback row — only when the on-device model is ready and
@@ -756,36 +756,6 @@ final class AppServices {
                 self.logger.error("clear history failed: \(String(describing: error), privacy: .public)")
                 HUDController.shared.flash("Couldn't clear history")
             }
-        }
-    }
-
-    /// One-line library summary for the `:stats` row, e.g.
-    /// "1,234 items · 812 text · 96 links · 12 images". Shows the top kinds from
-    /// `byKind` (already most-frequent first); no byte total.
-    /// `nonisolated` so the launcher's off-main `dynamicSubtitle` closure can
-    /// call it — it's pure.
-    private nonisolated static func statsSubtitle(_ stats: LibraryStats) -> String {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        func number(_ value: Int) -> String {
-            formatter.string(from: NSNumber(value: value)) ?? String(value)
-        }
-        let itemWord = stats.total == 1 ? "item" : "items"
-        var parts = ["\(number(stats.total)) \(itemWord)"]
-        for kindCount in stats.byKind.prefix(3) {
-            parts.append("\(number(kindCount.count)) \(Self.kindLabel(kindCount.kind, count: kindCount.count))")
-        }
-        return parts.joined(separator: " · ")
-    }
-
-    /// Human, pluralized name for a kind in the stats summary ("text", "links").
-    private nonisolated static func kindLabel(_ kind: ItemKind, count: Int) -> String {
-        switch kind {
-        case .text: "text"
-        case .link: count == 1 ? "link" : "links"
-        case .image: count == 1 ? "image" : "images"
-        case .file: count == 1 ? "file" : "files"
-        case .color: count == 1 ? "color" : "colors"
         }
     }
 

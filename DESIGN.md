@@ -91,11 +91,27 @@ The palette follows macOS appearance and accent preferences; it is not a fixed s
 - **Subtle Control Fill:** `.quaternary.opacity(0.6)` supplies source badges, saved-search chips, and keyboard keycaps. `.primary.opacity(0.10)` marks the active scope without competing with result selection.
 - **Opaque Panel:** `NSColor.windowBackgroundColor` replaces glass when Reduce Transparency is enabled. Native `Divider` separates structural regions.
 
+### Kind Identity
+
+A small fixed ramp of system colors names *what a result is* where no icon already says so. It is a recognition aid, not a brand palette: each color belongs to a content kind and is never reused decoratively.
+
+- **Orange:** calculations, and the `.color` content kind.
+- **Blue:** folders, web searches, and the `.link` content kind.
+- **Purple:** snippets, Ask AI, and the `.image` content kind.
+- **Gray:** system settings and the `.text` content kind.
+- **Teal:** launcher commands and the `.file` content kind.
+- **Green:** the now-playing row.
+- **Secret badge:** a filled orange capsule with a white lock and label. The one place the ramp is a warning rather than a label, so it is filled rather than tinted type, and it survives Increase Contrast unchanged.
+
+The content-kind half of the ramp is named in `OverboardCore` (`ItemKind.tintName`) and resolved to a color in exactly one place in `OverboardUI`.
+
 App icons, file icons, syntax highlighting, image previews, and source-derived card-header tints retain their own colors. These are information, not additional brand accents.
 
 **The Selection Accent Rule.** Use the system accent to identify actionable selection; preserve primary and secondary text hierarchy inside the tint.
 
 **The Native Color Rule.** Keep semantic color bindings live across appearance and accessibility changes. Do not turn screenshot pixel samples into application colors.
+
+**The Increase Contrast Rule.** Tertiary and quaternary foregrounds are promoted to secondary when `colorSchemeContrast` is `.increased`, and the source-app header tint on clipboard cards falls back to its flat `.primary.opacity(0.05)` fill. One helper applies the promotion so call sites do not each decide.
 
 ## Typography
 
@@ -106,11 +122,14 @@ App icons, file icons, syntax highlighting, image previews, and source-derived c
 
 ### Hierarchy
 
-- **Search:** the launcher query uses system regular type (20pt). Drawer and action-palette queries use `.title3`.
+- **Search:** the launcher query uses system regular type (20pt, scaled relative to `.title2`). Drawer, emoji, and action-palette queries use `.title3`.
+- **Scopes:** `.subheadline` medium with `.caption2` shortcuts.
 - **Result:** `.body`, normally regular; calculation results and query matches gain emphasis through weight.
-- **Preview:** readable plain text uses system regular type (14pt). Code uses the shared `code` token and the existing appearance-specific Highlightr themes (`atom-one-dark` and `xcode`).
-- **Section:** `.caption.weight(.semibold)` with secondary foreground, sentence case.
+- **Preview:** readable plain text uses `.callout`. Code uses the shared `code` token and the existing appearance-specific Highlightr themes (`atom-one-dark` and `xcode`).
+- **Section:** `.caption.weight(.semibold)` with secondary foreground, sentence case — on every surface, including the emoji picker's categories.
 - **Metadata and actions:** `.caption`; selected footer actions use medium weight. Compact source badges and keycaps use `.caption2`.
+
+**The Dynamic Type Rule.** Type comes from semantic roles; the few sizes that predate them (the launcher query, the emoji glyph, preview placeholder symbols, card geometry) are `@ScaledMetric` relative to the nearest role rather than fixed points. Fixed-size tiles grow with the text they hold and trade line count for it.
 
 **The Recognition Rule.** Give the title the first reading position, then the source or path. Emphasize matched text with weight rather than adding another highlight color.
 
@@ -146,7 +165,7 @@ Clip images to their slot or card before applying selection outlines. Preserve n
 
 ### Inputs / Fields
 
-Plain native text fields sit directly in the panel. The launcher query has a search symbol and generous horizontal padding, without a second enclosing input box. Focus returns to search when the surface opens, the scope changes, or the action palette closes. Clipboard filters retain native small pickers and a pin toggle.
+Plain native text fields sit directly in the panel. One shared field serves all three summonable surfaces in two sizes: the launcher's *large* size keeps the taller frame and generous horizontal padding; the drawer and emoji picker use the *regular* size. Neither adds a second enclosing input box. Focus returns to search when the surface opens, the scope changes, or the action palette closes. Clipboard filters retain native small pickers and a pin toggle.
 
 ### Navigation
 
@@ -158,7 +177,11 @@ An icon, recognizable title, secondary source or breadcrumb, and optional traili
 
 ### Buttons and Footer
 
-Footer buttons are plain text actions, with the primary action in primary foreground and the remaining controls in secondary foreground. The action label describes the selected item's behavior and paste destination when applicable. Return and the Actions keycap stay beside their controls. Native buttons handle explicit actions such as Download & Open.
+One footer bar serves every summonable surface: brand mark and name on the left, the ↩ action and an optional keycapped secondary action on the right. Footer buttons are plain text actions, with the primary action in primary foreground and the remaining controls in secondary foreground. The action label describes the selected item's behavior and paste destination when applicable. Return and the Actions keycap stay beside their controls. Native buttons handle explicit actions such as Download & Open.
+
+### Empty States
+
+One treatment everywhere: a native `ContentUnavailableView` with a meaningful symbol — or the app's bobbing boat for an empty clipboard, the one state that is Overboard's own — a sentence-case title, and an optional recovery sentence. Surfaces do not invent their own empty layout.
 
 ### Chips
 
@@ -170,7 +193,7 @@ The content occupies the main preview area; a divider separates its metadata bel
 
 ### Clipboard Cards
 
-The drawer preserves compact, equal-size cards with source-app headers, content previews, and metadata footers. Header tint comes from the source app's icon; image, link, code, color, file, and protected content keep their distinct presentations. Selected cards have an accent outline and soft lift; hover reveals compact native actions. The drawer's centered action hints use caption-sized secondary text.
+The drawer preserves compact, equal-size cards with source-app headers, content previews, and metadata footers. Card width and height scale with Dynamic Type, and the card strip and drawer panel heights are derived from the card rather than declared separately. Header tint comes from the source app's icon; image, link, code, color, file, and protected content keep their distinct presentations. Protected content carries the filled orange Secret badge in its header alongside its masked body. Selected cards have an accent outline and soft lift; hover reveals compact native actions. The drawer's centered action hints use caption-sized secondary text.
 
 ### Action Palette
 

@@ -9,30 +9,6 @@ import SwiftUI
 
 private let settingsLogger = Logger(subsystem: "com.nickysemenza.overboard", category: "settings")
 
-extension ItemKind {
-    /// Capitalized display name for Settings UI.
-    var displayName: String {
-        switch self {
-        case .text: "Text"
-        case .link: "Link"
-        case .image: "Image"
-        case .file: "File"
-        case .color: "Color"
-        }
-    }
-
-    /// SF Symbol representing this kind in Settings UI.
-    var symbolName: String {
-        switch self {
-        case .text: "textformat"
-        case .link: "link"
-        case .image: "photo"
-        case .file: "doc"
-        case .color: "paintpalette"
-        }
-    }
-}
-
 /// Identifies one Settings tab, so callers outside the view (a launcher
 /// command, a menu item) can deep-link to a specific one.
 public enum SettingsTab: Hashable, Sendable {
@@ -274,7 +250,14 @@ private struct HistorySettingsTab: View {
                         LabeledContent {
                             Text(entry.count.formatted())
                         } label: {
-                            Label(entry.kind.displayName, systemImage: entry.kind.symbolName)
+                            Label {
+                                Text(entry.kind.displayName)
+                            } icon: {
+                                // The one place the kind-identity ramp is the
+                                // subject rather than incidental decoration.
+                                Image(systemName: entry.kind.symbolName)
+                                    .foregroundStyle(Color(entry.kind.tintName))
+                            }
                         }
                     }
                 }
@@ -448,7 +431,7 @@ private struct ActionsSettingsTab: View {
                                 if let condition = info.condition {
                                     Text(condition)
                                         .font(.caption2)
-                                        .foregroundStyle(.tertiary)
+                                        .contrastAwareForeground(.tertiary)
                                         .padding(.leading, 22)
                                 }
                             }
@@ -481,7 +464,7 @@ private struct ActionsSettingsTab: View {
                 .foregroundStyle(.green)
         } else {
             Text("–")
-                .foregroundStyle(.quaternary)
+                .contrastAwareForeground(.quaternary)
         }
     }
 

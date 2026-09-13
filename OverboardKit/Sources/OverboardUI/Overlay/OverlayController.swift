@@ -138,7 +138,7 @@ public final class OverlayController {
 
         let screen = self.screenWithMouse()
         let visible = screen.visibleFrame
-        let height: CGFloat = 282
+        let height = CardMetrics.collapsedPanelHeight
         panel.setFrame(
             NSRect(x: visible.minX, y: visible.minY, width: visible.width, height: height),
             display: false
@@ -160,7 +160,7 @@ public final class OverlayController {
     // MARK: - Setup
 
     private func makePanel() -> OverlayPanel {
-        let panel = OverlayPanel(contentRect: NSRect(x: 0, y: 0, width: 800, height: 282))
+        let panel = OverlayPanel(contentRect: NSRect(x: 0, y: 0, width: 800, height: CardMetrics.collapsedPanelHeight))
         let hosting = NSHostingView(
             rootView: DrawerView(viewModel: self.viewModel)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
@@ -174,7 +174,7 @@ public final class OverlayController {
         guard let panel, panel.isVisible else { return }
         let screen = panel.screen ?? self.screenWithMouse()
         let visible = screen.visibleFrame
-        let height: CGFloat = expanded ? 540 : 282
+        let height = expanded ? CardMetrics.expandedPanelHeight : CardMetrics.collapsedPanelHeight
         panel.setFrame(
             NSRect(x: visible.minX, y: visible.minY, width: visible.width, height: height),
             display: true,

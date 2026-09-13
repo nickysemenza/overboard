@@ -5,6 +5,10 @@ struct SnippetCardView: View {
     let snippet: Snippet
     let index: Int
     let isSelected: Bool
+    /// Matches ItemCardView so the two card kinds stay the same size in a
+    /// strip that mixes them.
+    @ScaledMetric(relativeTo: .callout) private var cardWidth: CGFloat = CardMetrics.width
+    @ScaledMetric(relativeTo: .callout) private var cardHeight: CGFloat = CardMetrics.height
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -12,11 +16,11 @@ struct SnippetCardView: View {
             Divider().opacity(0.4)
             Text(self.snippet.body)
                 .font(.callout)
-                .lineLimit(7)
+                .lineLimit(self.bodyLineLimit)
                 .padding(10)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .frame(width: 190, height: 180)
+        .frame(width: self.cardWidth, height: self.cardHeight)
         .background(.background.opacity(0.6))
         .clipShape(RoundedRectangle(cornerRadius: 10))
         .overlay {
@@ -39,6 +43,12 @@ struct SnippetCardView: View {
         return "\(self.snippet.title), \(preview)"
     }
 
+    /// The card grows with Dynamic Type but not as fast as the type does, so
+    /// the line budget shrinks to keep the body inside the card.
+    private var bodyLineLimit: Int {
+        max(1, Int((7 * CardMetrics.height / self.cardHeight).rounded(.down)))
+    }
+
     private var header: some View {
         HStack(spacing: 6) {
             Image(systemName: "text.badge.star")
@@ -51,7 +61,7 @@ struct SnippetCardView: View {
             if self.index < 9 {
                 Text("⌘\(self.index + 1)")
                     .font(.caption2.monospaced())
-                    .foregroundStyle(.tertiary)
+                    .contrastAwareForeground(.tertiary)
                     .accessibilityLabel("Command \(self.index + 1)")
             }
         }

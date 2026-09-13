@@ -19,7 +19,7 @@ struct AppListEditor: View {
         VStack(alignment: .leading, spacing: 0) {
             if self.bundleIDs.isEmpty {
                 Text("No apps")
-                    .foregroundStyle(.tertiary)
+                    .contrastAwareForeground(.tertiary)
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.vertical, 12)
             }
@@ -61,7 +61,7 @@ struct AppListEditor: View {
                 if Self.displayName(for: bundleID) != nil {
                     Text(bundleID)
                         .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                        .contrastAwareForeground(.tertiary)
                 }
             }
             Spacer()
@@ -69,7 +69,7 @@ struct AppListEditor: View {
                 self.remove(bundleID)
             } label: {
                 Image(systemName: "minus.circle.fill")
-                    .foregroundStyle(.tertiary)
+                    .contrastAwareForeground(.tertiary)
             }
             .buttonStyle(.borderless)
             .help("Remove")

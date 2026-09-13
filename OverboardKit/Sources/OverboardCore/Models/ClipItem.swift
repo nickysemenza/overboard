@@ -112,17 +112,17 @@ extension ClipItem: FetchableRecord, PersistableRecord {
 
 // MARK: - Card metadata footer
 
-extension ClipItem {
+public extension ClipItem {
     /// One-line footer summarizing the clip's shape, shown under the card
     /// content. Pure and unit-testable; nil means "render no footer".
-    public var metadataFooter: String? {
+    var metadataFooter: String? {
         guard !self.isSecret else { return nil }
         switch self.kind {
         case .text:
             guard let chars = charCount else { return nil }
-            let charsPart = "\(Self.decimal(chars)) \(chars == 1 ? "char" : "chars")"
+            let charsPart = CountPhrase.string(chars, of: String(localized: "character"))
             guard let lines = lineCount, lines > 1 else { return charsPart }
-            return "\(charsPart) · \(lines) lines"
+            return "\(charsPart) · \(CountPhrase.string(lines, of: String(localized: "line")))"
         case .link:
             // The link's host, parsed from the URL preview text.
             return Self.linkHost(fromPreview: self.previewText)
@@ -136,7 +136,7 @@ extension ClipItem {
             return "\(size.width) × \(size.height)"
         case .file:
             guard let count = fileCount else { return nil }
-            let filesPart = count == 1 ? "1 file" : "\(count) files"
+            let filesPart = CountPhrase.string(count, of: String(localized: "file"))
             return "\(filesPart) · \(Self.byteCount(self.byteSize))"
         case .color:
             return nil
@@ -146,7 +146,7 @@ extension ClipItem {
     /// Parses the "Image W×H" preview string produced by
     /// `CaptureClassifier.previewText`. Used to backfill and to render footers
     /// for images captured before migration v2.
-    static func imageDimensions(fromPreview preview: String?) -> (width: Int, height: Int)? {
+    internal static func imageDimensions(fromPreview preview: String?) -> (width: Int, height: Int)? {
         guard let preview else { return nil }
         let scanner = Scanner(string: preview)
         // Skip up to the first digit ("Image " prefix, tolerant of variants).
@@ -161,15 +161,11 @@ extension ClipItem {
     /// The display host of a `.link` clip: the URL's host with a leading
     /// "www." stripped. Nil if the preview isn't a parseable URL with a host.
     /// Shared by the footer and the card headline's host line.
-    public static func linkHost(fromPreview preview: String?) -> String? {
+    static func linkHost(fromPreview preview: String?) -> String? {
         guard let preview,
               let host = URL(string: preview.trimmingCharacters(in: .whitespacesAndNewlines))?.host
         else { return nil }
         return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
-    }
-
-    private static func decimal(_ value: Int) -> String {
-        value.formatted(.number.grouping(.automatic))
     }
 
     /// Matches the History settings tab's disk-usage formatting (`.file` style).

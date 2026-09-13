@@ -60,9 +60,17 @@ public struct LauncherView: View {
                     self.errorBanner(message)
                 }
                 Divider()
-                LauncherFooterBar(primaryAction: self.viewModel.primaryAction, label: self.viewModel.primaryActionLabel,
-                                  onCommit: { self.viewModel.commit() }, onActions: { self.viewModel.togglePalette() })
-                    .padding(.horizontal, 12).padding(.vertical, 9)
+                PanelFooterBar(
+                    primary: self.viewModel.primaryAction.map { action in
+                        .init(label: self.viewModel.primaryActionLabel ?? action.label) { self.viewModel.commit() }
+                    },
+                    secondary: .init(
+                        label: String(localized: "Actions", bundle: .module),
+                        keycap: "⌘K",
+                        accessibilityLabel: String(localized: "Actions, Command K", bundle: .module)
+                    ) { self.viewModel.togglePalette() }
+                )
+                .padding(.horizontal, 12).padding(.vertical, 9)
             }
             .glassPanel(cornerRadius: PanelRadius.launcher)
             .padding(12)
@@ -95,15 +103,18 @@ public struct LauncherView: View {
     }
 
     private var searchBar: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "magnifyingglass").font(.title3).foregroundStyle(.secondary)
-                .accessibilityHidden(true)
-            TextField(self.viewModel.scope == .clipboard ? "Find something you copied…" : "Search apps, files, clipboard, or the web…", text: self.$viewModel.query)
-                .textFieldStyle(.plain).font(.system(size: 20)).focused(self.$fieldFocused)
-                .accessibilityLabel("Search \(self.viewModel.scope.rawValue)")
+        PanelSearchField(
+            symbol: "magnifyingglass",
+            prompt: self.viewModel.scope == .clipboard
+                ? String(localized: "Find something you copied…", bundle: .module)
+                : String(localized: "Search apps, files, clipboard, or the web…", bundle: .module),
+            text: self.$viewModel.query,
+            size: .large,
+            accessibilityLabel: String(localized: "Search \(self.viewModel.scope.rawValue)", bundle: .module),
+            focus: self.$fieldFocused
+        ) {
             if self.showSpinner { ProgressView().controlSize(.small) }
         }
-        .padding(.horizontal, 20).frame(height: 62)
     }
 
     private var scopeBar: some View {
@@ -111,8 +122,8 @@ public struct LauncherView: View {
             ForEach(Array(LauncherScope.allCases.enumerated()), id: \.element) { index, scope in
                 Button { self.viewModel.setScope(scope) } label: {
                     HStack(spacing: 6) {
-                        Text(scope.rawValue).font(.system(size: 12, weight: .medium))
-                        Text("⌘\(index + 1)").font(.system(size: 10)).foregroundStyle(.secondary)
+                        Text(scope.rawValue).font(.subheadline.weight(.medium))
+                        Text("⌘\(index + 1)").font(.caption2).foregroundStyle(.secondary)
                     }
                     .padding(.horizontal, 11).padding(.vertical, 6)
                     .background(self.viewModel.scope == scope ? Color.primary.opacity(0.10) : .clear, in: RoundedRectangle(cornerRadius: 7))
@@ -185,8 +196,7 @@ public struct LauncherView: View {
                 LazyVStack(spacing: 2) {
                     ForEach(Array(self.viewModel.results.enumerated()), id: \.element.id) { index, result in
                         if let header = self.historyHeader(at: index) {
-                            Text(header).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                                .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 10).padding(.top, 12).padding(.bottom, 4)
+                            PanelSectionHeader(title: header)
                         }
                         // Computed once per search pass in the view model
                         // (batched into one store call) rather than per row.
@@ -232,13 +242,23 @@ public struct LauncherView: View {
     @ViewBuilder private var emptyState: some View {
         let query = self.viewModel.query.trimmingCharacters(in: .whitespacesAndNewlines)
         if !query.isEmpty {
-            ContentUnavailableView.search(text: query)
+            PanelEmptyState(
+                mark: .symbol("magnifyingglass"),
+                title: String(localized: "No results for “\(query)”", bundle: .module),
+                subtitle: String(localized: "Check the spelling or try a new search.", bundle: .module)
+            )
         } else if self.viewModel.scope == .clipboard {
-            ContentUnavailableView("No results", systemImage: "doc.on.clipboard",
-                                   description: Text("Copy something, or try a different search or filter."))
+            PanelEmptyState(
+                mark: .symbol("doc.on.clipboard"),
+                title: String(localized: "No results", bundle: .module),
+                subtitle: String(localized: "Copy something, or try a different search or filter.", bundle: .module)
+            )
         } else {
-            ContentUnavailableView("No results", systemImage: "magnifyingglass",
-                                   description: Text("Try a shorter name or choose another scope."))
+            PanelEmptyState(
+                mark: .symbol("magnifyingglass"),
+                title: String(localized: "No results", bundle: .module),
+                subtitle: String(localized: "Try a shorter name or choose another scope.", bundle: .module)
+            )
         }
     }
 
@@ -265,64 +285,6 @@ public struct LauncherView: View {
     }
 }
 
-/// Section label above the first row of each provider run ("Apps", "Files",
-/// "Recent", …). Headers share the scrolling result viewport.
-struct LauncherSectionHeader: View {
-    let title: String
-
-    var body: some View {
-        Text(self.title)
-            .font(.caption2.weight(.semibold))
-            .foregroundStyle(.tertiary)
-            .textCase(.uppercase)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 8)
-            .padding(.top, 2)
-    }
-}
-
-/// Persistent bottom action bar. Left brands the panel; right shows the
-/// selected row's primary (↩) action and the ⌘K palette affordance. Rendered
-/// whenever the panel is visible — even with no results — in dedicated space.
-struct LauncherFooterBar: View {
-    let primaryAction: LauncherAction?
-    var label: String?
-    var onCommit: () -> Void = {}
-    var onActions: () -> Void = {}
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "bolt.fill")
-                .font(.caption)
-                .accessibilityHidden(true)
-            Text("Overboard")
-                .font(.caption)
-            Spacer(minLength: 12)
-            if let primaryAction {
-                Button(self.label ?? primaryAction.label, action: self.onCommit)
-                    .buttonStyle(.plain).font(.caption.weight(.medium)).foregroundStyle(.primary)
-                Image(systemName: "return")
-                    .font(.caption2)
-                    .accessibilityHidden(true)
-                Divider()
-                    .frame(height: 12)
-            }
-            Button("Actions", action: self.onActions)
-                .buttonStyle(.plain).font(.caption)
-                .accessibilityLabel("Actions, Command K")
-            Text("⌘K")
-                .font(.caption2)
-                .padding(.horizontal, 4)
-                .padding(.vertical, 1)
-                .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 4))
-                .accessibilityHidden(true)
-        }
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, 8)
-        .frame(height: 20)
-    }
-}
-
 #if DEBUG
     #Preview("Sections") {
         let viewModel = LauncherViewModel(
@@ -339,15 +301,4 @@ struct LauncherFooterBar: View {
             .frame(width: 640, height: 370)
     }
 
-    #Preview("Section header") {
-        LauncherSectionHeader(title: "Apps")
-            .padding()
-            .frame(width: 300)
-    }
-
-    #Preview("Footer bar") {
-        LauncherFooterBar(primaryAction: .open)
-            .padding()
-            .frame(width: 400)
-    }
 #endif

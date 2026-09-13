@@ -37,6 +37,17 @@ public struct LibraryStats: Sendable {
     public let bySource: [SourceCount]
     /// The heaviest items by stored byte size, largest first.
     public let largest: [LargeItem]
+
+    /// One-line library summary for the `:stats` launcher row, e.g.
+    /// "1,234 items · 812 text · 96 links · 12 images". Shows the top kinds from
+    /// `byKind` (already most-frequent first); no byte total.
+    public var subtitle: String {
+        var parts = [CountPhrase.string(self.total, of: String(localized: "item"))]
+        for kindCount in self.byKind.prefix(3) {
+            parts.append(kindCount.kind.countLabel(kindCount.count))
+        }
+        return parts.joined(separator: " · ")
+    }
 }
 
 /// The single owner of all persistence: items, representations, FTS index,

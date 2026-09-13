@@ -122,4 +122,18 @@ struct ItemCardSnapshotTests {
         )
         assertSnapshot(of: self.host(item), as: snapshotImageStrategy)
     }
+
+    /// Pins the accessibility-text layout: the card's own geometry scales with
+    /// Dynamic Type and the preview's line budget shrinks to match, so nothing
+    /// spills past the tile.
+    @Test func largestDynamicType() {
+        let item = Fixtures.item(
+            preview: "Pick up the package before 6pm — front desk closes early on Fridays.",
+            charCount: 1240,
+            lineCount: 32
+        )
+        let view = ItemCardView(item: item, index: 0, isSelected: false, store: self.store)
+            .environment(\.dynamicTypeSize, .xxxLarge)
+        assertSnapshot(of: snapshotHost(view, width: 300, height: 300), as: snapshotImageStrategy)
+    }
 }

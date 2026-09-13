@@ -19,6 +19,11 @@ struct ItemCardView: View {
     var onPreview: () -> Void = {}
 
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var contrast
+    /// Cards are a fixed grid of equal tiles, so the tile itself has to grow
+    /// with the type inside it.
+    @ScaledMetric(relativeTo: .callout) private var cardWidth: CGFloat = CardMetrics.width
+    @ScaledMetric(relativeTo: .callout) private var cardHeight: CGFloat = CardMetrics.height
     @State private var thumbnail: NSImage?
     @State private var hovering = false
     @State private var miniCode: NSAttributedString?
@@ -41,7 +46,7 @@ struct ItemCardView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             self.footer
         }
-        .frame(width: 190, height: 180)
+        .frame(width: self.cardWidth, height: self.cardHeight)
         .background(.background.opacity(0.6))
         // Clip the whole card so image fills can't bleed past the corners.
         .clipShape(RoundedRectangle(cornerRadius: 10))
@@ -118,7 +123,7 @@ struct ItemCardView: View {
     /// VoiceOver summary for the whole card: source app plus a short preview,
     /// so the card reads as one item instead of its individual subviews.
     private var accessibilityCardLabel: String {
-        let app = self.item.sourceAppName ?? self.kindLabel
+        let app = self.item.sourceAppName ?? self.item.kind.displayName
         if self.item.isSecret {
             return "\(app), secret item"
         }
@@ -162,7 +167,7 @@ struct ItemCardView: View {
                     .resizable()
                     .frame(width: 16, height: 16)
             }
-            Text(self.item.sourceAppName ?? self.kindLabel)
+            Text(self.item.sourceAppName ?? self.item.kind.displayName)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
@@ -176,9 +181,19 @@ struct ItemCardView: View {
                     .foregroundStyle(.secondary)
             }
             if self.item.isSecret {
-                Image(systemName: "lock.fill")
-                    .font(.caption2)
-                    .foregroundStyle(.yellow)
+                // A yellow glyph on glass was easy to miss on the one card where
+                // misreading the content matters most; a filled capsule reads as
+                // a warning at any contrast setting.
+                HStack(spacing: 3) {
+                    Image(systemName: "lock.fill")
+                    Text("Secret")
+                }
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 1.5)
+                .background(.orange, in: Capsule())
+                .accessibilityHidden(true)
             }
             if self.item.isPinned {
                 Image(systemName: "pin.fill")
@@ -188,7 +203,7 @@ struct ItemCardView: View {
             if self.index < 9 {
                 Text("⌘\(self.index + 1)")
                     .font(.caption2.monospaced())
-                    .foregroundStyle(.tertiary)
+                    .contrastAwareForeground(.tertiary)
                     .accessibilityLabel("Command \(self.index + 1)")
             }
         }
@@ -196,7 +211,10 @@ struct ItemCardView: View {
         .padding(.vertical, 7)
         .background {
             // Paste-style signature: header tinted by the source app's icon.
-            if let tint = self.headerTint {
+            // Increase Contrast drops the gradient: an arbitrary app-icon color
+            // behind the source name is exactly the kind of low-contrast pairing
+            // the setting exists to remove.
+            if let tint = self.headerTint, self.contrast != .increased {
                 LinearGradient(
                     colors: [tint.opacity(0.45), tint.opacity(0.2)],
                     startPoint: .leading,
@@ -216,13 +234,13 @@ struct ItemCardView: View {
                 VStack(spacing: 8) {
                     Image(systemName: "lock.fill")
                         .font(.title)
-                        .foregroundStyle(.yellow)
+                        .foregroundStyle(.orange)
                     Text(self.item.previewText ?? "Secret")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                     Text("Auto-expires soon")
                         .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                        .contrastAwareForeground(.tertiary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let miniCode {
@@ -245,7 +263,7 @@ struct ItemCardView: View {
                         HStack(alignment: .top, spacing: 4) {
                             Image(systemName: "sparkles")
                                 .font(.caption2)
-                                .foregroundStyle(.tertiary)
+                                .contrastAwareForeground(.tertiary)
                             Text(summary)
                                 .font(.caption)
                                 .italic()
@@ -361,7 +379,7 @@ struct ItemCardView: View {
             Spacer(minLength: 0)
             Text(self.item.previewText ?? "")
                 .font(.caption2)
-                .foregroundStyle(.tertiary)
+                .contrastAwareForeground(.tertiary)
                 .lineLimit(1)
                 .truncationMode(.middle)
         }
@@ -410,7 +428,7 @@ struct ItemCardView: View {
             Divider().opacity(0.25)
             Text(text)
                 .font(.caption2.monospacedDigit())
-                .foregroundStyle(.tertiary)
+                .contrastAwareForeground(.tertiary)
                 .lineLimit(1)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 4)
@@ -434,29 +452,22 @@ struct ItemCardView: View {
     /// Raw text yields lines to the title and summary when they're present.
     /// One line is reserved for the metadata footer row (see `footer`).
     private var textPreviewLineLimit: Int {
-        switch (self.item.aiTitle != nil, self.item.aiSummary != nil) {
+        let base = switch (self.item.aiTitle != nil, self.item.aiSummary != nil) {
         case (false, false): 6
         case (true, false): 5
         case (false, true): 3
         case (true, true): 2
         }
+        // The card grows with Dynamic Type but not as fast as the type does, so
+        // the line budget shrinks to keep the preview inside the content slot.
+        return max(1, Int((Double(base) * CardMetrics.height / self.cardHeight).rounded(.down)))
     }
 
     private func placeholder(_ systemImage: String) -> some View {
         Image(systemName: systemImage)
             .font(.largeTitle)
-            .foregroundStyle(.quaternary)
+            .contrastAwareForeground(.quaternary)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private var kindLabel: String {
-        switch self.item.kind {
-        case .text: "Text"
-        case .link: "Link"
-        case .image: "Image"
-        case .file: "File"
-        case .color: "Color"
-        }
     }
 
     private func loadThumbnailIfNeeded() async {

@@ -168,7 +168,7 @@ struct PreviewPane: View {
             case .color:
                 Image(systemName: "paintpalette.fill")
                     .font(.largeTitle)
-                    .foregroundStyle(.quaternary)
+                    .contrastAwareForeground(.quaternary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
@@ -284,16 +284,16 @@ struct PreviewPane: View {
             PreviewPaneDemo(store: store, editing: false)
         }
         // Matches OverlayController's expanded panel frame (full screen width,
-        // 540pt tall while previewing); a fixed 900pt stands in for the screen
+        // while previewing); a fixed 900pt stands in for the screen
         // width in previews.
-        .frame(width: 900, height: 540)
+        .frame(width: 900, height: CardMetrics.expandedPanelHeight)
     }
 
     #Preview("Editing") {
         SeededPreview { store in
             PreviewPaneDemo(store: store, editing: true)
         }
-        .frame(width: 900, height: 540)
+        .frame(width: 900, height: CardMetrics.expandedPanelHeight)
     }
 
     /// Waits for the seeded store's initial search to land, selects the plain-text

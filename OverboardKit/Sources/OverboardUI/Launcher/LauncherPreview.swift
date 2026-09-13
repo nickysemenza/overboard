@@ -49,6 +49,9 @@ struct LauncherPreview: View {
     let query: String
     var onOpen: () -> Void
     @Environment(\.colorScheme) private var colorScheme
+    /// The cloud placeholder is the preview's whole content when a file hasn't
+    /// been downloaded, so it scales with the rest of the type.
+    @ScaledMetric(relativeTo: .largeTitle) private var cloudGlyphSize: CGFloat = 38
     @State private var text: String?
     @State private var image: NSImage?
     @State private var code: NSAttributedString?
@@ -92,7 +95,7 @@ struct LauncherPreview: View {
             case let .file(_, url, info):
                 if self.fileState == .cloud || self.fileState == .downloading {
                     VStack(spacing: 14) {
-                        Image(systemName: "icloud.and.arrow.down").font(.system(size: 38)).foregroundStyle(.secondary)
+                        Image(systemName: "icloud.and.arrow.down").font(.system(size: self.cloudGlyphSize)).foregroundStyle(.secondary)
                         Text("Stored in \(info.location ?? "the cloud")").font(.headline)
                         Text("Download this file to open it. Browsing results keeps it in the cloud.").foregroundStyle(.secondary).multilineTextAlignment(.center)
                         Button("Download & Open", action: self.onOpen)
@@ -116,7 +119,7 @@ struct LauncherPreview: View {
                 } else {
                     ScrollView {
                         SearchHighlightedText(text: self.text ?? "", query: self.query)
-                            .font(.system(size: 14)).textSelection(.enabled)
+                            .font(.callout).textSelection(.enabled)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }

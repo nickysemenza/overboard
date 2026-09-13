@@ -26,7 +26,10 @@ public struct EmojiPickerView: View {
                 self.grid
             }
             Divider()
-            EmojiFooterBar()
+            PanelFooterBar(
+                primary: .init(label: String(localized: "Paste", bundle: .module)),
+                secondary: .init(label: String(localized: "Copy", bundle: .module), keycap: "⌘↩")
+            )
         }
         .padding(14)
         .glassPanel(cornerRadius: PanelRadius.drawer)
@@ -40,17 +43,12 @@ public struct EmojiPickerView: View {
     }
 
     private var searchBar: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "face.smiling")
-                .foregroundStyle(.secondary)
-                .accessibilityHidden(true)
-            TextField("Search emoji…", text: self.$viewModel.query)
-                .textFieldStyle(.plain)
-                .font(.title3)
-                .focused(self.$fieldFocused)
-        }
-        .padding(.horizontal, 6)
-        .frame(height: 30)
+        PanelSearchField(
+            symbol: "face.smiling",
+            prompt: String(localized: "Search emoji…", bundle: .module),
+            text: self.$viewModel.query,
+            focus: self.$fieldFocused
+        )
     }
 
     private var grid: some View {
@@ -58,7 +56,7 @@ public struct EmojiPickerView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 2) {
                     ForEach(Array(self.viewModel.sections.enumerated()), id: \.element.id) { sectionIndex, section in
-                        LauncherSectionHeader(title: section.title)
+                        PanelSectionHeader(title: section.title)
                         LazyVGrid(columns: Self.columns, spacing: 2) {
                             ForEach(Array(section.emoji.enumerated()), id: \.element.id) { offset, emoji in
                                 // Flat index from the CAPTURED section value —
@@ -103,10 +101,12 @@ public struct EmojiPickerView: View {
     }
 
     private var emptyState: some View {
-        Text("No emoji found")
-            .font(.callout)
-            .foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        PanelEmptyState(
+            mark: .symbol("face.dashed"),
+            title: String(localized: "No emoji found", bundle: .module),
+            subtitle: String(localized: "Try a different name or keyword.", bundle: .module)
+        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private static let columns = Array(
@@ -120,12 +120,16 @@ struct EmojiCell: View {
     let emoji: Emoji
     let isSelected: Bool
     var isHovered: Bool = false
+    /// The glyph is the cell's whole content, so it scales with Dynamic Type
+    /// rather than staying pinned at 24pt.
+    @ScaledMetric(relativeTo: .title) private var glyphSize: CGFloat = 24
+    @ScaledMetric(relativeTo: .title) private var cellHeight: CGFloat = 38
 
     var body: some View {
         Text(self.emoji.character)
-            .font(.system(size: 24))
+            .font(.system(size: self.glyphSize))
             .frame(maxWidth: .infinity)
-            .frame(height: 38)
+            .frame(height: self.cellHeight)
             .background(self.fill, in: RoundedRectangle(cornerRadius: 8))
             .contentShape(RoundedRectangle(cornerRadius: 8))
             .help(self.emoji.name)
@@ -137,38 +141,6 @@ struct EmojiCell: View {
         if self.isSelected { return Color.accentColor.opacity(0.22) }
         if self.isHovered { return Color.primary.opacity(0.06) }
         return .clear
-    }
-}
-
-/// Persistent bottom bar advertising the two commit actions, styled after
-/// LauncherFooterBar.
-struct EmojiFooterBar: View {
-    var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "bolt.fill")
-                .font(.caption)
-                .accessibilityHidden(true)
-            Text("Overboard")
-                .font(.caption)
-            Spacer(minLength: 12)
-            Text("Paste")
-                .font(.caption)
-            Image(systemName: "return")
-                .font(.caption2)
-                .accessibilityHidden(true)
-            Divider()
-                .frame(height: 12)
-            Text("Copy")
-                .font(.caption)
-            Text("⌘↩")
-                .font(.caption2)
-                .padding(.horizontal, 4)
-                .padding(.vertical, 1)
-                .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 4))
-        }
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, 8)
-        .frame(height: 20)
     }
 }
 
@@ -213,11 +185,5 @@ struct EmojiFooterBar: View {
         EmojiCell(emoji: Emoji(character: "🔥", name: "fire", keywords: [], category: .travel, version: 0.6), isSelected: true)
             .padding()
             .frame(width: 80)
-    }
-
-    #Preview("Footer bar") {
-        EmojiFooterBar()
-            .padding()
-            .frame(width: 400)
     }
 #endif
