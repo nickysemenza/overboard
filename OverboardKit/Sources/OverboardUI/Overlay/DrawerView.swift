@@ -17,53 +17,51 @@ public struct DrawerView: View {
     }
 
     public var body: some View {
-        Group {
-            VStack(spacing: 10) {
-                if self.viewModel.previewState == .hidden {
-                    self.searchBar
-                    if self.viewModel.mode == .history, !self.savedSearches.isEmpty {
-                        self.savedSearchBar
-                    }
-                    self.cardStrip
-                    self.footerHints
-                } else {
-                    PreviewPane(viewModel: self.viewModel)
+        VStack(spacing: 10) {
+            if self.viewModel.previewState == .hidden {
+                self.searchBar
+                if self.viewModel.mode == .history, !self.savedSearches.isEmpty {
+                    self.savedSearchBar
                 }
+                self.cardStrip
+                self.footerHints
+            } else {
+                PreviewPane(viewModel: self.viewModel)
             }
-            .animation(.spring(response: 0.22, dampingFraction: 0.85), value: self.viewModel.isPaletteOpen)
-            .padding(14)
-            .glassPanel(cornerRadius: PanelRadius.drawer)
-            .overlay {
-                if self.viewModel.isPaletteOpen {
-                    ActionPalette(viewModel: self.viewModel)
-                        .transition(.scale(scale: 0.95).combined(with: .opacity))
-                }
+        }
+        .animation(.spring(response: 0.22, dampingFraction: 0.85), value: self.viewModel.isPaletteOpen)
+        .padding(14)
+        .glassPanel(cornerRadius: PanelRadius.drawer)
+        .overlay {
+            if self.viewModel.isPaletteOpen {
+                ActionPalette(viewModel: self.viewModel)
+                    .transition(.scale(scale: 0.95).combined(with: .opacity))
             }
-            .padding(12)
-            .onAppear {
+        }
+        .padding(12)
+        .onAppear {
+            self.searchFocused = true
+            // The overlay controller can't reach SwiftUI environment actions;
+            // hand it the capability.
+            self.viewModel.onOpenSettings = {
+                self.openSettings()
+                NSApp.activate(ignoringOtherApps: true)
+            }
+        }
+        .onChange(of: self.viewModel.query) {
+            self.viewModel.scheduleSearch()
+        }
+        .onChange(of: self.viewModel.previewState) {
+            if self.viewModel.previewState == .hidden {
                 self.searchFocused = true
-                // The overlay controller can't reach SwiftUI environment actions;
-                // hand it the capability.
-                self.viewModel.onOpenSettings = {
-                    self.openSettings()
-                    NSApp.activate(ignoringOtherApps: true)
-                }
             }
-            .onChange(of: self.viewModel.query) {
-                self.viewModel.scheduleSearch()
-            }
-            .onChange(of: self.viewModel.previewState) {
-                if self.viewModel.previewState == .hidden {
-                    self.searchFocused = true
-                }
-            }
-            .onChange(of: self.viewModel.isPaletteOpen) {
-                // The ⌘K palette owns focus while open; when it closes, first
-                // responder isn't returned automatically, so typed characters would
-                // be dropped until the user clicks back into the field.
-                if !self.viewModel.isPaletteOpen {
-                    self.searchFocused = true
-                }
+        }
+        .onChange(of: self.viewModel.isPaletteOpen) {
+            // The ⌘K palette owns focus while open; when it closes, first
+            // responder isn't returned automatically, so typed characters would
+            // be dropped until the user clicks back into the field.
+            if !self.viewModel.isPaletteOpen {
+                self.searchFocused = true
             }
         }
     }
@@ -258,8 +256,15 @@ public struct DrawerView: View {
 
     private var emptyTitle: String {
         switch self.viewModel.mode {
-        case .history: self.viewModel.query.isEmpty ? String(localized: "Nothing captured yet", bundle: .module) : String(localized: "No matches", bundle: .module)
-        case .snippets: self.viewModel.query.isEmpty ? String(localized: "No snippets yet", bundle: .module) : String(localized: "No matches", bundle: .module)
+        case .history: self.viewModel.query
+            .isEmpty ? String(localized: "Nothing captured yet", bundle: .module) : String(
+                localized: "No matches",
+                bundle: .module
+            )
+        case .snippets: self.viewModel.query.isEmpty ? String(localized: "No snippets yet", bundle: .module) : String(
+                localized: "No matches",
+                bundle: .module
+            )
         }
     }
 

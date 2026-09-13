@@ -11,7 +11,8 @@ import UniformTypeIdentifiers
 /// demand; primary action in a reserved footer that never overlaps results.
 /// FORM: User-approved compact launcher plus list/detail clipboard browser;
 /// an extension of the existing native design, not a new visual-world selection.
-/// FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
+/// FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and
+/// DESIGN.md
 public struct LauncherView: View {
     @Bindable var viewModel: LauncherViewModel
     let store: ClipStore
@@ -29,61 +30,67 @@ public struct LauncherView: View {
     }
 
     public var body: some View {
-        Group {
-            VStack(spacing: 0) {
-                self.searchBar
-                self.scopeBar
-                if self.viewModel.scope == .clipboard { self.clipboardFilters }
-                Divider()
-                HStack(spacing: 0) {
-                    self.resultList
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    if self.viewModel.showsPreview {
-                        Divider()
-                        LauncherPreview(result: self.viewModel.selectedResult, store: self.store, query: self.viewModel.query,
-                                        onOpen: { self.viewModel.commit() })
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    }
-                }
-                // Overlaying just the list/preview region — rather than the
-                // whole panel with a hand-tuned bottom padding to clear the
-                // footer's height — anchors the palette to this region's own
-                // bottom edge, which already sits directly above the (optional)
-                // error banner, the divider, and the footer.
-                .overlay(alignment: .bottom) {
-                    if self.viewModel.isPaletteOpen {
-                        LauncherActionPalette(viewModel: self.viewModel)
-                            .padding(.bottom, 8)
-                    }
-                }
-                if let message = self.viewModel.statusMessage {
-                    self.errorBanner(message)
-                }
-                Divider()
-                PanelFooterBar(
-                    primary: self.viewModel.primaryAction.map { action in
-                        .init(label: self.viewModel.primaryActionLabel ?? action.label) { self.viewModel.commit() }
-                    },
-                    secondary: .init(
-                        label: String(localized: "Actions", bundle: .module),
-                        keycap: "⌘K",
-                        accessibilityLabel: String(localized: "Actions, Command K", bundle: .module)
-                    ) { self.viewModel.togglePalette() }
-                )
-                .padding(.horizontal, 12).padding(.vertical, 9)
+        VStack(spacing: 0) {
+            self.searchBar
+            self.scopeBar
+            if self.viewModel.scope == .clipboard {
+                self.clipboardFilters
             }
-            .glassPanel(cornerRadius: PanelRadius.launcher)
-            .padding(12)
-            .onAppear { self.fieldFocused = true }
-            .onChange(of: self.viewModel.showGeneration) { self.fieldFocused = true }
-            .onChange(of: self.viewModel.scope) { self.fieldFocused = true }
-            .onChange(of: self.viewModel.isPaletteOpen) {
-                if !self.viewModel.isPaletteOpen { self.fieldFocused = true }
+            Divider()
+            HStack(spacing: 0) {
+                self.resultList
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                if self.viewModel.showsPreview {
+                    Divider()
+                    LauncherPreview(
+                        result: self.viewModel.selectedResult,
+                        store: self.store,
+                        query: self.viewModel.query,
+                        onOpen: { self.viewModel.commit() }
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
             }
-            .onChange(of: self.viewModel.query) { self.viewModel.scheduleSearch() }
-            .onChange(of: self.viewModel.clipboardFilter) { self.viewModel.scheduleSearch() }
-            .onChange(of: self.viewModel.isSearching) { self.scheduleSpinnerDelay() }
+            // Overlaying just the list/preview region — rather than the
+            // whole panel with a hand-tuned bottom padding to clear the
+            // footer's height — anchors the palette to this region's own
+            // bottom edge, which already sits directly above the (optional)
+            // error banner, the divider, and the footer.
+            .overlay(alignment: .bottom) {
+                if self.viewModel.isPaletteOpen {
+                    LauncherActionPalette(viewModel: self.viewModel)
+                        .padding(.bottom, 8)
+                }
+            }
+            if let message = self.viewModel.statusMessage {
+                self.errorBanner(message)
+            }
+            Divider()
+            PanelFooterBar(
+                primary: self.viewModel.primaryAction.map { action in
+                    .init(label: self.viewModel.primaryActionLabel ?? action.label) { self.viewModel.commit() }
+                },
+                secondary: .init(
+                    label: String(localized: "Actions", bundle: .module),
+                    keycap: "⌘K",
+                    accessibilityLabel: String(localized: "Actions, Command K", bundle: .module)
+                ) { self.viewModel.togglePalette() }
+            )
+            .padding(.horizontal, 12).padding(.vertical, 9)
         }
+        .glassPanel(cornerRadius: PanelRadius.launcher)
+        .padding(12)
+        .onAppear { self.fieldFocused = true }
+        .onChange(of: self.viewModel.showGeneration) { self.fieldFocused = true }
+        .onChange(of: self.viewModel.scope) { self.fieldFocused = true }
+        .onChange(of: self.viewModel.isPaletteOpen) {
+            if !self.viewModel.isPaletteOpen {
+                self.fieldFocused = true
+            }
+        }
+        .onChange(of: self.viewModel.query) { self.viewModel.scheduleSearch() }
+        .onChange(of: self.viewModel.clipboardFilter) { self.viewModel.scheduleSearch() }
+        .onChange(of: self.viewModel.isSearching) { self.scheduleSpinnerDelay() }
     }
 
     /// Only shows the spinner once `isSearching` has held continuously for
@@ -113,7 +120,9 @@ public struct LauncherView: View {
             accessibilityLabel: String(localized: "Search \(self.viewModel.scope.rawValue)", bundle: .module),
             focus: self.$fieldFocused
         ) {
-            if self.showSpinner { ProgressView().controlSize(.small) }
+            if self.showSpinner {
+                ProgressView().controlSize(.small)
+            }
         }
     }
 
@@ -126,7 +135,10 @@ public struct LauncherView: View {
                         Text("⌘\(index + 1)").font(.caption2).foregroundStyle(.secondary)
                     }
                     .padding(.horizontal, 11).padding(.vertical, 6)
-                    .background(self.viewModel.scope == scope ? Color.primary.opacity(0.10) : .clear, in: RoundedRectangle(cornerRadius: 7))
+                    .background(
+                        self.viewModel.scope == scope ? Color.primary.opacity(0.10) : .clear,
+                        in: RoundedRectangle(cornerRadius: 7)
+                    )
                 }
                 .buttonStyle(.plain)
                 .accessibilityAddTraits(self.viewModel.scope == scope ? .isSelected : [])
@@ -200,18 +212,28 @@ public struct LauncherView: View {
                         }
                         // Computed once per search pass in the view model
                         // (batched into one store call) rather than per row.
-                        let excerpt: String? = if case let .clip(item) = result { self.viewModel.matchExcerpts[item.id] } else { nil }
-                        LauncherRow(result: result, store: self.store, isSelected: index == self.viewModel.selectedIndex,
-                                    runningAppPaths: self.viewModel.runningAppPaths, query: self.viewModel.query,
-                                    showsSourceBadge: self.viewModel.scope != .clipboard, excerpt: excerpt,
-                                    actions: self.viewModel.actions(for: result),
-                                    onSelect: { self.viewModel.select(at: index) },
-                                    onCommit: { self.viewModel.select(at: index); self.viewModel.commit() },
-                                    onPerformAction: { action in
-                                        self.viewModel.select(at: index)
-                                        self.viewModel.perform(action)
-                                    })
-                                    .id(result.id)
+                        let excerpt: String? = if case let .clip(item) = result {
+                            self.viewModel.matchExcerpts[item.id]
+                        } else {
+                            nil
+                        }
+                        LauncherRow(
+                            result: result,
+                            store: self.store,
+                            isSelected: index == self.viewModel.selectedIndex,
+                            runningAppPaths: self.viewModel.runningAppPaths,
+                            query: self.viewModel.query,
+                            showsSourceBadge: self.viewModel.scope != .clipboard,
+                            excerpt: excerpt,
+                            actions: self.viewModel.actions(for: result),
+                            onSelect: { self.viewModel.select(at: index) },
+                            onCommit: { self.viewModel.select(at: index); self.viewModel.commit() },
+                            onPerformAction: { action in
+                                self.viewModel.select(at: index)
+                                self.viewModel.perform(action)
+                            }
+                        )
+                        .id(result.id)
                     }
                     if self.viewModel.hasMoreClipboard {
                         Button("Show more history", action: self.viewModel.loadMoreClipboard)
@@ -231,10 +253,14 @@ public struct LauncherView: View {
                 }
             }
             .onChange(of: self.viewModel.selectedResult?.id) {
-                if let id = self.viewModel.selectedResult?.id { proxy.scrollTo(id) }
+                if let id = self.viewModel.selectedResult?.id {
+                    proxy.scrollTo(id)
+                }
             }
             .onChange(of: self.viewModel.results.count) {
-                if let id = self.viewModel.selectedResult?.id { proxy.scrollTo(id) }
+                if let id = self.viewModel.selectedResult?.id {
+                    proxy.scrollTo(id)
+                }
             }
         }
     }
@@ -267,7 +293,9 @@ public struct LauncherView: View {
             switch self.viewModel.results[index] {
             case .app: return index == 0 ? "Suggestions" : nil
             case .recentSearch:
-                if index > 0, case .recentSearch = self.viewModel.results[index - 1] { return nil }
+                if index > 0, case .recentSearch = self.viewModel.results[index - 1] {
+                    return nil
+                }
                 return "Recent searches"
             default: return nil
             }
@@ -275,12 +303,20 @@ public struct LauncherView: View {
         guard self.viewModel.scope == .clipboard, self.viewModel.query.isEmpty,
               case let .clip(item) = self.viewModel.results[index] else { return nil }
         func label(_ date: Date) -> String {
-            if Calendar.current.isDateInToday(date) { return "Today" }
-            if Calendar.current.isDateInYesterday(date) { return "Yesterday" }
+            if Calendar.current.isDateInToday(date) {
+                return "Today"
+            }
+            if Calendar.current.isDateInYesterday(date) {
+                return "Yesterday"
+            }
             return date.formatted(date: .abbreviated, time: .omitted)
         }
         let title = label(item.lastUsedAt)
-        if index > 0, case let .clip(previous) = self.viewModel.results[index - 1], label(previous.lastUsedAt) == title { return nil }
+        if index > 0, case let .clip(previous) = self.viewModel.results[index - 1],
+           label(previous.lastUsedAt) == title
+        {
+            return nil
+        }
         return title
     }
 }

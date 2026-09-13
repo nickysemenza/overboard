@@ -91,8 +91,14 @@ public final class FileIndexService {
         let cloud = home.appendingPathComponent("Library/Mobile Documents/com~apple~CloudDocs", isDirectory: true)
         let providers = home.appendingPathComponent("Library/CloudStorage", isDirectory: true)
         var roots = [home]
-        if FileManager.default.fileExists(atPath: cloud.path) { roots.append(cloud) }
-        if let children = try? FileManager.default.contentsOfDirectory(at: providers, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]) {
+        if FileManager.default.fileExists(atPath: cloud.path) {
+            roots.append(cloud)
+        }
+        if let children = try? FileManager.default.contentsOfDirectory(
+            at: providers,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        ) {
             roots += children.filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true }
         }
         return roots
@@ -117,8 +123,10 @@ public final class FileIndexService {
         self.activeRoots = configured.isEmpty ? Self.defaultRoots : configured.map {
             URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath, isDirectory: true).standardizedFileURL
         }
-        self.activeRoots = Array(Set(self.activeRoots.map(FileMetadataScanner.canonicalURL))).sorted { $0.path < $1.path }
-        self.activeExclusions = self.exclusionsOverride ?? Defaults[.fileSearchExclusions].split(whereSeparator: \.isNewline).map(String.init)
+        self.activeRoots = Array(Set(self.activeRoots.map(FileMetadataScanner.canonicalURL)))
+            .sorted { $0.path < $1.path }
+        self.activeExclusions = self.exclusionsOverride ?? Defaults[.fileSearchExclusions]
+            .split(whereSeparator: \.isNewline).map(String.init)
         let roots = self.activeRoots
         let exclusions = self.activeExclusions
         self.scanTask = Task {
@@ -132,7 +140,9 @@ public final class FileIndexService {
                     self.index = try FileNameIndex(url: directory.appendingPathComponent("filenames.sqlite"))
                 }
                 guard let index = self.index else { return }
-                if clear { try await index.reset() }
+                if clear {
+                    try await index.reset()
+                }
                 try await index.retainRoots(roots.map(\.path))
                 guard !Task.isCancelled else { return }
                 self.watch(roots)
@@ -142,7 +152,12 @@ public final class FileIndexService {
                     self.status = "Indexing \(Self.locationName(root))…"
                     let generation = UUID().uuidString
                     let worker = Task.detached(priority: .utility) {
-                        try await FileMetadataScanner.scan(root: root, exclusions: exclusions, generation: generation, index: index)
+                        try await FileMetadataScanner.scan(
+                            root: root,
+                            exclusions: exclusions,
+                            generation: generation,
+                            index: index
+                        )
                     }
                     let failures = try await withTaskCancellationHandler {
                         try await worker.value
@@ -156,7 +171,9 @@ public final class FileIndexService {
                 self.status = self.issues.isEmpty ? "\(self.fileCount.formatted()) files ready" : "\(self.fileCount.formatted()) files · some locations unavailable"
                 self.onChange()
                 self.signalReconcile()
-                if !self.dirtyPaths.isEmpty { self.scheduleRefresh() }
+                if !self.dirtyPaths.isEmpty {
+                    self.scheduleRefresh()
+                }
             } catch is CancellationError {
                 // A successor owns the status.
             } catch {
@@ -232,7 +249,9 @@ public final class FileIndexService {
                 let url = URL(fileURLWithPath: path)
                 let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
                 let directory = isDirectory ? url : url.deletingLastPathComponent()
-                if !directories.contains(where: { directory.path == $0.path || directory.path.hasPrefix($0.path + "/") }) {
+                if !directories
+                    .contains(where: { directory.path == $0.path || directory.path.hasPrefix($0.path + "/") })
+                {
                     directories.append(directory)
                 }
             }
@@ -240,17 +259,31 @@ public final class FileIndexService {
             defer {
                 self.isIndexing = false
                 self.signalReconcile()
-                if !Task.isCancelled, !self.dirtyPaths.isEmpty { self.scheduleRefresh() }
+                if !Task.isCancelled, !self.dirtyPaths.isEmpty {
+                    self.scheduleRefresh()
+                }
             }
             for directory in directories {
                 guard !Task.isCancelled else { return }
-                guard let root = self.activeRoots.filter({ FileMetadataScanner.shouldInclude(directory, root: $0, exclusions: self.activeExclusions) }).max(by: { $0.path.count < $1.path.count }) else { continue }
+                guard let root = self.activeRoots.filter({ FileMetadataScanner.shouldInclude(
+                    directory,
+                    root: $0,
+                    exclusions: self.activeExclusions
+                ) }).max(by: { $0.path.count < $1.path.count }) else { continue }
                 let exclusions = self.activeExclusions
                 let worker = Task.detached(priority: .utility) {
-                    try await FileMetadataScanner.scan(root: root, exclusions: exclusions, generation: UUID().uuidString, index: index, under: directory)
+                    try await FileMetadataScanner.scan(
+                        root: root,
+                        exclusions: exclusions,
+                        generation: UUID().uuidString,
+                        index: index,
+                        under: directory
+                    )
                 }
                 do {
-                    let failures = try await withTaskCancellationHandler { try await worker.value } onCancel: { worker.cancel() }
+                    let failures = try await withTaskCancellationHandler { try await worker.value } onCancel: {
+                        worker.cancel()
+                    }
                     guard !Task.isCancelled else { return }
                     self.issues = Array((self.issues + failures).suffix(12))
                 } catch { return }
@@ -263,7 +296,13 @@ public final class FileIndexService {
     }
 
     private func watch(_ roots: [URL]) {
-        var context = FSEventStreamContext(version: 0, info: Unmanaged.passUnretained(self).toOpaque(), retain: nil, release: nil, copyDescription: nil)
+        var context = FSEventStreamContext(
+            version: 0,
+            info: Unmanaged.passUnretained(self).toOpaque(),
+            retain: nil,
+            release: nil,
+            copyDescription: nil
+        )
         self.eventStream = FSEventStreamCreate(nil, { _, pointer, count, paths, flags, _ in
             guard let pointer else { return }
             // Stream is explicitly delivered on the main queue. Ignore our own
@@ -271,15 +310,30 @@ public final class FileIndexService {
             MainActor.assumeIsolated {
                 let service = Unmanaged<FileIndexService>.fromOpaque(pointer).takeUnretainedValue()
                 let changed = unsafeBitCast(paths, to: NSArray.self).compactMap { $0 as? String }
-                let missed = (0 ..< count).contains { flags[$0] & UInt32(kFSEventStreamEventFlagMustScanSubDirs | kFSEventStreamEventFlagUserDropped | kFSEventStreamEventFlagKernelDropped | kFSEventStreamEventFlagRootChanged | kFSEventStreamEventFlagEventIdsWrapped) != 0 }
-                if missed { service.dirtyPaths.formUnion(service.activeRoots.map(\.path)) }
-                for path in changed where service.activeRoots.contains(where: { FileMetadataScanner.shouldInclude(URL(fileURLWithPath: path), root: $0, exclusions: service.activeExclusions) }) {
+                let missed = (0 ..< count)
+                    .contains {
+                        flags[$0] &
+                            UInt32(kFSEventStreamEventFlagMustScanSubDirs | kFSEventStreamEventFlagUserDropped |
+                                kFSEventStreamEventFlagKernelDropped | kFSEventStreamEventFlagRootChanged |
+                                kFSEventStreamEventFlagEventIdsWrapped) != 0
+                    }
+                if missed {
+                    service.dirtyPaths.formUnion(service.activeRoots.map(\.path))
+                }
+                for path in changed where service.activeRoots.contains(where: { FileMetadataScanner.shouldInclude(
+                    URL(fileURLWithPath: path),
+                    root: $0,
+                    exclusions: service.activeExclusions
+                ) }) {
                     service.dirtyPaths.insert(path)
                 }
-                if !service.dirtyPaths.isEmpty { service.scheduleRefresh() }
+                if !service.dirtyPaths.isEmpty {
+                    service.scheduleRefresh()
+                }
             }
         }, &context, roots.map(\.path) as CFArray, FSEventStreamEventId(kFSEventStreamEventIdSinceNow), 2,
-        FSEventStreamCreateFlags(kFSEventStreamCreateFlagUseCFTypes | kFSEventStreamCreateFlagWatchRoot | kFSEventStreamCreateFlagFileEvents))
+        FSEventStreamCreateFlags(kFSEventStreamCreateFlagUseCFTypes | kFSEventStreamCreateFlagWatchRoot |
+            kFSEventStreamCreateFlagFileEvents))
         if let stream = self.eventStream {
             FSEventStreamSetDispatchQueue(stream, .main)
             FSEventStreamStart(stream)
@@ -295,9 +349,15 @@ public final class FileIndexService {
     }
 
     public nonisolated static func locationName(_ root: URL) -> String {
-        if root.path.contains("com~apple~CloudDocs") { return "iCloud Drive" }
-        if root.path.contains("/CloudStorage/") { return root.lastPathComponent }
-        if root == FileManager.default.homeDirectoryForCurrentUser { return "Home" }
+        if root.path.contains("com~apple~CloudDocs") {
+            return "iCloud Drive"
+        }
+        if root.path.contains("/CloudStorage/") {
+            return root.lastPathComponent
+        }
+        if root == FileManager.default.homeDirectoryForCurrentUser {
+            return "Home"
+        }
         return root.lastPathComponent
     }
 }
@@ -336,26 +396,52 @@ public nonisolated enum FileMetadataScanner {
         guard path == rootPath || path.hasPrefix(rootPath + "/") else { return false }
         let relative = String(path.dropFirst(rootPath.count)).split(separator: "/").map(String.init)
         // Cloud roots inside Library are scanned explicitly, not through Home.
-        if root == FileManager.default.homeDirectoryForCurrentUser, relative.first == "Library" { return false }
-        if relative.contains(where: { $0.hasPrefix(".") }) { return false }
+        if root == FileManager.default.homeDirectoryForCurrentUser, relative.first == "Library" {
+            return false
+        }
+        if relative.contains(where: { $0.hasPrefix(".") }) {
+            return false
+        }
         return !exclusions.contains { exclusion in
             let expanded = (exclusion.trimmingCharacters(in: .whitespaces) as NSString).expandingTildeInPath
-            if expanded.hasPrefix("/") { return path == expanded || path.hasPrefix(expanded + "/") }
+            if expanded.hasPrefix("/") {
+                return path == expanded || path.hasPrefix(expanded + "/")
+            }
             return relative.contains(expanded)
         }
     }
 
-    public static func scan(root: URL, exclusions: [String], generation: String, index: FileNameIndex, under directory: URL? = nil) async throws -> [String] {
+    public static func scan(
+        root: URL,
+        exclusions: [String],
+        generation: String,
+        index: FileNameIndex,
+        under directory: URL? = nil
+    ) async throws -> [String] {
         // Directory enumeration resolves aliases such as /var -> /private/var.
         // Roots and incremental scopes must use the same filesystem identity.
         let root = self.canonicalURL(root)
         let directory = directory.map(self.canonicalURL)
-        let keys: Set<URLResourceKey> = [.isDirectoryKey, .isSymbolicLinkKey, .isPackageKey, .contentModificationDateKey, .isUbiquitousItemKey, .ubiquitousItemDownloadingStatusKey]
+        let keys: Set<URLResourceKey> = [
+            .isDirectoryKey,
+            .isSymbolicLinkKey,
+            .isPackageKey,
+            .contentModificationDateKey,
+            .isUbiquitousItemKey,
+            .ubiquitousItemDownloadingStatusKey,
+        ]
         var failures: [String] = []
-        guard let enumerator = FileManager.default.enumerator(at: directory ?? root, includingPropertiesForKeys: Array(keys), options: [.skipsHiddenFiles, .skipsPackageDescendants], errorHandler: { url, error in
-            if failures.count < 12 { failures.append("\(url.path): \(error.localizedDescription)") }
-            return true
-        }) else { return ["\(root.path): Couldn’t read this location. Check access in System Settings."] }
+        guard let enumerator = FileManager.default.enumerator(
+            at: directory ?? root,
+            includingPropertiesForKeys: Array(keys),
+            options: [.skipsHiddenFiles, .skipsPackageDescendants],
+            errorHandler: { url, error in
+                if failures.count < 12 {
+                    failures.append("\(url.path): \(error.localizedDescription)")
+                }
+                return true
+            }
+        ) else { return ["\(root.path): Couldn’t read this location. Check access in System Settings."] }
         var batch: [IndexedFile] = []
         // An incremental enumeration yields descendants, not the directory
         // itself. Refresh its record before pruning the old generation.
@@ -376,14 +462,27 @@ public nonisolated enum FileMetadataScanner {
             }
             do {
                 let values = try url.resourceValues(forKeys: keys)
-                if values.isSymbolicLink == true { enumerator.skipDescendants(); continue }
-                if values.isPackage == true { enumerator.skipDescendants() }
+                if values.isSymbolicLink == true {
+                    enumerator.skipDescendants(); continue
+                }
+                if values.isPackage == true {
+                    enumerator.skipDescendants()
+                }
                 let availability = FileAvailability.status(at: url, values: values)
-                batch.append(IndexedFile(path: url.path, name: url.lastPathComponent, root: root.path, generation: generation,
-                                         modifiedAt: values.contentModificationDate ?? .distantPast, availability: availability,
-                                         isDirectory: values.isDirectory == true, location: FileIndexService.locationName(root)))
+                batch.append(IndexedFile(
+                    path: url.path,
+                    name: url.lastPathComponent,
+                    root: root.path,
+                    generation: generation,
+                    modifiedAt: values.contentModificationDate ?? .distantPast,
+                    availability: availability,
+                    isDirectory: values.isDirectory == true,
+                    location: FileIndexService.locationName(root)
+                ))
             } catch {
-                if failures.count < 12 { failures.append("\(url.path): \(error.localizedDescription)") }
+                if failures.count < 12 {
+                    failures.append("\(url.path): \(error.localizedDescription)")
+                }
             }
             if batch.count >= 400 {
                 try await index.upsert(batch)
@@ -394,7 +493,11 @@ public nonisolated enum FileMetadataScanner {
         try await index.upsert(batch)
         try Task.checkCancellation()
         // Never erase known cloud/permission-denied entries after a partial scan.
-        if failures.isEmpty { try await index.finishScan(root: root.path, generation: generation, under: directory?.path) }
+        if failures
+            .isEmpty
+        {
+            try await index.finishScan(root: root.path, generation: generation, under: directory?.path)
+        }
         return failures
     }
 }

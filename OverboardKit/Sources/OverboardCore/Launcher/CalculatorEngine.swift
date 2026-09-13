@@ -53,7 +53,9 @@ public enum CalculatorEngine {
                 || CharacterSet.decimalDigits.contains(scalar)
                 || CharacterSet.whitespaces.contains(scalar)
                 || self.allowedPunctuation.contains(scalar)
-            if !ok { return false }
+            if !ok {
+                return false
+            }
         }
 
         let words = s.lowercased().split(whereSeparator: { !$0.isLetter }).map(String.init)
@@ -72,7 +74,9 @@ public enum CalculatorEngine {
     /// or "1,000" — digits, separators, and at most a leading minus.
     private static func trimmedOfBareNumberCharacters(_ s: String) -> String {
         var rest = Substring(s)
-        if rest.first == "-" { rest = rest.dropFirst() }
+        if rest.first == "-" {
+            rest = rest.dropFirst()
+        }
         return rest.filter { !($0.isNumber || $0 == "." || $0 == "," || $0.isWhitespace) }
     }
 

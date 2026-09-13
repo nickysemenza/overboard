@@ -24,7 +24,10 @@ struct LauncherScopeTests {
 
     @Test func firstSelectionTracksBestResultUntilUserNavigates() async {
         let file = LauncherResult.file(name: "hello.txt", url: URL(fileURLWithPath: "/tmp/hello.txt"))
-        let model = LauncherViewModel(secondaryProviders: [DelayedLauncherProvider(rows: [file], delay: .milliseconds(40))])
+        let model = LauncherViewModel(secondaryProviders: [DelayedLauncherProvider(
+            rows: [file],
+            delay: .milliseconds(40)
+        )])
         model.query = "hello"
         model.scheduleSearch()
         await self.waitForSearch(model)
@@ -38,7 +41,10 @@ struct LauncherScopeTests {
     @Test func lateResultsCannotReplaceManualSelection() async {
         let app = LauncherResult.app(name: "Hello Helper", url: URL(fileURLWithPath: "/Applications/Hello Helper.app"))
         let file = LauncherResult.file(name: "hello.txt", url: URL(fileURLWithPath: "/tmp/hello.txt"))
-        let model = LauncherViewModel(instantProviders: [DelayedLauncherProvider(rows: [app])], secondaryProviders: [DelayedLauncherProvider(rows: [file], delay: .milliseconds(80))])
+        let model = LauncherViewModel(
+            instantProviders: [DelayedLauncherProvider(rows: [app])],
+            secondaryProviders: [DelayedLauncherProvider(rows: [file], delay: .milliseconds(80))]
+        )
         model.query = "hello"
         model.scheduleSearch()
         // Deliberately *not* `settle()`: the point is to navigate while the
@@ -61,7 +67,10 @@ struct LauncherScopeTests {
     @Test func scopesKeepOnlyTheirOwnResultsAndAllKeepsExtras() async {
         let app = LauncherResult.app(name: "Notes", url: URL(fileURLWithPath: "/Applications/Notes.app"))
         let file = LauncherResult.file(name: "notes.txt", url: URL(fileURLWithPath: "/tmp/notes.txt"))
-        let model = LauncherViewModel(instantProviders: [DelayedLauncherProvider(rows: [app, file])], secondaryProviders: [])
+        let model = LauncherViewModel(
+            instantProviders: [DelayedLauncherProvider(rows: [app, file])],
+            secondaryProviders: []
+        )
         model.query = "notes"
         model.setScope(.apps)
         await self.waitForSearch(model)
@@ -72,7 +81,13 @@ struct LauncherScopeTests {
         model.setScope(.all)
         await self.waitForSearch(model)
         #expect(model.results.contains(app) && model.results.contains(file))
-        #expect(model.results.contains { if case .webSearch = $0 { true } else { false } })
+        #expect(model.results.contains {
+            if case .webSearch = $0 {
+                true
+            } else {
+                false
+            }
+        })
     }
 
     @Test func successfulActionsFeedTheDefaultAppSuggestions() async {
@@ -88,7 +103,10 @@ struct LauncherScopeTests {
         Defaults[.launcherItemLastUsed] = [:]
         let frequent = LauncherResult.app(name: "Frequent App", url: URL(fileURLWithPath: "/fixture/frequent.app"))
         let running = LauncherResult.app(name: "Running App", url: URL(fileURLWithPath: "/fixture/running.app"))
-        let model = LauncherViewModel(instantProviders: [DelayedLauncherProvider(rows: [running, frequent])], secondaryProviders: [])
+        let model = LauncherViewModel(
+            instantProviders: [DelayedLauncherProvider(rows: [running, frequent])],
+            secondaryProviders: []
+        )
         model.runningAppPaths = ["/fixture/running.app"]
         model.scheduleSearch()
         await self.waitForSearch(model)
@@ -110,7 +128,10 @@ struct LauncherScopeTests {
     /// screen until the instant pass's `setResults` call replaces it.
     @Test func newQueryKeepsPreviousResultsVisibleUntilTheInstantPassReplacesThem() async {
         let file = LauncherResult.file(name: "hello.txt", url: URL(fileURLWithPath: "/tmp/hello.txt"))
-        let model = LauncherViewModel(secondaryProviders: [DelayedLauncherProvider(rows: [file], delay: .milliseconds(30))])
+        let model = LauncherViewModel(secondaryProviders: [DelayedLauncherProvider(
+            rows: [file],
+            delay: .milliseconds(30)
+        )])
         model.query = "hello"
         model.scheduleSearch()
         await self.waitForSearch(model)
@@ -127,7 +148,11 @@ struct LauncherScopeTests {
     @Test func clipboardPaginationKeepsSelectionAndFiltersResetThePage() async throws {
         let store = try Fixtures.store()
         for index in 0 ..< 205 {
-            _ = try await store.ingest(PasteboardSnapshot(reps: [.init(uti: WellKnownUTI.plainText, data: Data("history entry \(index)".utf8))], sourceBundleID: nil, sourceAppName: nil))
+            _ = try await store.ingest(PasteboardSnapshot(
+                reps: [.init(uti: WellKnownUTI.plainText, data: Data("history entry \(index)".utf8))],
+                sourceBundleID: nil,
+                sourceAppName: nil
+            ))
         }
         let model = LauncherViewModel(secondaryProviders: [], clipboardStore: store)
         model.setScope(.clipboard)
@@ -146,8 +171,15 @@ struct LauncherScopeTests {
     }
 
     @Test func cloudResultOnlyDownloadsOnCommit() async {
-        let cloud = LauncherResult.file(name: "budget.xlsx", url: URL(fileURLWithPath: "/fixture/budget.xlsx"), info: FileSearchInfo(availability: .cloud))
-        let model = LauncherViewModel(instantProviders: [DelayedLauncherProvider(rows: [cloud])], secondaryProviders: [])
+        let cloud = LauncherResult.file(
+            name: "budget.xlsx",
+            url: URL(fileURLWithPath: "/fixture/budget.xlsx"),
+            info: FileSearchInfo(availability: .cloud)
+        )
+        let model = LauncherViewModel(
+            instantProviders: [DelayedLauncherProvider(rows: [cloud])],
+            secondaryProviders: []
+        )
         var opened = 0
         model.onOpenFile = { _ in opened += 1 }
         model.query = "budget"
@@ -165,7 +197,10 @@ struct LauncherScopeTests {
     /// on it — same outcome as when the list used to be blanked.
     @Test func aNewQueryImmediatelyClearsAnOldAction() async {
         let file = LauncherResult.file(name: "hello.txt", url: URL(fileURLWithPath: "/tmp/hello.txt"))
-        let model = LauncherViewModel(secondaryProviders: [DelayedLauncherProvider(rows: [file], delay: .milliseconds(30))])
+        let model = LauncherViewModel(secondaryProviders: [DelayedLauncherProvider(
+            rows: [file],
+            delay: .milliseconds(30)
+        )])
         model.query = "hello"
         model.scheduleSearch()
         await self.waitForSearch(model)
@@ -192,7 +227,10 @@ struct LauncherScopeTests {
     /// itself or a "type, Esc, settle" sequence parks forever.
     @Test(.timeLimit(.minutes(1))) func settleReturnsAfterStopObserving() async {
         let file = LauncherResult.file(name: "hello.txt", url: URL(fileURLWithPath: "/tmp/hello.txt"))
-        let model = LauncherViewModel(secondaryProviders: [DelayedLauncherProvider(rows: [file], delay: .milliseconds(200))])
+        let model = LauncherViewModel(secondaryProviders: [DelayedLauncherProvider(
+            rows: [file],
+            delay: .milliseconds(200)
+        )])
         model.query = "hello"
         model.scheduleSearch()
         model.stopObserving()
@@ -217,7 +255,9 @@ struct LauncherScopeTests {
         var observedEmptyResults = false
         let observer = Task {
             while !Task.isCancelled {
-                if model.results.isEmpty { observedEmptyResults = true }
+                if model.results.isEmpty {
+                    observedEmptyResults = true
+                }
                 try? await Task.sleep(for: .milliseconds(1))
             }
         }

@@ -49,9 +49,13 @@ public struct HistoryDebugView: View {
 
     private func subtitle(for item: ClipItem) -> String {
         var parts: [String] = []
-        if let app = item.sourceAppName { parts.append(app) }
+        if let app = item.sourceAppName {
+            parts.append(app)
+        }
         parts.append(item.lastUsedAt.formatted(date: .abbreviated, time: .shortened))
-        if item.useCount > 1 { parts.append("×\(item.useCount)") }
+        if item.useCount > 1 {
+            parts.append("×\(item.useCount)")
+        }
         return parts.joined(separator: " · ")
     }
 }

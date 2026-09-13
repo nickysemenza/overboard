@@ -138,8 +138,12 @@ struct EmojiCell: View {
     }
 
     private var fill: Color {
-        if self.isSelected { return Color.accentColor.opacity(0.22) }
-        if self.isHovered { return Color.primary.opacity(0.06) }
+        if self.isSelected {
+            return Color.accentColor.opacity(0.22)
+        }
+        if self.isHovered {
+            return Color.primary.opacity(0.06)
+        }
         return .clear
     }
 }
@@ -176,14 +180,20 @@ struct EmojiCell: View {
     }
 
     #Preview("Cell: unselected") {
-        EmojiCell(emoji: Emoji(character: "🔥", name: "fire", keywords: [], category: .travel, version: 0.6), isSelected: false)
-            .padding()
-            .frame(width: 80)
+        EmojiCell(
+            emoji: Emoji(character: "🔥", name: "fire", keywords: [], category: .travel, version: 0.6),
+            isSelected: false
+        )
+        .padding()
+        .frame(width: 80)
     }
 
     #Preview("Cell: selected") {
-        EmojiCell(emoji: Emoji(character: "🔥", name: "fire", keywords: [], category: .travel, version: 0.6), isSelected: true)
-            .padding()
-            .frame(width: 80)
+        EmojiCell(
+            emoji: Emoji(character: "🔥", name: "fire", keywords: [], category: .travel, version: 0.6),
+            isSelected: true
+        )
+        .padding()
+        .frame(width: 80)
     }
 #endif

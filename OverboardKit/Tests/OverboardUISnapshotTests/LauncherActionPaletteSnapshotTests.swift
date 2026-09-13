@@ -25,7 +25,11 @@ struct LauncherActionPaletteSnapshotTests {
     @Test func light() async {
         let viewModel = await self.makeViewModel()
         let view = LauncherActionPalette(viewModel: viewModel)
-        assertSnapshot(of: snapshotImage(view, width: 420, height: 360), as: snapshotImageStrategy, record: snapshotRecordingMode)
+        assertSnapshot(
+            of: snapshotImage(view, width: 420, height: 360),
+            as: snapshotImageStrategy,
+            record: snapshotRecordingMode
+        )
     }
 
     @Test func dark() async {

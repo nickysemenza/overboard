@@ -62,14 +62,22 @@ public enum SearchMatcher {
         /// folding and query tokenization for every retrieved candidate.
         public func tier(foldedTitle name: String, foldedContext context: String) -> SearchMatch.Tier? {
             guard !self.needle.isEmpty else { return .related }
-            if name == self.needle || (name as NSString).deletingPathExtension == self.needle { return .exact }
-            if name.hasPrefix(self.needle) { return .prefix }
-            if let literal { return (name + " " + context).contains(literal) ? .substring : nil }
+            if name == self.needle || (name as NSString).deletingPathExtension == self.needle {
+                return .exact
+            }
+            if name.hasPrefix(self.needle) {
+                return .prefix
+            }
+            if let literal {
+                return (name + " " + context).contains(literal) ? .substring : nil
+            }
             guard !self.tokens.isEmpty else { return name.contains(self.needle) ? .substring : nil }
             let words = (name + " " + context).split { !$0.isLetter && !$0.isNumber }.map(String.init)
             var tier = SearchMatch.Tier.words
             for token in self.tokens {
-                if words.contains(where: { $0.hasPrefix(token) }) { continue }
+                if words.contains(where: { $0.hasPrefix(token) }) {
+                    continue
+                }
                 if token.count >= 3, words.contains(where: { $0.contains(token) }) {
                     tier = max(tier, .substring)
                     continue
@@ -84,8 +92,13 @@ public enum SearchMatcher {
         }
     }
 
-    public static func match(query: String, title: String, context: String = "", includeHighlights: Bool = true) -> SearchMatch? {
-        guard let tier = PreparedQuery(query).tier(foldedTitle: AppMatcher.fold(title), foldedContext: AppMatcher.fold(context)) else { return nil }
+    public static func match(query: String, title: String, context: String = "",
+                             includeHighlights: Bool = true) -> SearchMatch?
+    {
+        guard let tier = PreparedQuery(query).tier(
+            foldedTitle: AppMatcher.fold(title),
+            foldedContext: AppMatcher.fold(context)
+        ) else { return nil }
         return SearchMatch(tier: tier, highlights: includeHighlights ? self.highlights(in: title, query: query) : [])
     }
 
@@ -94,7 +107,11 @@ public enum SearchMatcher {
         for token in self.literalTerm(query).map({ [$0] }) ?? self.tokens(query) {
             var start = text.startIndex
             while start < text.endIndex,
-                  let range = text.range(of: token, options: [.caseInsensitive, .diacriticInsensitive], range: start ..< text.endIndex)
+                  let range = text.range(
+                      of: token,
+                      options: [.caseInsensitive, .diacriticInsensitive],
+                      range: start ..< text.endIndex
+                  )
             {
                 ranges.append(NSRange(range, in: text))
                 start = range.upperBound
@@ -123,7 +140,9 @@ public enum SearchMatcher {
                     current[column] = min(current[column], beforePrevious[column - 2] + 1)
                 }
             }
-            if current.min() ?? 0 > budget { return false }
+            if current.min() ?? 0 > budget {
+                return false
+            }
             beforePrevious = previous
             previous = current
         }
@@ -132,35 +151,53 @@ public enum SearchMatcher {
 }
 
 public enum LauncherRanking {
-    public static func match(for result: LauncherResult, query: String, aliases: [String: String] = [:]) -> SearchMatch {
+    public static func match(for result: LauncherResult, query: String,
+                             aliases: [String: String] = [:]) -> SearchMatch
+    {
         switch result {
         case let .app(name, _):
             if let target = aliases[AppMatcher.fold(query)], AppMatcher.fold(name).hasPrefix(AppMatcher.fold(target)) {
                 return SearchMatch(tier: .exact)
             }
-            if AppMatcher.score(query: query, name: name) == .initials { return SearchMatch(tier: .words) }
+            if AppMatcher.score(query: query, name: name) == .initials {
+                return SearchMatch(tier: .words)
+            }
             return SearchMatcher.match(query: query, title: name) ?? SearchMatch(tier: .related)
         case let .file(name, url, _):
             return SearchMatcher.match(query: query, title: name, context: url.deletingLastPathComponent().path)
                 ?? SearchMatch(tier: .related)
         case let .clip(item):
-            return SearchMatcher.match(query: ParsedQuery.parse(query).text, title: item.previewText ?? "", context: [item.aiTitle, item.linkTitle, item.sourceTitle].compactMap(\.self).joined(separator: " "))
+            return SearchMatcher.match(
+                query: ParsedQuery.parse(query).text,
+                title: item.previewText ?? "",
+                context: [item.aiTitle, item.linkTitle, item.sourceTitle].compactMap(\.self).joined(separator: " ")
+            )
                 ?? SearchMatch(tier: .related)
         case let .snippet(item):
-            return SearchMatcher.match(query: query, title: item.title, context: item.body) ?? SearchMatch(tier: .related)
+            return SearchMatcher
+                .match(query: query, title: item.title, context: item.body) ?? SearchMatch(tier: .related)
         case let .systemSetting(name, _):
             return SearchMatcher.match(query: query, title: name) ?? SearchMatch(tier: .related)
         default: return SearchMatch(tier: .related)
         }
     }
 
-    public static func sorted(_ results: [LauncherResult], query: String, aliases: [String: String] = [:], usage: [String: Int] = [:]) -> [LauncherResult] {
+    public static func sorted(
+        _ results: [LauncherResult],
+        query: String,
+        aliases: [String: String] = [:],
+        usage: [String: Int] = [:]
+    ) -> [LauncherResult] {
         results.enumerated().map { index, result in
             (index: index, result: result, priority: self.priority(result, query: query, aliases: aliases))
         }.sorted { left, right in
-            if left.priority != right.priority { return left.priority < right.priority }
+            if left.priority != right.priority {
+                return left.priority < right.priority
+            }
             let leftUse = usage[left.result.id, default: 0], rightUse = usage[right.result.id, default: 0]
-            if leftUse != rightUse { return leftUse > rightUse }
+            if leftUse != rightUse {
+                return leftUse > rightUse
+            }
             return left.index < right.index
         }.map(\.result)
     }

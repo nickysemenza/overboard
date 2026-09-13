@@ -18,7 +18,10 @@ struct OverboardApp: App {
                 Divider()
             }
 
-            SummonMenuItem(title: "Show Launcher", shortcutDescription: HotkeyService.toggleLauncherShortcutDescription) {
+            SummonMenuItem(
+                title: "Show Launcher",
+                shortcutDescription: HotkeyService.toggleLauncherShortcutDescription
+            ) {
                 AppServices.shared.launcher.show()
             }
 
@@ -26,7 +29,10 @@ struct OverboardApp: App {
                 AppServices.shared.overlay.show()
             }
 
-            SummonMenuItem(title: "Show Emoji Picker", shortcutDescription: HotkeyService.toggleEmojiPickerShortcutDescription) {
+            SummonMenuItem(
+                title: "Show Emoji Picker",
+                shortcutDescription: HotkeyService.toggleEmojiPickerShortcutDescription
+            ) {
                 AppServices.shared.emojiPicker.show()
             }
 

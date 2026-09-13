@@ -15,7 +15,11 @@ public struct SemanticVersion: Comparable, Equatable, Sendable, CustomStringConv
         guard let firstDigit = raw.firstIndex(where: \.isNumber) else { return nil }
         var core = ""
         for char in raw[firstDigit...] {
-            if char.isNumber || char == "." { core.append(char) } else { break }
+            if char.isNumber || char == "." {
+                core.append(char)
+            } else {
+                break
+            }
         }
         let parts = core.split(separator: ".", omittingEmptySubsequences: true).map { Int($0) }
         guard !parts.isEmpty, parts.allSatisfy({ $0 != nil }) else { return nil }
@@ -27,7 +31,9 @@ public struct SemanticVersion: Comparable, Equatable, Sendable, CustomStringConv
         for index in 0 ..< count {
             let left = index < lhs.components.count ? lhs.components[index] : 0
             let right = index < rhs.components.count ? rhs.components[index] : 0
-            if left != right { return left < right }
+            if left != right {
+                return left < right
+            }
         }
         return false
     }

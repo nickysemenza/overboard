@@ -63,20 +63,32 @@ public struct LinkMetadataFetcher: Sendable {
             host = String(host.dropFirst().dropLast())
         }
 
-        if host == "localhost" || host.hasSuffix(".localhost") { return true }
-        if host == "local" || host.hasSuffix(".local") { return true }
+        if host == "localhost" || host.hasSuffix(".localhost") {
+            return true
+        }
+        if host == "local" || host.hasSuffix(".local") {
+            return true
+        }
 
         // IPv6 loopback / unspecified.
-        if host == "::1" || host == "::" { return true }
+        if host == "::1" || host == "::" {
+            return true
+        }
         // IPv4-mapped IPv6 loopback, e.g. ::ffff:127.0.0.1.
-        if host.hasPrefix("::ffff:"), self.isPrivateIPv4(String(host.dropFirst(7))) { return true }
+        if host.hasPrefix("::ffff:"), self.isPrivateIPv4(String(host.dropFirst(7))) {
+            return true
+        }
         // IPv6 link-local (fe80::/10) and unique-local (fc00::/7).
         if host.hasPrefix("fe8") || host.hasPrefix("fe9") || host.hasPrefix("fea") || host.hasPrefix("feb") {
             return true
         }
-        if host.hasPrefix("fc") || host.hasPrefix("fd") { return true }
+        if host.hasPrefix("fc") || host.hasPrefix("fd") {
+            return true
+        }
 
-        if self.isPrivateIPv4(host) { return true }
+        if self.isPrivateIPv4(host) {
+            return true
+        }
 
         return false
     }
@@ -121,7 +133,9 @@ public struct LinkMetadataFetcher: Sendable {
                     // getnameinfo can append a scope id to link-local addrs (fe80::1%en0).
                     let numeric = buffer.withUnsafeBufferPointer { String(cString: $0.baseAddress!) }
                     let bare = numeric.split(separator: "%").first.map(String.init) ?? numeric
-                    if self.isPrivateHost(bare) { return true }
+                    if self.isPrivateHost(bare) {
+                        return true
+                    }
                 }
                 node = current.pointee.ai_next
             }
@@ -236,8 +250,12 @@ public struct LinkMetadataFetcher: Sendable {
             let closeTag = Array("</head>".utf8)
             for try await byte in bytes {
                 data.append(byte)
-                if data.count >= Self.htmlByteCap { break }
-                if data.count >= closeTag.count, Self.hasSuffix(data, closeTag) { break }
+                if data.count >= Self.htmlByteCap {
+                    break
+                }
+                if data.count >= closeTag.count, Self.hasSuffix(data, closeTag) {
+                    break
+                }
             }
             bytes.task.cancel()
 
@@ -262,7 +280,9 @@ public struct LinkMetadataFetcher: Sendable {
             // Match ASCII case-insensitively.
             let lower = (actual >= 65 && actual <= 90) ? actual + 32 : actual
             let expectedLower = (expected >= 65 && expected <= 90) ? expected + 32 : expected
-            if lower != expectedLower { return false }
+            if lower != expectedLower {
+                return false
+            }
             i = data.index(after: i)
         }
         return true

@@ -27,7 +27,11 @@ struct LauncherSectionSnapshotTests {
         await viewModel.settle()
 
         let view = LauncherView(viewModel: viewModel, store: store)
-        assertSnapshot(of: snapshotImage(view, width: 740, height: 370), as: snapshotImageStrategy, record: snapshotRecordingMode)
+        assertSnapshot(
+            of: snapshotImage(view, width: 740, height: 370),
+            as: snapshotImageStrategy,
+            record: snapshotRecordingMode
+        )
     }
 
     /// An app row whose bundle path is in `runningAppPaths` shows the small
@@ -45,7 +49,11 @@ struct LauncherSectionSnapshotTests {
         await viewModel.settle()
 
         let view = LauncherView(viewModel: viewModel, store: store)
-        assertSnapshot(of: snapshotImage(view, width: 740, height: 316), as: snapshotImageStrategy, record: snapshotRecordingMode)
+        assertSnapshot(
+            of: snapshotImage(view, width: 740, height: 316),
+            as: snapshotImageStrategy,
+            record: snapshotRecordingMode
+        )
     }
 
     /// The persistent footer bar renders even with zero result rows: brand on
@@ -61,6 +69,10 @@ struct LauncherSectionSnapshotTests {
         await viewModel.settle()
 
         let view = LauncherView(viewModel: viewModel, store: store)
-        assertSnapshot(of: snapshotImage(view, width: 740, height: 316), as: snapshotImageStrategy, record: snapshotRecordingMode)
+        assertSnapshot(
+            of: snapshotImage(view, width: 740, height: 316),
+            as: snapshotImageStrategy,
+            record: snapshotRecordingMode
+        )
     }
 }

@@ -24,8 +24,19 @@ enum DemoSeed {
         func results(for query: String) async -> [LauncherResult] {
             Self.paths
                 .map { URL(fileURLWithPath: $0) }
-                .filter { query.isEmpty || SearchMatcher.match(query: query, title: $0.lastPathComponent, context: $0.deletingLastPathComponent().path) != nil }
-                .map { .file(name: $0.lastPathComponent, url: $0, info: FileSearchInfo(availability: $0.path.contains("CloudDocs") ? .cloud : .local, location: $0.path.contains("CloudDocs") ? "iCloud Drive" : "On this Mac")) }
+                .filter { query.isEmpty || SearchMatcher.match(
+                    query: query,
+                    title: $0.lastPathComponent,
+                    context: $0.deletingLastPathComponent().path
+                ) != nil }
+                .map { .file(
+                    name: $0.lastPathComponent,
+                    url: $0,
+                    info: FileSearchInfo(
+                        availability: $0.path.contains("CloudDocs") ? .cloud : .local,
+                        location: $0.path.contains("CloudDocs") ? "iCloud Drive" : "On this Mac"
+                    )
+                ) }
         }
     }
 

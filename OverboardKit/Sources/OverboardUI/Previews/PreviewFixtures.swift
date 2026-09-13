@@ -106,7 +106,9 @@
         /// whichever Apple Color Emoji revision the rendering Mac has. Nonisolated
         /// so the view model's `@Sendable` catalog closure can call it.
         nonisolated static func emojiCatalog() -> EmojiCatalog {
-            func emoji(_ character: String, _ name: String, _ category: EmojiCategory, keywords: [String] = []) -> Emoji {
+            func emoji(_ character: String, _ name: String, _ category: EmojiCategory,
+                       keywords: [String] = []) -> Emoji
+            {
                 Emoji(character: character, name: name, keywords: keywords, category: category, version: 0.6)
             }
             return EmojiCatalog(all: [

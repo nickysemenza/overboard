@@ -8,7 +8,11 @@ struct CommandProviderTests {
     /// Pulls the command out of each row, ignoring any resolved subtitle.
     private func commands(_ results: [LauncherResult]) -> [LauncherCommand] {
         results.compactMap {
-            if case let .command(command, _) = $0 { command } else { nil }
+            if case let .command(command, _) = $0 {
+                command
+            } else {
+                nil
+            }
         }
     }
 

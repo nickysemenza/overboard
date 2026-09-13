@@ -16,7 +16,9 @@ struct CardEntrance: ViewModifier {
             .opacity(self.shown ? 1 : 0)
             .offset(y: self.shown ? 0 : 26)
             .onAppear {
-                if self.reduceMotion { self.shown = true; return }
+                if self.reduceMotion {
+                    self.shown = true; return
+                }
                 withAnimation(
                     .spring(response: 0.36, dampingFraction: 0.8)
                         .delay(Double(min(self.index, 8)) * 0.028)
@@ -96,7 +98,11 @@ extension View {
     /// adjacent shapes. Floating menus use their own opaque surface: overlapping
     /// glass shapes merge behind the host content. Leave both nil for standalone glass.
     func glassPanel(cornerRadius: CGFloat, id: String? = nil, in namespace: Namespace.ID? = nil) -> some View {
-        modifier(AccessibleGlassPanel(shape: RoundedRectangle(cornerRadius: cornerRadius), id: id, namespace: namespace))
+        modifier(AccessibleGlassPanel(
+            shape: RoundedRectangle(cornerRadius: cornerRadius),
+            id: id,
+            namespace: namespace
+        ))
     }
 
     /// Same shared glass chrome, for shells that aren't a rounded rectangle
@@ -154,8 +160,12 @@ struct LauncherRowButtonStyle: ButtonStyle {
             if self.isSelected {
                 return self.configuration.isPressed ? Color.accentColor.opacity(0.28) : Color.accentColor.opacity(0.20)
             }
-            if self.configuration.isPressed { return Color.primary.opacity(0.10) }
-            if self.isHovering { return Color.primary.opacity(0.06) }
+            if self.configuration.isPressed {
+                return Color.primary.opacity(0.10)
+            }
+            if self.isHovering {
+                return Color.primary.opacity(0.06)
+            }
             return .clear
         }
     }
@@ -188,7 +198,11 @@ private struct AccessibleGlassPanel<S: Shape>: ViewModifier {
                 content.glassEffect(.regular, in: self.shape)
             }
         }
-        .transaction { if self.reduceMotion { $0.animation = nil } }
+        .transaction {
+            if self.reduceMotion {
+                $0.animation = nil
+            }
+        }
     }
 }
 

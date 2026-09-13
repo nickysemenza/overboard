@@ -32,10 +32,16 @@ public struct SnippetSearchProvider: LauncherProvider {
     static func rank(_ snippet: Snippet, query: String) -> Int {
         let title = snippet.title.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
         let query = query.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
-        if title.hasPrefix(query) { return 0 }
+        if title.hasPrefix(query) {
+            return 0
+        }
         let words = title.split { !$0.isLetter && !$0.isNumber }
-        if words.contains(where: { $0.hasPrefix(query) }) { return 1 }
-        if title.contains(query) { return 2 }
+        if words.contains(where: { $0.hasPrefix(query) }) {
+            return 1
+        }
+        if title.contains(query) {
+            return 2
+        }
         return 3
     }
 }

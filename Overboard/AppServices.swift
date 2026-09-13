@@ -382,7 +382,9 @@ final class AppServices {
                 }
                 guard !links.isEmpty else { return .finished }
                 for link in links {
-                    if Task.isCancelled { return .finished }
+                    if Task.isCancelled {
+                        return .finished
+                    }
                     await enrichment.fetchLinkMetadata(for: link)
                     try? await Task.sleep(for: .seconds(1))
                 }
@@ -476,7 +478,9 @@ final class AppServices {
         // Observation runs only while the panel is visible.
         self.launcher.onWillShow = { [weak self] in
             guard let self else { return }
-            if !Self.isDemo { self.spotify.refreshSnapshot() }
+            if !Self.isDemo {
+                self.spotify.refreshSnapshot()
+            }
             self.launcherViewModel.runningAppPaths = self.runningApps.snapshot()
             self.runningApps.startObserving()
         }
@@ -504,10 +508,17 @@ final class AppServices {
                         HUDController.shared.flash("Downloading \(url.lastPathComponent)…", duration: .seconds(60))
                     }
                     try await FileOpening.open(url)
-                    if needsDownload { HUDController.shared.flash("Opened \(url.lastPathComponent)") }
-                    if let id { self.launcherViewModel.recordSuccessfulSelection(id: id, query: query) }
+                    if needsDownload {
+                        HUDController.shared.flash("Opened \(url.lastPathComponent)")
+                    }
+                    if let id {
+                        self.launcherViewModel.recordSuccessfulSelection(id: id, query: query)
+                    }
                 } catch {
-                    HUDController.shared.flash("Couldn’t open \(url.lastPathComponent). Check its location or internet connection and try again.", duration: .seconds(6))
+                    HUDController.shared.flash(
+                        "Couldn’t open \(url.lastPathComponent). Check its location or internet connection and try again.",
+                        duration: .seconds(6)
+                    )
                 }
             }
         }

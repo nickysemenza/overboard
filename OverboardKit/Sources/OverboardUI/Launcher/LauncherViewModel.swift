@@ -45,8 +45,12 @@ public final class LauncherViewModel {
 
     public var primaryActionLabel: String? {
         guard let action = self.primaryAction else { return nil }
-        if action == .paste { return "Paste to \(self.targetAppName)" }
-        if action == .search { return "Search Google" }
+        if action == .paste {
+            return "Paste to \(self.targetAppName)"
+        }
+        if action == .search {
+            return "Search Google"
+        }
         return action.label
     }
 
@@ -271,7 +275,8 @@ public final class LauncherViewModel {
         self.searchGeneration += 1
         let generation = self.searchGeneration
         if query.isEmpty, scope == .all {
-            let recents = self.history.reversed().prefix(self.maxRecentRows).map { LauncherResult.recentSearch(query: $0) }
+            let recents = self.history.reversed().prefix(self.maxRecentRows)
+                .map { LauncherResult.recentSearch(query: $0) }
             self.setResults(recents, preserveSelection: preserveSelection)
             self.searchTask = Task {
                 let apps = await self.instantRouter.results(for: "", scope: .apps)
@@ -281,8 +286,12 @@ public final class LauncherViewModel {
                 }
                 let counts = Defaults[.launcherItemUseCounts]
                 let candidates = apps.filter { row in
-                    if counts[row.id, default: 0] > 0 { return true }
-                    if case let .app(_, url) = row { return self.runningAppPaths.contains(url.path) }
+                    if counts[row.id, default: 0] > 0 {
+                        return true
+                    }
+                    if case let .app(_, url) = row {
+                        return self.runningAppPaths.contains(url.path)
+                    }
                     return false
                 }
                 let suggestions = self.sortByFrecency(candidates).prefix(6)
@@ -353,7 +362,11 @@ public final class LauncherViewModel {
         let scope = self.scope
         if scope == .clipboard, let store = self.clipboardStore {
             do {
-                let items = try await store.browseHistory(query, filter: self.clipboardFilter, limit: self.clipboardLimit + 1)
+                let items = try await store.browseHistory(
+                    query,
+                    filter: self.clipboardFilter,
+                    limit: self.clipboardLimit + 1
+                )
                 let stats = try await store.libraryStats(topSources: 100)
                 guard self.searchGeneration == generation else { return }
                 self.sources = stats.bySource.map(\.app).sorted()
@@ -488,7 +501,13 @@ public final class LauncherViewModel {
         // selection so it lands on the next row down.
         let oldIndex = self.selectedIndex
         self.setResults(
-            self.results.filter { if case .app = $0 { true } else { false } }
+            self.results.filter {
+                if case .app = $0 {
+                    true
+                } else {
+                    false
+                }
+            }
                 + self.history.reversed().prefix(self.maxRecentRows).map { .recentSearch(query: $0) }
         )
         self.selectedIndex = min(oldIndex, max(self.results.count - 1, 0))
@@ -509,7 +528,11 @@ public final class LauncherViewModel {
     /// list what it can do), sharing `selectedActions`' running-app context
     /// rule for app rows.
     public func actions(for result: LauncherResult) -> [LauncherAction] {
-        let isRunning: Bool = if case let .app(_, url) = result { self.runningAppPaths.contains(url.path) } else { false }
+        let isRunning: Bool = if case let .app(_, url) = result {
+            self.runningAppPaths.contains(url.path)
+        } else {
+            false
+        }
         return LauncherActions.actions(for: result, context: LauncherActionContext(isAppRunning: isRunning))
     }
 
@@ -571,7 +594,9 @@ public final class LauncherViewModel {
                 self.scheduleSearch(preserveSelection: true)
             }
         case let (.openSource, .clip(item)):
-            if let source = item.sourceURL, let url = URL(string: source) { self.onOpenClipLink(url) }
+            if let source = item.sourceURL, let url = URL(string: source) {
+                self.onOpenClipLink(url)
+            }
         case let (.revealInFinder, .app(_, url)), let (.revealInFinder, .file(_, url, _)):
             self.onRevealFile(url)
         case let (.copyPath, .app(_, url)), let (.copyPath, .file(_, url, _)):
@@ -589,7 +614,9 @@ public final class LauncherViewModel {
         case let (.copy, .clip(item)):
             self.onCopyClip(item)
         case let (.openLink, .clip(item)):
-            if let url = Self.clipLinkURL(item) { self.onOpenClipLink(url) }
+            if let url = Self.clipLinkURL(item) {
+                self.onOpenClipLink(url)
+            }
         case let (.search, .webSearch(_, url)):
             self.onOpenWebSearch(url)
         case let (.openSetting, .systemSetting(_, url)):
@@ -679,7 +706,9 @@ public final class LauncherViewModel {
         counts[id] = min(counts[id, default: 0] + 1, 100_000)
         lastUsed[id] = Date.now.timeIntervalSince1970
         if counts.count > 2000 {
-            for key in counts.keys.sorted(by: { lastUsed[$0, default: 0] < lastUsed[$1, default: 0] }).prefix(counts.count - 2000) {
+            for key in counts.keys.sorted(by: { lastUsed[$0, default: 0] < lastUsed[$1, default: 0] })
+                .prefix(counts.count - 2000)
+            {
                 counts.removeValue(forKey: key)
                 lastUsed.removeValue(forKey: key)
             }
@@ -701,11 +730,16 @@ public final class LauncherViewModel {
     }
 
     private func sortByFrecency(_ rows: [LauncherResult]) -> [LauncherResult] {
-        LauncherFrecency.sorted(rows, counts: Defaults[.launcherItemUseCounts], lastUsed: Defaults[.launcherItemLastUsed])
+        LauncherFrecency.sorted(
+            rows,
+            counts: Defaults[.launcherItemUseCounts],
+            lastUsed: Defaults[.launcherItemLastUsed]
+        )
     }
 
     private static func normalizedHistory(_ persisted: [String]) -> [String] {
-        Array(BoundedRecents(mostRecentFirst: persisted.reversed(), limit: LauncherViewModel.maxHistory).mostRecentFirst.reversed())
+        Array(BoundedRecents(mostRecentFirst: persisted.reversed(), limit: LauncherViewModel.maxHistory).mostRecentFirst
+            .reversed())
     }
 
     private func setResults(_ newResults: [LauncherResult], preserveSelection: Bool = false) {

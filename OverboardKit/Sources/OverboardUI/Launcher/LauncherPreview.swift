@@ -95,13 +95,21 @@ struct LauncherPreview: View {
             case let .file(_, url, info):
                 if self.fileState == .cloud || self.fileState == .downloading {
                     VStack(spacing: 14) {
-                        Image(systemName: "icloud.and.arrow.down").font(.system(size: self.cloudGlyphSize)).foregroundStyle(.secondary)
+                        Image(systemName: "icloud.and.arrow.down").font(.system(size: self.cloudGlyphSize))
+                            .foregroundStyle(.secondary)
                         Text("Stored in \(info.location ?? "the cloud")").font(.headline)
-                        Text("Download this file to open it. Browsing results keeps it in the cloud.").foregroundStyle(.secondary).multilineTextAlignment(.center)
+                        Text("Download this file to open it. Browsing results keeps it in the cloud.")
+                            .foregroundStyle(.secondary).multilineTextAlignment(.center)
                         Button("Download & Open", action: self.onOpen)
                     }.frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if self.fileState == .unavailable {
-                    ContentUnavailableView("File unavailable", systemImage: "exclamationmark.icloud", description: Text("It may have moved, or its location may be offline. Rebuild the index in Settings → Files."))
+                    ContentUnavailableView(
+                        "File unavailable",
+                        systemImage: "exclamationmark.icloud",
+                        description: Text(
+                            "It may have moved, or its location may be offline. Rebuild the index in Settings → Files."
+                        )
+                    )
                 } else if self.fileState == .local {
                     if let filePreviewContent {
                         FilePreviewView(content: filePreviewContent)
@@ -124,10 +132,18 @@ struct LauncherPreview: View {
                     }
                 }
             default:
-                ContentUnavailableView("Ready to open", systemImage: "arrow.up.forward.app", description: Text("Press Return to run the selected action."))
+                ContentUnavailableView(
+                    "Ready to open",
+                    systemImage: "arrow.up.forward.app",
+                    description: Text("Press Return to run the selected action.")
+                )
             }
         } else {
-            ContentUnavailableView("Select a result", systemImage: "sidebar.right", description: Text("Its contents and source will appear here."))
+            ContentUnavailableView(
+                "Select a result",
+                systemImage: "sidebar.right",
+                description: Text("Its contents and source will appear here.")
+            )
         }
     }
 
@@ -143,18 +159,27 @@ struct LauncherPreview: View {
                         Label(item.sourceTitle ?? "Open source page", systemImage: "arrow.up.right.square").lineLimit(1)
                     }
                 }
-                if let detail = item.metadataFooter { Text(detail).foregroundStyle(.secondary) }
+                if let detail = item.metadataFooter {
+                    Text(detail).foregroundStyle(.secondary)
+                }
             }.font(.caption)
         } else if case let .file(name, url, info) = self.result {
             Divider()
             Text(name).font(.headline).lineLimit(2)
-            Text(FileBreadcrumb.label(url.deletingLastPathComponent())).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
-            if let date = info.modifiedAt { Text("Modified \(date.formatted(date: .abbreviated, time: .shortened))").font(.caption).foregroundStyle(.secondary) }
+            Text(FileBreadcrumb.label(url.deletingLastPathComponent())).font(.caption).foregroundStyle(.secondary)
+                .textSelection(.enabled)
+            if let date = info
+                .modifiedAt
+            {
+                Text("Modified \(date.formatted(date: .abbreviated, time: .shortened))").font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 
     private func load() async {
-        self.text = nil; self.image = nil; self.code = nil; self.error = nil; self.fileState = nil; self.filePreviewContent = nil
+        self.text = nil; self.image = nil; self.code = nil; self.error = nil; self.fileState = nil; self
+            .filePreviewContent = nil
         self.loading = true
         self.showSpinner = false
         self.spinnerTask?.cancel()
@@ -165,7 +190,9 @@ struct LauncherPreview: View {
         }
         defer {
             self.spinnerTask?.cancel()
-            if !Task.isCancelled { self.loadedID = self.result?.id; self.loading = false }
+            if !Task.isCancelled {
+                self.loadedID = self.result?.id; self.loading = false
+            }
         }
         do {
             switch self.result {
@@ -173,7 +200,9 @@ struct LauncherPreview: View {
                 guard !item.isSecret else { self.error = "Protected clipboard item"; return }
                 switch item.kind {
                 case .image:
-                    guard let representation = try await self.store.representations(for: item.id).first(where: { $0.uti == WellKnownUTI.png }) else { self.error = "Image data is missing."; return }
+                    guard let representation = try await self.store.representations(for: item.id)
+                        .first(where: { $0.uti == WellKnownUTI.png })
+                    else { self.error = "Image data is missing."; return }
                     let data = try await self.store.payload(for: representation)
                     guard !Task.isCancelled else { return }
                     self.image = ItemCardView.thumbnail(from: data, maxPixel: 1400)
@@ -222,6 +251,8 @@ private struct NativeFilePreview: NSViewRepresentable {
     }
 
     func updateNSView(_ view: QLPreviewView, context _: Context) {
-        if (view.previewItem as? NSURL) != self.url as NSURL { view.previewItem = self.url as NSURL }
+        if (view.previewItem as? NSURL) != self.url as NSURL {
+            view.previewItem = self.url as NSURL
+        }
     }
 }

@@ -22,7 +22,9 @@ struct FileSearchSettingsTab: View {
         Form {
             Section {
                 LabeledContent("Status", value: self.service.status)
-                if self.service.isIndexing { ProgressView().controlSize(.small) }
+                if self.service.isIndexing {
+                    ProgressView().controlSize(.small)
+                }
             } header: { Text("Index") } footer: {
                 Text("Permission problems are listed under Permissions.")
             }
@@ -33,13 +35,17 @@ struct FileSearchSettingsTab: View {
                     self.roots = FileIndexService.defaultRoots.map(\.path).joined(separator: "\n")
                 }
             } header: { Text("Included folders") } footer: {
-                Text("One folder path per line. Defaults include your home folder, iCloud Drive and Finder-visible cloud storage. Home excludes Library; cloud locations inside Library are included explicitly.")
+                Text(
+                    "One folder path per line. Defaults include your home folder, iCloud Drive and Finder-visible cloud storage. Home excludes Library; cloud locations inside Library are included explicitly."
+                )
             }
             Section {
                 TextEditor(text: self.$exclusions).font(.body.monospaced()).frame(height: 110)
                     .accessibilityLabel("Excluded folder names or absolute paths, one per line")
             } header: { Text("Excluded folders") } footer: {
-                Text("One folder name or absolute path per line. Hidden internals and app-package contents are skipped. Only names, paths, dates and cloud availability are indexed; file contents are never read.")
+                Text(
+                    "One folder name or absolute path per line. Hidden internals and app-package contents are skipped. Only names, paths, dates and cloud availability are indexed; file contents are never read."
+                )
             }
             HStack(spacing: 10) {
                 Button("Apply & Rebuild Index") {

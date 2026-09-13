@@ -128,7 +128,9 @@ public final class DrawerViewModel {
             var remaining = Substring(needle)
             for char in action.label.lowercased() where char == remaining.first {
                 remaining = remaining.dropFirst()
-                if remaining.isEmpty { return true }
+                if remaining.isEmpty {
+                    return true
+                }
             }
             return remaining.isEmpty
         }

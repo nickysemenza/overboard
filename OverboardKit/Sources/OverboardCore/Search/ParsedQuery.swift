@@ -45,14 +45,20 @@ public struct ParsedQuery: Equatable, Sendable {
     /// In-memory check, used to keep semantic-search extras consistent with
     /// the SQL filters.
     public func matches(_ item: ClipItem) -> Bool {
-        if let kind, item.kind != kind { return false }
+        if let kind, item.kind != kind {
+            return false
+        }
         if let app {
             let needle = app.lowercased()
             let nameHit = item.sourceAppName?.lowercased().contains(needle) ?? false
             let bundleHit = item.sourceBundleID?.lowercased().contains(needle) ?? false
-            if !nameHit, !bundleHit { return false }
+            if !nameHit, !bundleHit {
+                return false
+            }
         }
-        if let category, item.category != category { return false }
+        if let category, item.category != category {
+            return false
+        }
         return true
     }
 }

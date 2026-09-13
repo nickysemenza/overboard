@@ -111,14 +111,20 @@ public enum LauncherActions {
                 .revealInFinder,
                 .copyPath,
             ]
-            if context.isAppRunning { actions.append(.quitApp) }
+            if context.isAppRunning {
+                actions.append(.quitApp)
+            }
             return actions
         case let .clip(item):
             // ↩ paste, ⌘↩ copy, ⌥↩ paste plain; link clips add Open Link.
             var actions: [LauncherAction] = [.paste, .copy, .pastePlain]
-            if item.kind == .link { actions.append(.openLink) }
+            if item.kind == .link {
+                actions.append(.openLink)
+            }
             actions += [.preview, item.isPinned ? .unpin : .pin]
-            if item.sourceURL != nil { actions.append(.openSource) }
+            if item.sourceURL != nil {
+                actions.append(.openSource)
+            }
             return actions
         case .snippet:
             // ↩ paste, ⌘↩ copy (⌥↩ is a no-op alias of ↩ for snippets).

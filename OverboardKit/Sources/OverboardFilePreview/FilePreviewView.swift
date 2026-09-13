@@ -18,7 +18,8 @@ public struct FilePreviewView: View {
                 ScrollView {
                     Markdown(self.content.text)
                         .markdownTheme(.basic)
-                        .markdownCodeSyntaxHighlighter(HighlightrMarkdownSyntaxHighlighter(dark: self.colorScheme == .dark))
+                        .markdownCodeSyntaxHighlighter(HighlightrMarkdownSyntaxHighlighter(dark: self
+                                .colorScheme == .dark))
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(12)
@@ -35,16 +36,23 @@ public struct FilePreviewView: View {
                 }
             }
             if self.content.isTruncated {
-                Label("Preview truncated to keep Quick Look responsive", systemImage: "text.line.first.and.arrowtriangle.forward")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 12)
-                    .padding(.bottom, 8)
+                Label(
+                    "Preview truncated to keep Quick Look responsive",
+                    systemImage: "text.line.first.and.arrowtriangle.forward"
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 12)
+                .padding(.bottom, 8)
             }
         }
         .task(id: "\(self.content.url.path)-\(self.colorScheme == .dark)") {
             guard !self.content.isMarkdown else { self.highlighted = nil; return }
-            let highlighted = await HighlightrCache.shared.highlight(self.content.text, language: self.content.language, dark: self.colorScheme == .dark)
+            let highlighted = await HighlightrCache.shared.highlight(
+                self.content.text,
+                language: self.content.language,
+                dark: self.colorScheme == .dark
+            )
             guard !Task.isCancelled else { return }
             self.highlighted = highlighted
         }

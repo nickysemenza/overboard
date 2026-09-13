@@ -148,7 +148,12 @@ struct CommandPaletteView: View {
             items: [
                 CommandPaletteItem(id: "paste", label: "Paste", systemImage: "doc.on.clipboard", hint: "↩"),
                 CommandPaletteItem(id: "copy", label: "Copy", systemImage: "doc.on.doc", hint: "⌘↩"),
-                CommandPaletteItem(id: "pastePlain", label: "Paste as Plain Text", systemImage: "textformat", hint: "⌥↩"),
+                CommandPaletteItem(
+                    id: "pastePlain",
+                    label: "Paste as Plain Text",
+                    systemImage: "textformat",
+                    hint: "⌥↩"
+                ),
                 CommandPaletteItem(id: "openLink", label: "Open Link in Browser", systemImage: "safari"),
             ],
             query: $query,

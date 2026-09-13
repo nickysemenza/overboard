@@ -58,7 +58,9 @@ public nonisolated enum BrowserProvenanceService {
         // to send, so skip anything that isn't already running.
         guard !NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).isEmpty else { return nil }
         // The user already said no — don't prompt or round-trip again this run.
-        if self.deniedBundleIDs.withLock({ $0.contains(bundleID) }) { return nil }
+        if self.deniedBundleIDs.withLock({ $0.contains(bundleID) }) {
+            return nil
+        }
 
         let source = BrowserScript.source(for: dialect, bundleID: bundleID)
 

@@ -193,7 +193,9 @@ struct ClipStoreTests {
         var pinnedID: String?
         for i in 0 ..< 10 {
             let item = try await store.ingest(textSnapshot("clip number \(i)"))
-            if i == 0 { pinnedID = item?.id }
+            if i == 0 {
+                pinnedID = item?.id
+            }
         }
         try await store.setPinned(id: #require(pinnedID), true)
         try await store.purge(keepingLatest: 3)

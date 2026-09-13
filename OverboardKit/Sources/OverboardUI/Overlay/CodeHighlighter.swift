@@ -27,7 +27,9 @@ enum CodeHighlighter {
             "public ", "private ", "});",
         ]
         let hits = markers.count(where: text.contains)
-        if hits >= 2 { return true }
+        if hits >= 2 {
+            return true
+        }
         return hits >= 1 && text.contains("{") && text.contains("}")
     }
 }
@@ -42,7 +44,7 @@ struct CodeTextView: NSViewRepresentable {
     func makeNSView(context _: Context) -> NSScrollView {
         let scroll = NSTextView.scrollableTextView()
         // scrollableTextView()'s documentView is an NSTextView by API contract.
-        // swiftlint:disable:next force_cast
+
         let textView = scroll.documentView as! NSTextView
         textView.isEditable = false
         textView.isSelectable = self.selectable
@@ -56,7 +58,7 @@ struct CodeTextView: NSViewRepresentable {
 
     func updateNSView(_ scroll: NSScrollView, context _: Context) {
         // scrollableTextView()'s documentView is an NSTextView by API contract.
-        // swiftlint:disable:next force_cast
+
         let textView = scroll.documentView as! NSTextView
         textView.textStorage?.setAttributedString(self.attributed)
     }

@@ -31,7 +31,8 @@ struct LauncherPanelSizingTests {
         model.runningAppPaths = Set((0 ..< 6).map { "/fixture/app-\($0).app" })
         let controller = try LauncherPanelController(store: Fixtures.store(), viewModel: model)
         controller.show()
-        let panel = try #require(application.windows.first { $0 is OverlayPanel && !existingWindows.contains($0.windowNumber) })
+        let panel = try #require(application.windows
+            .first { $0 is OverlayPanel && !existingWindows.contains($0.windowNumber) })
         defer {
             model.query = ""
             controller.hide()

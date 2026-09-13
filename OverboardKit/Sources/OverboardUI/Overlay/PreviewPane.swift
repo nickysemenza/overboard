@@ -222,7 +222,9 @@ struct PreviewPane: View {
 
     private func subtitle(for item: ClipItem) -> String {
         var parts: [String] = []
-        if let app = item.sourceAppName { parts.append(app) }
+        if let app = item.sourceAppName {
+            parts.append(app)
+        }
         parts.append(item.lastUsedAt.formatted(date: .abbreviated, time: .shortened))
         return parts.joined(separator: " · ")
     }
@@ -318,7 +320,9 @@ struct PreviewPane: View {
                 for _ in 0 ..< 2000 where model.items.isEmpty {
                     await Task.yield()
                 }
-                if let index = model.items.firstIndex(where: { $0.previewText?.contains("Pick up the package") == true }) {
+                if let index = model.items
+                    .firstIndex(where: { $0.previewText?.contains("Pick up the package") == true })
+                {
                     model.selectedIndex = index
                 }
                 if self.editing {

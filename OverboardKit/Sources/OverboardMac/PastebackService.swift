@@ -280,7 +280,9 @@ public final class PastebackService {
             main.setData(payload, forType: type)
         }
         main.setData(Data(), forType: ClipboardMonitor.markerType)
-        if pbItems.isEmpty { pbItems = [main] }
+        if pbItems.isEmpty {
+            pbItems = [main]
+        }
         return pbItems
     }
 

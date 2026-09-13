@@ -167,7 +167,11 @@ public final class LauncherPanelController {
     }
 
     public func toggle() {
-        if self.isVisible { self.hide() } else { self.show() }
+        if self.isVisible {
+            self.hide()
+        } else {
+            self.show()
+        }
     }
 
     /// Same path as pressing ↩ / ⌘↩ / ⌥↩ — used by the debug hooks.
@@ -208,8 +212,12 @@ public final class LauncherPanelController {
         let stale = self.lastHiddenAt.map { Date().timeIntervalSince($0) > Self.resumeWindow } ?? true
 
         self.viewModel.prepareForShow(clearQuery: stale)
-        if let scope { self.viewModel.setScope(scope) }
-        if let query { self.viewModel.query = query; self.viewModel.scheduleSearch() }
+        if let scope {
+            self.viewModel.setScope(scope)
+        }
+        if let query {
+            self.viewModel.query = query; self.viewModel.scheduleSearch()
+        }
         self.viewModel.startObserving()
         // Apply the final scope's viewport before ordering the panel onscreen,
         // including the first summon while suggestions are still loading.
@@ -265,11 +273,18 @@ public final class LauncherPanelController {
         let visible = screen.visibleFrame
         let width = min(self.viewModel.showsPreview ? Metrics.previewWidth : Metrics.panelWidth, visible.width - 40)
         var height = self.viewModel.showsPreview ? Metrics.previewHeight : Metrics.panelHeight
-        if self.viewModel.scope == .clipboard { height += Metrics.clipboardFilterHeight }
+        if self.viewModel.scope == .clipboard {
+            height += Metrics.clipboardFilterHeight
+        }
         height = min(height, visible.height - 60)
         let compactHeight = min(Metrics.panelHeight, visible.height - 60)
         let top = min(visible.maxY - 30, visible.midY + compactHeight / 2 + 60)
-        return NSRect(x: visible.midX - width / 2, y: max(visible.minY + 30, top - height), width: width, height: height)
+        return NSRect(
+            x: visible.midX - width / 2,
+            y: max(visible.minY + 30, top - height),
+            width: width,
+            height: height
+        )
     }
 
     /// Only an explicit scope/preview change can resize the panel. Keep its
@@ -337,7 +352,9 @@ public final class LauncherPanelController {
                 self.viewModel.togglePreview()
                 return nil
             case .escape:
-                if self.viewModel.isPreviewVisible { self.viewModel.togglePreview(); return nil }
+                if self.viewModel.isPreviewVisible {
+                    self.viewModel.togglePreview(); return nil
+                }
                 // Two-stage Esc (matches EmojiPanelController): a non-empty
                 // query is cleared first; only a second Esc, pressed once the
                 // bar is already empty, dismisses the panel. Record the query
@@ -403,9 +420,15 @@ public final class LauncherPanelController {
     }
 
     private func removeMonitors() {
-        if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
-        if let clickMonitor { NSEvent.removeMonitor(clickMonitor) }
-        if let resignObserver { NotificationCenter.default.removeObserver(resignObserver) }
+        if let keyMonitor {
+            NSEvent.removeMonitor(keyMonitor)
+        }
+        if let clickMonitor {
+            NSEvent.removeMonitor(clickMonitor)
+        }
+        if let resignObserver {
+            NotificationCenter.default.removeObserver(resignObserver)
+        }
         self.keyMonitor = nil
         self.clickMonitor = nil
         self.resignObserver = nil

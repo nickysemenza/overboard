@@ -87,7 +87,9 @@ public actor ClipStore {
     }
 
     private var sentenceEmbedding: NLEmbedding? {
-        if let cached = embeddingCache { return cached }
+        if let cached = embeddingCache {
+            return cached
+        }
         let embedding = NLEmbedding.sentenceEmbedding(for: .english)
         self.embeddingCache = embedding
         return embedding
@@ -328,7 +330,9 @@ public actor ClipStore {
     }
 
     /// Browser filters are applied before LIMIT, including OCR-backed FTS hits.
-    public func browseHistory(_ query: String, filter: ClipboardFilter = ClipboardFilter(), limit: Int = 200) async throws -> [ClipItem] {
+    public func browseHistory(_ query: String, filter: ClipboardFilter = ClipboardFilter(),
+                              limit: Int = 200) async throws -> [ClipItem]
+    {
         let parsed = ParsedQuery.parse(query)
         let match = FTSQuery.match(for: parsed.text)
         var conditions = ["item.deletedAt IS NULL", "item.isSecret = 0"]
@@ -359,7 +363,9 @@ public actor ClipStore {
             conditions.append("item.lastUsedAt >= ?")
             arguments.append(since)
         }
-        if filter.pinnedOnly { conditions.append("item.isPinned = 1") }
+        if filter.pinnedOnly {
+            conditions.append("item.isPinned = 1")
+        }
         let join: String
         let order: String
         if let match {
@@ -421,7 +427,9 @@ public actor ClipStore {
 
     /// Resolves a representation's payload, whether inline or blob-stored.
     public func payload(for rep: Representation) throws -> Data {
-        if let data = rep.data { return data }
+        if let data = rep.data {
+            return data
+        }
         guard let hash = rep.blobHash else {
             throw DatabaseError(message: "representation \(rep.id) has neither data nor blobHash")
         }

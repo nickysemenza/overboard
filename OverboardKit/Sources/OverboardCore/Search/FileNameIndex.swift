@@ -15,7 +15,16 @@ public struct IndexedFile: Codable, Sendable, FetchableRecord, PersistableRecord
     public var isDirectory: Bool
     public var location: String
 
-    public init(path: String, name: String, root: String, generation: String, modifiedAt: Date = .distantPast, availability: FileSearchInfo.Availability = .local, isDirectory: Bool = false, location: String = "On this Mac") {
+    public init(
+        path: String,
+        name: String,
+        root: String,
+        generation: String,
+        modifiedAt: Date = .distantPast,
+        availability: FileSearchInfo.Availability = .local,
+        isDirectory: Bool = false,
+        location: String = "On this Mac"
+    ) {
         // APFS can enumerate a canonically equivalent spelling different from
         // a URL supplied by the caller. SQLite's binary keys must agree.
         self.path = path.precomposedStringWithCanonicalMapping
@@ -32,7 +41,8 @@ public struct IndexedFile: Codable, Sendable, FetchableRecord, PersistableRecord
 
     public var result: LauncherResult {
         .file(name: self.name, url: URL(fileURLWithPath: self.path), info: FileSearchInfo(
-            availability: self.availability, isDirectory: self.isDirectory, modifiedAt: self.modifiedAt, location: self.location
+            availability: self.availability, isDirectory: self.isDirectory, modifiedAt: self.modifiedAt,
+            location: self.location
         ))
     }
 }
@@ -98,9 +108,15 @@ public actor FileNameIndex {
         let path = path?.precomposedStringWithCanonicalMapping
         try await self.database.write { db in
             if let path {
-                try db.execute(sql: "DELETE FROM file_entry WHERE root = ? AND generation != ? AND (path = ? OR substr(path, 1, length(?)) = ?)", arguments: [root, generation, path, path + "/", path + "/"])
+                try db.execute(
+                    sql: "DELETE FROM file_entry WHERE root = ? AND generation != ? AND (path = ? OR substr(path, 1, length(?)) = ?)",
+                    arguments: [root, generation, path, path + "/", path + "/"]
+                )
             } else {
-                try db.execute(sql: "DELETE FROM file_entry WHERE root = ? AND generation != ?", arguments: [root, generation])
+                try db.execute(
+                    sql: "DELETE FROM file_entry WHERE root = ? AND generation != ?",
+                    arguments: [root, generation]
+                )
             }
         }
     }
@@ -112,7 +128,10 @@ public actor FileNameIndex {
     public func retainRoots(_ roots: [String]) async throws {
         try await self.database.write { db in
             let slots = Array(repeating: "?", count: roots.count).joined(separator: ",")
-            try db.execute(sql: "DELETE FROM file_entry WHERE root NOT IN (\(slots))", arguments: StatementArguments(roots.map(\.precomposedStringWithCanonicalMapping)))
+            try db.execute(
+                sql: "DELETE FROM file_entry WHERE root NOT IN (\(slots))",
+                arguments: StatementArguments(roots.map(\.precomposedStringWithCanonicalMapping))
+            )
         }
     }
 
@@ -142,7 +161,11 @@ public actor FileNameIndex {
         let tokens = SearchMatcher.tokens(query)
         guard !query.isEmpty else {
             return try await self.database.read { db in
-                try IndexedFile.fetchAll(db, sql: "SELECT * FROM file_entry ORDER BY modifiedAt DESC LIMIT ?", arguments: [limit])
+                try IndexedFile.fetchAll(
+                    db,
+                    sql: "SELECT * FROM file_entry ORDER BY modifiedAt DESC LIMIT ?",
+                    arguments: [limit]
+                )
             }
         }
         let indexedTokens = tokens.filter { $0.count >= 3 }
@@ -157,7 +180,9 @@ public actor FileNameIndex {
                 // Exact fragments first: AND intersects posting lists rather
                 // than scoring every file sharing one common path trigram.
                 let direct = try retrieve(indexedTokens.map { "\"\($0)\"" }.joined(separator: " AND "))
-                if direct.count >= limit { return direct }
+                if direct.count >= limit {
+                    return direct
+                }
                 let fuzzy: String = indexedTokens.map { token -> String in
                     let chars = Array(token)
                     let grams = Set((0 ... chars.count - 3).map { String(chars[$0 ..< $0 + 3]) })
@@ -167,13 +192,21 @@ public actor FileNameIndex {
             }
             let fragments = tokens.isEmpty ? [AppMatcher.fold(query)] : tokens
             let conditions = fragments.map { _ in "instr(foldedPath, ?) > 0" }.joined(separator: " AND ")
-            return try IndexedFile.fetchAll(db, sql: "SELECT * FROM file_entry WHERE \(conditions) ORDER BY length(name), modifiedAt DESC LIMIT 1500", arguments: StatementArguments(fragments))
+            return try IndexedFile.fetchAll(
+                db,
+                sql: "SELECT * FROM file_entry WHERE \(conditions) ORDER BY length(name), modifiedAt DESC LIMIT 1500",
+                arguments: StatementArguments(fragments)
+            )
         }
         // Four-letter typos can share no trigram ("nots" -> "notes").
         // A bounded SQLite scan recovers these without widening every query.
         if tokens.count == 1, let token = tokens.first, token.count == 4 {
             let extra = try await self.database.read { db in
-                try IndexedFile.fetchAll(db, sql: "SELECT * FROM file_entry WHERE foldedName LIKE ? OR foldedName LIKE ? ORDER BY length(name) LIMIT 500", arguments: [String(token.prefix(2)) + "%", "%" + String(token.suffix(2)) + "%"])
+                try IndexedFile.fetchAll(
+                    db,
+                    sql: "SELECT * FROM file_entry WHERE foldedName LIKE ? OR foldedName LIKE ? ORDER BY length(name) LIMIT 500",
+                    arguments: [String(token.prefix(2)) + "%", "%" + String(token.suffix(2)) + "%"]
+                )
             }
             candidates += extra
         }
@@ -191,9 +224,15 @@ public actor FileNameIndex {
             else { return nil }
             return (file, SearchMatch(tier: tier))
         }.sorted { left, right in
-            if left.1.tier != right.1.tier { return left.1.tier < right.1.tier }
-            if left.0.name.count != right.0.name.count { return left.0.name.count < right.0.name.count }
-            if left.0.modifiedAt != right.0.modifiedAt { return left.0.modifiedAt > right.0.modifiedAt }
+            if left.1.tier != right.1.tier {
+                return left.1.tier < right.1.tier
+            }
+            if left.0.name.count != right.0.name.count {
+                return left.0.name.count < right.0.name.count
+            }
+            if left.0.modifiedAt != right.0.modifiedAt {
+                return left.0.modifiedAt > right.0.modifiedAt
+            }
             return left.0.path < right.0.path
         }.prefix(limit).map(\.0.result)
     }

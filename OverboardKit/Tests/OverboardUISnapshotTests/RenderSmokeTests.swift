@@ -57,7 +57,11 @@ struct RenderSmokeTests {
 
     @Test func launcherScopesRenderInBothAppearances() async {
         let model = LauncherViewModel(instantProviders: [StubLauncherProvider(rows: [
-            .file(name: "2026 budget.xlsx", url: URL(fileURLWithPath: "/fixture/iCloud Drive/Wedding/2026 budget.xlsx"), info: FileSearchInfo(availability: .cloud)),
+            .file(
+                name: "2026 budget.xlsx",
+                url: URL(fileURLWithPath: "/fixture/iCloud Drive/Wedding/2026 budget.xlsx"),
+                info: FileSearchInfo(availability: .cloud)
+            ),
             .clip(Fixtures.item(preview: "Wedding budget notes")),
         ])], secondaryProviders: [])
         model.query = "wedding budget"
@@ -67,7 +71,12 @@ struct RenderSmokeTests {
             await model.settle()
             for dark in [false, true] {
                 let view = LauncherView(viewModel: model, store: self.store)
-                #expect(self.rendersNonEmpty(snapshotHost(view, width: model.showsPreview ? 1020 : 740, height: 650, dark: dark)))
+                #expect(self.rendersNonEmpty(snapshotHost(
+                    view,
+                    width: model.showsPreview ? 1020 : 740,
+                    height: 650,
+                    dark: dark
+                )))
             }
         }
     }
@@ -118,7 +127,12 @@ struct RenderSmokeTests {
         )
         for content in [source, markdown] {
             for dark in [false, true] {
-                #expect(self.rendersNonEmpty(snapshotHost(FilePreviewView(content: content), width: 520, height: 360, dark: dark)))
+                #expect(self.rendersNonEmpty(snapshotHost(
+                    FilePreviewView(content: content),
+                    width: 520,
+                    height: 360,
+                    dark: dark
+                )))
             }
         }
     }

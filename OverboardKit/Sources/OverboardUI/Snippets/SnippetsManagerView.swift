@@ -43,7 +43,9 @@ final class SnippetsManagerViewModel {
 
     func load() async {
         self.snippets = await (try? self.store.snippets()) ?? []
-        if self.selectedID == nil { self.selectSnippet(self.snippets.first?.id) }
+        if self.selectedID == nil {
+            self.selectSnippet(self.snippets.first?.id)
+        }
     }
 
     /// Selects a different snippet. This is a personal editor with no

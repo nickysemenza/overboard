@@ -107,7 +107,9 @@ private struct GeneralSettingsTab: View {
                 KeyboardShortcuts.Recorder("Show Launcher", name: .toggleLauncher)
                 KeyboardShortcuts.Recorder("Show Emoji Picker", name: .toggleEmojiPicker)
             } footer: {
-                Text("The emoji picker's default shortcut (⌃⌘Space) takes over the system emoji viewer's binding while Overboard is running — record a different one here to get the system viewer back.")
+                Text(
+                    "The emoji picker's default shortcut (⌃⌘Space) takes over the system emoji viewer's binding while Overboard is running — record a different one here to get the system viewer back."
+                )
             }
 
             Section {
@@ -125,7 +127,9 @@ private struct GeneralSettingsTab: View {
                         .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
                 }
             } footer: {
-                Text("All mixes apps, files, clipboard, snippets, calculator, system settings, AI, and now playing. Use ⌘1–4 to switch scopes. File search locations are managed in Files. Aliases are one “sm = Sublime Merge” per line; initials work automatically.")
+                Text(
+                    "All mixes apps, files, clipboard, snippets, calculator, system settings, AI, and now playing. Use ⌘1–4 to switch scopes. File search locations are managed in Files. Aliases are one “sm = Sublime Merge” per line; initials work automatically."
+                )
             }
 
             Section {
@@ -136,7 +140,9 @@ private struct GeneralSettingsTab: View {
             Section {
                 Toggle("Fetch link titles and icons", isOn: self.$richLinkPreviews)
             } footer: {
-                Text("Connects to the URLs you copy to fetch each page’s title, description, favicon, and preview image, rendered on link cards. Requests come only from your Mac; nothing is sent anywhere else. Turn this off to keep Overboard fully offline.")
+                Text(
+                    "Connects to the URLs you copy to fetch each page’s title, description, favicon, and preview image, rendered on link cards. Requests come only from your Mac; nothing is sent anywhere else. Turn this off to keep Overboard fully offline."
+                )
             }
 
             Section {
@@ -167,7 +173,9 @@ private struct GeneralSettingsTab: View {
             } header: {
                 Text("About")
             } footer: {
-                Text("“Version” is the tagged release this build descends from; it only changes when a release is cut. “Source” is the exact git state it was built from — \(AppVersion.isDirtyOrAhead ? "this build is ahead of, or dirty against, that tag." : "matching the tag means it’s a clean release build."). Update checks look at GitHub Releases once a day; installing stays a manual download.")
+                Text(
+                    "“Version” is the tagged release this build descends from; it only changes when a release is cut. “Source” is the exact git state it was built from — \(AppVersion.isDirtyOrAhead ? "this build is ahead of, or dirty against, that tag." : "matching the tag means it’s a clean release build."). Update checks look at GitHub Releases once a day; installing stays a manual download."
+                )
             }
         }
         .formStyle(.grouped)
@@ -264,7 +272,9 @@ private struct HistorySettingsTab: View {
             } header: {
                 Text("Backup")
             } footer: {
-                Text("An export is a folder of readable JSON plus the large payloads it references. Detected secrets are left out — they expire on purpose. Importing skips clips you already have.")
+                Text(
+                    "An export is a folder of readable JSON plus the large payloads it references. Detected secrets are left out — they expire on purpose. Importing skips clips you already have."
+                )
             }
             .disabled(self.isArchiving)
 
@@ -338,7 +348,11 @@ private struct HistorySettingsTab: View {
             self.archiveOutcome?.title ?? "",
             isPresented: Binding(
                 get: { self.archiveOutcome != nil },
-                set: { if !$0 { self.archiveOutcome = nil } }
+                set: {
+                    if !$0 {
+                        self.archiveOutcome = nil
+                    }
+                }
             ),
             presenting: self.archiveOutcome
         ) { _ in
@@ -494,7 +508,9 @@ private struct AppsSettingsTab: View {
             } header: {
                 Text("Never capture from")
             } footer: {
-                Text("Copies made in these apps never enter history. Apps that mark their pasteboard as concealed (most password managers) are skipped automatically.")
+                Text(
+                    "Copies made in these apps never enter history. Apps that mark their pasteboard as concealed (most password managers) are skipped automatically."
+                )
             }
 
             Section {
@@ -515,7 +531,9 @@ private struct AppsSettingsTab: View {
             } header: {
                 Text("Clean up copies from")
             } footer: {
-                Text("One “bundleID = transform” per line — e.g. “com.apple.Safari = stripTrackingParams” strips ?utm_… from every link you copy in Safari. Transforms run at capture time on the plain-text copy. Available: \(self.transformList).")
+                Text(
+                    "One “bundleID = transform” per line — e.g. “com.apple.Safari = stripTrackingParams” strips ?utm_… from every link you copy in Safari. Transforms run at capture time on the plain-text copy. Available: \(self.transformList)."
+                )
             }
         }
         .formStyle(.grouped)
@@ -582,7 +600,9 @@ private struct ActionsSettingsTab: View {
             } header: {
                 Text("Applies to")
             } footer: {
-                Text("A checkmark means the action can apply to that content kind; “When” is how many items must be selected (single / 2+ / any). Greyed conditions are extra checks run against the clip's contents when you open the menu.")
+                Text(
+                    "A checkmark means the action can apply to that content kind; “When” is how many items must be selected (single / 2+ / any). Greyed conditions are extra checks run against the clip's contents when you open the menu."
+                )
             }
         }
         .formStyle(.grouped)
@@ -627,7 +647,9 @@ private struct AISettingsTab: View {
             Section {
                 LabeledContent("Image OCR", value: "Always on")
             } footer: {
-                Text("Copied images and screenshots are text-recognized on-device so you can search them by their contents.")
+                Text(
+                    "Copied images and screenshots are text-recognized on-device so you can search them by their contents."
+                )
             }
         }
         .formStyle(.grouped)

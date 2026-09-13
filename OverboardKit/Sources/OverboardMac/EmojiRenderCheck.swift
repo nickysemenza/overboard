@@ -26,7 +26,7 @@ public nonisolated enum EmojiRenderCheck {
         let attributes = CTRunGetAttributes(run) as NSDictionary
         guard let runFontValue = attributes[kCTFontAttributeName as String] else { return false }
         // CTRun attribute values are CF objects; CTFont is toll-free usable here.
-        let runFont = runFontValue as! CTFont // swiftlint:disable:this force_cast
+        let runFont = runFontValue as! CTFont
         let name = CTFontCopyPostScriptName(runFont) as String
         return name == "AppleColorEmoji"
     }

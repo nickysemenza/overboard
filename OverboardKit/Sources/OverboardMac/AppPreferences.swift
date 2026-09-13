@@ -48,7 +48,10 @@ public nonisolated extension Defaults.Keys {
     static let launcherItemUseCounts = Key<[String: Int]>("launcherItemUseCounts", default: [:])
     static let launcherItemLastUsed = Key<[String: Double]>("launcherItemLastUsed", default: [:])
     static let fileSearchRoots = Key<[String]>("fileSearchRoots", default: [])
-    static let fileSearchExclusions = Key<String>("fileSearchExclusions", default: ".git\nnode_modules\n.build\nbuild\ndist\ntarget\nDerivedData\n.cache\n.Trash")
+    static let fileSearchExclusions = Key<String>(
+        "fileSearchExclusions",
+        default: ".git\nnode_modules\n.build\nbuild\ndist\ntarget\nDerivedData\n.cache\n.Trash"
+    )
     /// Unsaved draft text for the Files settings tab's included-folders editor.
     /// The tab only commits typed edits on "Apply & Rebuild Index" (rebuilding
     /// the index is expensive), so this mirrors keystrokes as they happen —

@@ -26,12 +26,18 @@ public enum AppMatcher {
         let q = self.fold(query)
         let n = self.fold(name)
         guard !q.isEmpty, !n.isEmpty else { return nil }
-        if n.hasPrefix(q) { return .namePrefix }
+        if n.hasPrefix(q) {
+            return .namePrefix
+        }
         let initials = String(
             n.split(whereSeparator: { $0 == " " || $0 == "-" }).compactMap(\.first)
         )
-        if initials.hasPrefix(q), initials.count > 1 { return .initials }
-        if n.contains(q) { return .substring }
+        if initials.hasPrefix(q), initials.count > 1 {
+            return .initials
+        }
+        if n.contains(q) {
+            return .substring
+        }
         return nil
     }
 
@@ -57,9 +63,13 @@ public enum AppMatcher {
 
         return scored
             .sorted { lhs, rhs in
-                if lhs.match != rhs.match { return lhs.match > rhs.match }
+                if lhs.match != rhs.match {
+                    return lhs.match > rhs.match
+                }
                 let l = names[lhs.index], r = names[rhs.index]
-                if l.count != r.count { return l.count < r.count }
+                if l.count != r.count {
+                    return l.count < r.count
+                }
                 return l.localizedCaseInsensitiveCompare(r) == .orderedAscending
             }
             .prefix(limit)

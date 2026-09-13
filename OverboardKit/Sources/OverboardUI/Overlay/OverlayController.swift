@@ -126,7 +126,11 @@ public final class OverlayController {
     }
 
     public func toggle() {
-        if self.isVisible { self.hide() } else { self.show() }
+        if self.isVisible {
+            self.hide()
+        } else {
+            self.show()
+        }
     }
 
     public func show() {
@@ -351,9 +355,15 @@ public final class OverlayController {
     }
 
     private func removeMonitors() {
-        if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
-        if let clickMonitor { NSEvent.removeMonitor(clickMonitor) }
-        if let resignObserver { NotificationCenter.default.removeObserver(resignObserver) }
+        if let keyMonitor {
+            NSEvent.removeMonitor(keyMonitor)
+        }
+        if let clickMonitor {
+            NSEvent.removeMonitor(clickMonitor)
+        }
+        if let resignObserver {
+            NotificationCenter.default.removeObserver(resignObserver)
+        }
         self.keyMonitor = nil
         self.clickMonitor = nil
         self.resignObserver = nil

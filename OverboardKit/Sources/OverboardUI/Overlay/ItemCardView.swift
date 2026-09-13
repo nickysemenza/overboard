@@ -415,7 +415,9 @@ struct ItemCardView: View {
 
     /// The headline text: the fetched title when present, else the host.
     private var resolvedLinkTitle: String {
-        if let title = item.linkTitle, !title.isEmpty { return title }
+        if let title = item.linkTitle, !title.isEmpty {
+            return title
+        }
         return self.linkHost ?? "Link"
     }
 
@@ -619,7 +621,9 @@ final class AppIconCache {
     func icon(forBundleID bundleID: String?) -> NSImage? {
         guard let bundleID else { return nil }
         let key = bundleID as NSString
-        if let boxed = self.iconCache.object(forKey: key) { return boxed.image }
+        if let boxed = self.iconCache.object(forKey: key) {
+            return boxed.image
+        }
         let icon = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID)
             .map { NSWorkspace.shared.icon(forFile: $0.path) }
         self.iconCache.setObject(IconBox(icon), forKey: key)
@@ -630,7 +634,9 @@ final class AppIconCache {
     func tint(forBundleID bundleID: String?) -> Color? {
         guard let bundleID else { return nil }
         let key = bundleID as NSString
-        if let boxed = self.tintCache.object(forKey: key) { return boxed.color }
+        if let boxed = self.tintCache.object(forKey: key) {
+            return boxed.color
+        }
         let tint = self.icon(forBundleID: bundleID).flatMap(Self.averageColor)
         self.tintCache.setObject(TintBox(tint), forKey: key)
         return tint

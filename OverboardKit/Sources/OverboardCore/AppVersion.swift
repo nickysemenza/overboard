@@ -40,12 +40,20 @@ public enum AppVersion {
 
     /// One-liner for the launcher subtitle.
     public static var detail: String {
-        if let git = gitDescribe { "\(git) · build \(build)" } else { "build \(build)" }
+        if let git = gitDescribe {
+            "\(git) · build \(build)"
+        } else {
+            "build \(build)"
+        }
     }
 
     /// Full human string, suitable for a bug report.
     public static var summary: String {
-        if let git = gitDescribe { "Overboard \(marketing) (\(git))" } else { "Overboard \(marketing) (build \(build))" }
+        if let git = gitDescribe {
+            "Overboard \(marketing) (\(git))"
+        } else {
+            "Overboard \(marketing) (build \(build))"
+        }
     }
 
     /// True when the source has drifted from the tag — a dirty tree or any

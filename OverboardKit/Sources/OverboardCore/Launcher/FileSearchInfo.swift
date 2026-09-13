@@ -10,7 +10,12 @@ public struct FileSearchInfo: Sendable, Equatable, Codable {
     public var modifiedAt: Date?
     public var location: String?
 
-    public init(availability: Availability = .local, isDirectory: Bool = false, modifiedAt: Date? = nil, location: String? = nil) {
+    public init(
+        availability: Availability = .local,
+        isDirectory: Bool = false,
+        modifiedAt: Date? = nil,
+        location: String? = nil
+    ) {
         self.availability = availability
         self.isDirectory = isDirectory
         self.modifiedAt = modifiedAt

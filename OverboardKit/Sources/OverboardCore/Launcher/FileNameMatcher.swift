@@ -15,9 +15,13 @@ public enum FileNameMatcher {
         let name = self.fold(name)
         let query = self.fold(query)
         guard !query.isEmpty else { return nil }
-        if name.hasPrefix(query) { return 0 }
+        if name.hasPrefix(query) {
+            return 0
+        }
         let words = name.split { !$0.isLetter && !$0.isNumber }
-        if words.contains(where: { $0.hasPrefix(query) }) { return 1 }
+        if words.contains(where: { $0.hasPrefix(query) }) {
+            return 1
+        }
         guard query.count >= self.substringMinLength else { return nil }
         return name.contains(query) ? 2 : nil
     }

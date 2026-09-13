@@ -82,8 +82,12 @@ public final class ClipboardMonitor {
         let types = pasteboard.types ?? []
 
         // Privacy gates — checked before reading any payload.
-        if Self.skippedTypes.contains(where: types.contains) { return nil }
-        if IsSecureEventInputEnabled() { return nil }
+        if Self.skippedTypes.contains(where: types.contains) {
+            return nil
+        }
+        if IsSecureEventInputEnabled() {
+            return nil
+        }
 
         let frontmost = NSWorkspace.shared.frontmostApplication
         if let bundleID = frontmost?.bundleIdentifier, self.excludedBundleIDs().contains(bundleID) {

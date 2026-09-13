@@ -73,13 +73,19 @@ struct SnippetCardView: View {
 
 #if DEBUG
     #Preview("Light") {
-        let snippet = Snippet(title: "Standup update", body: "Yesterday: shipped X.\nToday: working on Y.\nBlockers: none.")
+        let snippet = Snippet(
+            title: "Standup update",
+            body: "Yesterday: shipped X.\nToday: working on Y.\nBlockers: none."
+        )
         SnippetCardView(snippet: snippet, index: 0, isSelected: false)
             .padding()
     }
 
     #Preview("Selected") {
-        let snippet = Snippet(title: "Standup update", body: "Yesterday: shipped X.\nToday: working on Y.\nBlockers: none.")
+        let snippet = Snippet(
+            title: "Standup update",
+            body: "Yesterday: shipped X.\nToday: working on Y.\nBlockers: none."
+        )
         SnippetCardView(snippet: snippet, index: 0, isSelected: true)
             .padding()
     }

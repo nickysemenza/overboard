@@ -6,3 +6,5 @@
 # Would rewrite every camelCase @Test name as a backticked sentence.
 --disable swiftTestingTestCaseNames
 --exclude .build,**/.build,DerivedData,build
+# Match SwiftLint line_length (120): SwiftFormat wraps what it can, the rest is fixed by hand.
+--max-width 120

@@ -62,7 +62,9 @@ public enum MarkdownDetector {
                 markers.insert(.tableRow)
             }
 
-            if markers.count >= 2 { return true }
+            if markers.count >= 2 {
+                return true
+            }
         }
         return false
     }

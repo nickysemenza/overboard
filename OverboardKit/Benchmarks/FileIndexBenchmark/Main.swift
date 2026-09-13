@@ -11,7 +11,18 @@ struct FileIndexBenchmark {
         let index = try FileNameIndex(url: directory.appendingPathComponent("files.sqlite"))
         let clock = ContinuousClock()
         let start = clock.now
-        let names = ["budget", "meeting", "proposal", "photo", "report", "invoice", "design", "release", "schedule", "notes"]
+        let names = [
+            "budget",
+            "meeting",
+            "proposal",
+            "photo",
+            "report",
+            "invoice",
+            "design",
+            "release",
+            "schedule",
+            "notes",
+        ]
         let extensions = ["pdf", "xlsx", "md", "jpg", "txt"]
         for batch in 0 ..< 100 {
             let files = (0 ..< 1000).map { offset in
@@ -24,12 +35,24 @@ struct FileIndexBenchmark {
             try await index.upsert(files)
         }
         let initial = start.duration(to: clock.now)
-        let queries = ["budget", "project 126 invoice", "report 45874", "budegt", "design", "schedule 778", "notes", "photo 2093", "release", "meeting"]
+        let queries = [
+            "budget",
+            "project 126 invoice",
+            "report 45874",
+            "budegt",
+            "design",
+            "schedule 778",
+            "notes",
+            "photo 2093",
+            "release",
+            "meeting",
+        ]
         // Prime caches separately from the warm samples.
         for query in queries {
             let begin = clock.now
             _ = try await index.search(query)
-            FileHandle.standardOutput.write(Data("warmup query=\(query) elapsed=\(begin.duration(to: clock.now))\n".utf8))
+            FileHandle.standardOutput
+                .write(Data("warmup query=\(query) elapsed=\(begin.duration(to: clock.now))\n".utf8))
         }
         var durations: [Double] = []
         for _ in 0 ..< 10 {
@@ -42,8 +65,11 @@ struct FileIndexBenchmark {
         }
         durations.sort()
         let p95 = durations[Int(ceil(Double(durations.count) * 0.95)) - 1]
-        let bytes = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.fileSizeKey])
-            .reduce(0) { $0 + ((try? $1.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0) }
+        let bytes = try FileManager.default.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: [.fileSizeKey]
+        )
+        .reduce(0) { $0 + ((try? $1.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0) }
         let report = "FILE_INDEX_BENCHMARK count=100000 initial_metadata_ingest=\(initial) disk_bytes=\(bytes) warm_samples=\(durations.count) p95_ms=\(p95)\n"
         FileHandle.standardOutput.write(Data(report.utf8))
         guard p95 < 100 else { throw BenchmarkFailure.tooSlow }

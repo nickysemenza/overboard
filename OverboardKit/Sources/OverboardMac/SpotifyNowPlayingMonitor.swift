@@ -92,7 +92,9 @@ public final class SpotifyNowPlayingMonitor {
             self.apply(nil)
             return
         }
-        if let last = lastSnapshotAt, Date().timeIntervalSince(last) < 1 { return }
+        if let last = lastSnapshotAt, Date().timeIntervalSince(last) < 1 {
+            return
+        }
         self.lastSnapshotAt = Date()
 
         // Off the main thread so a slow Apple Event (or the one-time Automation
@@ -131,7 +133,9 @@ public final class SpotifyNowPlayingMonitor {
         guard let script = NSAppleScript(source: source) else { return nil }
         var error: NSDictionary?
         let output = script.executeAndReturnError(&error)
-        if error != nil { return nil }
+        if error != nil {
+            return nil
+        }
         return output.stringValue ?? ""
     }
 
