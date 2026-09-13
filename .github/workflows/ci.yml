@@ -19,9 +19,13 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      # Both linters ship preinstalled on the macos-26 image; locally they
-      # come from Homebrew. A point-release drift between the two just means
-      # fixing whatever new rule fires — nothing is disabled or pinned.
+      # SwiftFormat ships on the macos-26 image; SwiftLint is a bottled brew
+      # install. Locally both come from Homebrew. A point-release drift
+      # between the two just means fixing whatever new rule fires — nothing
+      # is disabled or pinned.
+      - name: Install SwiftLint
+        run: brew install swiftlint
+
       - name: Tool versions
         run: |
           swiftformat --version

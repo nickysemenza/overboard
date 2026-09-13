@@ -263,9 +263,9 @@ survives the rebuild (see the signing note above), swaps the build into
 `/Applications`, re-registers the Quick Look extension, and relaunches.
 
 Lint is strict and nothing is disabled: `.swiftlint.yml` only holds the
-options that make SwiftLint accept SwiftFormat's output. CI uses the linters
-preinstalled on the GitHub runner; if a newer release adds a rule, fix the
-code rather than silence it.
+options that make SwiftLint accept SwiftFormat's output. CI uses the
+runner's SwiftFormat and a Homebrew SwiftLint; if a newer release adds a
+rule, fix the code rather than silence it.
 
 ### Snapshot tests
 
