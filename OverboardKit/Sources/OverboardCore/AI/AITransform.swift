@@ -31,13 +31,19 @@ public enum AITransform: String, Sendable, CaseIterable, Identifiable {
         case .summarize:
             "Summarize the text concisely, keeping the key facts."
         case .fixGrammar:
-            "Fix all grammar, spelling, and punctuation mistakes in the text. Keep the wording and tone otherwise unchanged."
+            """
+            Fix all grammar, spelling, and punctuation mistakes in the text. Keep the wording \
+            and tone otherwise unchanged.
+            """
         case .makeFormal:
             "Rewrite the text in a polished, professional tone."
         case .makeCasual:
             "Rewrite the text in a relaxed, casual tone."
         case .extractActionItems:
-            "Extract the action items from the text as a short dash-prefixed list. If there are none, reply with the single line: No action items."
+            """
+            Extract the action items from the text as a short dash-prefixed list. If there are \
+            none, reply with the single line: No action items.
+            """
         }
     }
 }
