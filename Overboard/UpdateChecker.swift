@@ -3,6 +3,7 @@ import Foundation
 import os
 import OverboardCore
 import OverboardMac
+import OverboardUI
 
 /// Polls the GitHub Releases API and, when a newer tag than this build exists,
 /// exposes it so the menu bar can offer a one-click download. Install stays
@@ -58,7 +59,31 @@ final class UpdateChecker {
         self.availableTag = nil
     }
 
+    /// One immediate, user-visible check — the menu's "Check for Updates…".
+    /// Shares `performCheck` with the silent daily poll; the only difference
+    /// is that this reports its outcome via a HUD.
+    func checkNow() async {
+        switch await self.performCheck() {
+        case let .newerAvailable(tag):
+            HUDController.shared.flash("Overboard \(tag) is available")
+        case .upToDate:
+            HUDController.shared.flash("You're up to date (v\(AppVersion.marketing))")
+        case .failed:
+            HUDController.shared.flash("Couldn't check for updates")
+        }
+    }
+
+    private enum CheckOutcome {
+        case newerAvailable(tag: String)
+        case upToDate
+        case failed
+    }
+
     private func checkOnce() async {
+        _ = await self.performCheck()
+    }
+
+    private func performCheck() async -> CheckOutcome {
         do {
             var request = URLRequest(url: Self.latestReleaseURL)
             request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
@@ -70,7 +95,7 @@ final class UpdateChecker {
                 // Distinguishes a GitHub rate-limit (403) or other API hiccup
                 // from being offline, which throws instead and lands below.
                 self.logger.info("update check got status \(statusCode ?? -1, privacy: .public), skipping")
-                return
+                return .failed
             }
 
             let release = try JSONDecoder().decode(GitHubRelease.self, from: data)
@@ -78,13 +103,16 @@ final class UpdateChecker {
             if let newer = UpdateCheck.newerRelease(current: AppVersion.marketing, latestTag: release.tagName) {
                 self.availableTag = newer
                 self.releaseURL = URL(string: release.htmlURL)
+                return .newerAvailable(tag: newer)
             } else {
                 self.availableTag = nil
                 self.releaseURL = nil
+                return .upToDate
             }
         } catch {
             // Offline / rate-limited / no releases yet — silently try again next cycle.
             self.logger.debug("update check failed: \(String(describing: error), privacy: .public)")
+            return .failed
         }
     }
 }

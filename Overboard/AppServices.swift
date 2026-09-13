@@ -64,6 +64,9 @@ final class AppServices {
     let launcherViewModel: LauncherViewModel
     let emojiPicker: EmojiPanelController
     let emojiViewModel: EmojiPickerViewModel
+    /// Shared Settings tab selection so `openSettings(tab:)` can deep-link
+    /// into a specific tab of the once-built `Settings` scene.
+    let settingsNavigation = SettingsNavigation()
     let runningApps = RunningApps()
     let stack = PasteStack()
 
@@ -450,11 +453,11 @@ final class AppServices {
         self.launcher.onRunCommand = { [weak self] command in
             guard let self else { return }
             switch command {
+            case .version, .settings: Self.openSettings()
             // `:stats` has no action of its own — ↩ opens Settings, where the
             // full library breakdown lives (the row subtitle is the summary).
-            // Settings has no tab-selection binding today, so this opens the
-            // default (General) tab rather than History specifically.
-            case .version, .stats, .settings: Self.openSettings()
+            // Deep-links straight to the History tab via SettingsNavigation.
+            case .stats: Self.openSettings(tab: .history)
             case .pause: self.setCapturePaused(true)
             case .resume: self.setCapturePaused(false)
             case .clear: self.confirmAndClearHistory()
@@ -530,7 +533,11 @@ final class AppServices {
     ///   - Then `orderFrontRegardless` raises it even while we're inactive, which
     ///     is the only thing that works when Settings is already open behind
     ///     another app (⌘, / showSettingsWindow: both no-op in that case).
-    static func openSettings() {
+    ///
+    /// `tab` deep-links into a specific tab via the shared `SettingsNavigation`
+    /// object bound into the `SettingsView`'s `TabView` selection.
+    static func openSettings(tab: SettingsTab = .general) {
+        self.shared.settingsNavigation.selectedTab = tab
         NSApp.activate(ignoringOtherApps: true)
         let existing = self.settingsWindow()
         if existing == nil || existing?.isVisible == false {
@@ -579,9 +586,9 @@ final class AppServices {
     private func confirmAndClearHistory() {
         let alert = NSAlert()
         alert.alertStyle = .critical
-        alert.messageText = "Clear all clipboard history?"
-        alert.informativeText = "Pinned items are kept."
-        alert.addButton(withTitle: "Clear")
+        alert.messageText = ClearHistoryPrompt.title
+        alert.informativeText = ClearHistoryPrompt.message
+        alert.addButton(withTitle: ClearHistoryPrompt.confirm)
         alert.addButton(withTitle: "Cancel")
         NSApp.activate(ignoringOtherApps: true)
         guard alert.runModal() == .alertFirstButtonReturn else { return }

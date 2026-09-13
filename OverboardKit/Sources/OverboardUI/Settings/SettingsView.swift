@@ -33,44 +33,83 @@ extension ItemKind {
     }
 }
 
+/// Identifies one Settings tab, so callers outside the view (a launcher
+/// command, a menu item) can deep-link to a specific one.
+public enum SettingsTab: Hashable, Sendable {
+    case general, history, files, apps, actions, ai
+}
+
+/// Shared, externally-settable tab selection for the Settings scene. SwiftUI
+/// builds the `Settings` scene once at launch, long before any window exists,
+/// so there's no view instance around for a caller like
+/// `AppServices.openSettings` to hand a binding to — this observable object
+/// is the bridge: `SettingsView` binds its `TabView` selection to it, and a
+/// caller sets `selectedTab` before raising the window.
+@Observable
+public final class SettingsNavigation {
+    public var selectedTab: SettingsTab
+
+    public init(selectedTab: SettingsTab = .general) {
+        self.selectedTab = selectedTab
+    }
+}
+
+/// Shared copy for the "clear all clipboard history" confirmation, so the
+/// Settings confirmation dialog and the `:clear` launcher command's `NSAlert`
+/// (which can't use a SwiftUI dialog since it runs outside a view) can't drift.
+public enum ClearHistoryPrompt {
+    public static let title = "Clear Clipboard History?"
+    public static let message = "All unpinned items will be deleted. Pinned items are kept. This can't be undone."
+    public static let confirm = "Clear History"
+}
+
 public struct SettingsView: View {
     private let store: ClipStore
+    private let checkForUpdates: () async -> Void
+    @Bindable private var navigation: SettingsNavigation
 
-    public init(store: ClipStore) {
+    public init(
+        store: ClipStore,
+        navigation: SettingsNavigation = SettingsNavigation(),
+        checkForUpdates: @escaping () async -> Void = {}
+    ) {
         self.store = store
+        self.navigation = navigation
+        self.checkForUpdates = checkForUpdates
     }
 
     public var body: some View {
-        TabView {
-            Tab("General", systemImage: "gearshape") {
-                GeneralSettingsTab()
+        TabView(selection: self.$navigation.selectedTab) {
+            Tab("General", systemImage: "gearshape", value: SettingsTab.general) {
+                GeneralSettingsTab(checkForUpdates: self.checkForUpdates)
             }
-            Tab("History", systemImage: "clock.arrow.circlepath") {
+            Tab("History", systemImage: "clock.arrow.circlepath", value: SettingsTab.history) {
                 HistorySettingsTab(store: self.store)
             }
-            Tab("Files", systemImage: "folder") {
+            Tab("Files", systemImage: "folder", value: SettingsTab.files) {
                 FileSearchSettingsTab()
             }
-            Tab("Apps", systemImage: "app.badge.checkmark") {
+            Tab("Apps", systemImage: "app.badge.checkmark", value: SettingsTab.apps) {
                 AppsSettingsTab()
             }
-            Tab("Actions", systemImage: "wand.and.stars") {
+            Tab("Actions", systemImage: "wand.and.stars", value: SettingsTab.actions) {
                 ActionsSettingsTab()
             }
-            Tab("AI", systemImage: "sparkles") {
+            Tab("AI", systemImage: "sparkles", value: SettingsTab.ai) {
                 AISettingsTab()
             }
         }
-        .frame(width: 600)
-        .onAppear {
-            NSApp.activate(ignoringOtherApps: true)
-        }
+        // A fixed floor big enough for the tallest tab (History, with its
+        // stats sections) so switching tabs doesn't resize the window.
+        .frame(minWidth: 520, minHeight: 420)
     }
 }
 
 // MARK: - General
 
 private struct GeneralSettingsTab: View {
+    let checkForUpdates: () async -> Void
+
     @Default(.restoreClipboard) private var restoreClipboard
     @Default(.launcherFileResults) private var launcherFileResults
     @Default(.launcherClipResults) private var launcherClipResults
@@ -156,7 +195,13 @@ private struct GeneralSettingsTab: View {
                         }
                     }
                 }
-                Toggle("Check for updates automatically", isOn: self.$updateCheckEnabled)
+                HStack {
+                    Toggle("Check for updates automatically", isOn: self.$updateCheckEnabled)
+                    Spacer()
+                    Button("Check Now") {
+                        Task { await self.checkForUpdates() }
+                    }
+                }
                 Button("Copy Version Info") {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(AppVersion.summary, forType: .string)
@@ -272,10 +317,10 @@ private struct HistorySettingsTab: View {
         }
         .formStyle(.grouped)
         .confirmationDialog(
-            "Clear clipboard history?",
+            ClearHistoryPrompt.title,
             isPresented: self.$confirmingClear
         ) {
-            Button("Clear History", role: .destructive) {
+            Button(ClearHistoryPrompt.confirm, role: .destructive) {
                 Task {
                     do {
                         try await self.store.purge(keepingLatest: 0)
@@ -288,7 +333,7 @@ private struct HistorySettingsTab: View {
                 }
             }
         } message: {
-            Text("All unpinned items will be deleted. This can't be undone.")
+            Text(ClearHistoryPrompt.message)
         }
         .task {
             await self.refresh()
@@ -489,7 +534,7 @@ private struct AISettingsTab: View {
     }
 
     #Preview("General") {
-        GeneralSettingsTab()
+        GeneralSettingsTab(checkForUpdates: {})
             .frame(width: 600, height: 500)
     }
 

@@ -1,3 +1,4 @@
+import OverboardMac
 import OverboardUI
 import SwiftUI
 
@@ -17,8 +18,16 @@ struct OverboardApp: App {
                 Divider()
             }
 
-            Button("Show Drawer") {
+            SummonMenuItem(title: "Show Launcher", shortcutDescription: HotkeyService.toggleLauncherShortcutDescription) {
+                AppServices.shared.launcher.show()
+            }
+
+            SummonMenuItem(title: "Show Drawer", shortcutDescription: HotkeyService.toggleDrawerShortcutDescription) {
                 AppServices.shared.overlay.show()
+            }
+
+            SummonMenuItem(title: "Show Emoji Picker", shortcutDescription: HotkeyService.toggleEmojiPickerShortcutDescription) {
+                AppServices.shared.emojiPicker.show()
             }
 
             // HistoryDebugView is a debug affordance superseded by the drawer;
@@ -41,6 +50,17 @@ struct OverboardApp: App {
 
             Button(self.captureState.isPaused ? "Resume Capture" : "Pause Capture") {
                 AppServices.shared.setCapturePaused(!self.captureState.isPaused)
+            }
+
+            Divider()
+
+            Button("Check for Updates…") {
+                Task { await AppServices.shared.updates.checkNow() }
+            }
+
+            Button("About Overboard") {
+                NSApp.activate(ignoringOtherApps: true)
+                NSApp.orderFrontStandardAboutPanel(nil)
             }
 
             Divider()
@@ -82,7 +102,33 @@ struct OverboardApp: App {
         .restorationBehavior(.disabled)
 
         Settings {
-            SettingsView(store: AppServices.shared.store)
+            SettingsView(
+                store: AppServices.shared.store,
+                navigation: AppServices.shared.settingsNavigation,
+                checkForUpdates: { await AppServices.shared.updates.checkNow() }
+            )
+        }
+    }
+}
+
+/// A menu-bar item that summons a panel (launcher / drawer / emoji picker),
+/// showing its recorded global shortcut as trailing secondary text, e.g.
+/// "Show Launcher  ⌥Space". These shortcuts are Carbon hotkeys owned by
+/// `KeyboardShortcuts`, so this deliberately does NOT attach a
+/// `.keyboardShortcut` modifier to the button — that would register a second,
+/// duplicate app-level shortcut alongside the global one.
+private struct SummonMenuItem: View {
+    let title: String
+    let shortcutDescription: String?
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: self.action) {
+            if let shortcutDescription {
+                Text("\(self.title)  \(Text(shortcutDescription).foregroundStyle(.secondary))")
+            } else {
+                Text(self.title)
+            }
         }
     }
 }

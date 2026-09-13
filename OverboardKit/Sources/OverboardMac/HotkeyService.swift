@@ -34,4 +34,21 @@ public enum HotkeyService {
     public static func onToggleEmojiPicker(_ handler: @escaping @MainActor () -> Void) {
         KeyboardShortcuts.onKeyDown(for: .toggleEmojiPicker, action: handler)
     }
+
+    /// The recorded global shortcut for each summon action, formatted like
+    /// "⌥Space" — nil when the user has cleared it. Exposed as plain strings
+    /// (rather than the `KeyboardShortcuts.Name`/`Shortcut` types) so callers
+    /// that only need to display the binding, like the menu-bar menu, don't
+    /// need their own dependency on the KeyboardShortcuts package.
+    public static var toggleLauncherShortcutDescription: String? {
+        KeyboardShortcuts.getShortcut(for: .toggleLauncher)?.description
+    }
+
+    public static var toggleDrawerShortcutDescription: String? {
+        KeyboardShortcuts.getShortcut(for: .toggleDrawer)?.description
+    }
+
+    public static var toggleEmojiPickerShortcutDescription: String? {
+        KeyboardShortcuts.getShortcut(for: .toggleEmojiPicker)?.description
+    }
 }

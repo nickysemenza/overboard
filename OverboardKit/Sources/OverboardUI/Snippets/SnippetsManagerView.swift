@@ -12,12 +12,25 @@ final class SnippetsManagerViewModel {
 
     private let store: ClipStore
 
+    /// The in-flight (or most recently finished) persist triggered by
+    /// `saveDraft()` or the switch-triggered auto-save. Not used by any UI
+    /// call site — both fire-and-forget — but gives tests a way to await
+    /// completion instead of racing the background write.
+    private(set) var pendingSaveTask: Task<Void, Never>?
+
     init(store: ClipStore) {
         self.store = store
     }
 
     var selected: Snippet? {
         self.snippets.first { $0.id == self.selectedID }
+    }
+
+    /// Whether the draft has edits the selected snippet doesn't have yet.
+    /// False once nothing is selected — there's nothing to compare against.
+    var isDirty: Bool {
+        guard let selected else { return false }
+        return self.draftTitle != selected.title || self.draftBody != selected.body
     }
 
     /// Snippets matching `filter` by title, case-insensitively. Selection is
@@ -33,7 +46,15 @@ final class SnippetsManagerViewModel {
         if self.selectedID == nil { self.selectSnippet(self.snippets.first?.id) }
     }
 
+    /// Selects a different snippet. This is a personal editor with no
+    /// explicit "discard changes?" prompt, so silently dropping a dirty draft
+    /// on switch would be more surprising than saving it — auto-save the
+    /// outgoing draft first, unless its title is empty (that would create a
+    /// junk blank-titled snippet; those edits are simply dropped instead).
     func selectSnippet(_ id: String?) {
+        if self.isDirty, let previous = self.selected, !self.draftTitle.isEmpty {
+            self.persist(id: previous.id, title: self.draftTitle, body: self.draftBody)
+        }
         self.selectedID = id
         let snippet = self.snippets.first { $0.id == id }
         self.draftTitle = snippet?.title ?? ""
@@ -49,11 +70,20 @@ final class SnippetsManagerViewModel {
         }
     }
 
+    /// Explicit Save (button / ⌘S). Unlike the switch-triggered auto-save,
+    /// this always applies — an empty title falls back to "Untitled" rather
+    /// than silently discarding the edit, since the user asked for it directly.
     func saveDraft() {
-        guard var snippet = self.selected else { return }
-        snippet.title = self.draftTitle.isEmpty ? "Untitled" : self.draftTitle
-        snippet.body = self.draftBody
-        Task {
+        guard let selected else { return }
+        let title = self.draftTitle.isEmpty ? "Untitled" : self.draftTitle
+        self.persist(id: selected.id, title: title, body: self.draftBody)
+    }
+
+    private func persist(id: String, title: String, body: String) {
+        guard var snippet = self.snippets.first(where: { $0.id == id }) else { return }
+        snippet.title = title
+        snippet.body = body
+        self.pendingSaveTask = Task {
             try? await self.store.saveSnippet(snippet)
             await self.load()
         }
