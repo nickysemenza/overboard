@@ -56,14 +56,19 @@ struct RenderSmokeTests {
     }
 
     @Test func launcherScopesRenderInBothAppearances() async {
-        let model = LauncherViewModel(instantProviders: [StubLauncherProvider(rows: [
-            .file(
-                name: "2026 budget.xlsx",
-                url: URL(fileURLWithPath: "/fixture/iCloud Drive/Wedding/2026 budget.xlsx"),
-                info: FileSearchInfo(availability: .cloud)
-            ),
-            .clip(Fixtures.item(preview: "Wedding budget notes")),
-        ])], secondaryProviders: [])
+        let model = LauncherViewModel(
+            instantProviders: [
+                StubLauncherProvider(rows: [
+                    .file(
+                        name: "2026 budget.xlsx",
+                        url: URL(fileURLWithPath: "/fixture/iCloud Drive/Wedding/2026 budget.xlsx"),
+                        info: FileSearchInfo(availability: .cloud)
+                    ),
+                    .clip(Fixtures.item(preview: "Wedding budget notes")),
+                ]),
+            ],
+            secondaryProviders: []
+        )
         model.query = "wedding budget"
         for scope in LauncherScope.allCases {
             model.scope = scope
