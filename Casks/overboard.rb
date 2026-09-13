@@ -1,15 +1,20 @@
 cask "overboard" do
   version "0.4.0"
-  # The Release workflow prints the released zip's `sha256 "…"` line into its
-  # job summary; paste it here when bumping `version`. `:no_check` is a
-  # placeholder so the cask is installable from a local checkout, not a claim
-  # that the download is unverified upstream.
+  # `version` and `sha256` are maintained by .github/workflows/release.yml,
+  # which commits the bump to main after each release's zip is uploaded, so a
+  # tap pointed at this repo upgrades on its own. `:no_check` is only the
+  # pre-first-release placeholder; the workflow replaces it with a real hash.
   sha256 :no_check
 
   url "https://github.com/nickysemenza/overboard/releases/download/v#{version}/Overboard-#{version}.zip"
   name "Overboard"
   desc "Menu-bar launcher and clipboard manager"
   homepage "https://github.com/nickysemenza/overboard"
+
+  livecheck do
+    url :url
+    strategy :github_latest
+  end
 
   # :tahoe is macOS 26, the oldest release Overboard builds against.
   depends_on macos: ">= :tahoe"

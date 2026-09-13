@@ -18,8 +18,14 @@ person's workflow and taste.
 
 ## Install
 
-**Homebrew:** `brew install --cask ./Casks/overboard.rb` from a checkout — the
-cask lives in this repo until there's a tap to point at.
+**Homebrew:** this repo doubles as a tap. The cask downloads the same
+signed and notarized zip as the Releases page, and `brew upgrade` picks up
+new releases (the release workflow bumps the cask on `main`).
+
+```sh
+brew tap nickysemenza/overboard https://github.com/nickysemenza/overboard
+brew install --cask nickysemenza/overboard/overboard
+```
 
 Or grab the zip from
 [Releases](https://github.com/nickysemenza/overboard/releases) — releases are
