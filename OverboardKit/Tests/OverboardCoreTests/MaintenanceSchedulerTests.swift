@@ -12,7 +12,7 @@ private actor RunCounter {
 
     /// Waits until `count >= target`, or gives up after `timeout`. Polling
     /// keeps these tests off wall-clock sleeps long enough to be flaky.
-    func wait(for target: Int, timeout: Duration = .seconds(2)) async -> Int {
+    func wait(for target: Int, timeout: Duration = .seconds(5)) async -> Int {
         let deadline = ContinuousClock.now + timeout
         while self.count < target, ContinuousClock.now < deadline {
             try? await Task.sleep(for: .milliseconds(5))
@@ -21,12 +21,32 @@ private actor RunCounter {
     }
 }
 
+/// Builds a job at `.userInitiated` priority. The production default is
+/// `.background`, which macOS throttles hard under load — a parallel
+/// `swift build` was enough to keep a job from running before `wait(for:)`
+/// gave up. Every test goes through here so scheduling order, not QoS, is
+/// what's under test.
+private func testJob(
+    name: String,
+    interval: Duration,
+    initialDelay: Duration = .zero,
+    work: @escaping @Sendable () async -> MaintenanceJob.Outcome
+) -> MaintenanceJob {
+    MaintenanceJob(
+        name: name,
+        interval: interval,
+        initialDelay: initialDelay,
+        priority: .userInitiated,
+        work: work
+    )
+}
+
 @Suite(.timeLimit(.minutes(1)))
 struct MaintenanceSchedulerTests {
     @Test func runsAJobImmediatelyWhenThereIsNoInitialDelay() async {
         let counter = RunCounter()
         let scheduler = MaintenanceScheduler(jobs: [
-            MaintenanceJob(name: "once", interval: .seconds(3600)) {
+            testJob(name: "once", interval: .seconds(3600)) {
                 await counter.bump()
                 return .repeatLater
             },
@@ -40,7 +60,7 @@ struct MaintenanceSchedulerTests {
     @Test func repeatsOnItsInterval() async {
         let counter = RunCounter()
         let scheduler = MaintenanceScheduler(jobs: [
-            MaintenanceJob(name: "ticker", interval: .milliseconds(10)) {
+            testJob(name: "ticker", interval: .milliseconds(10)) {
                 await counter.bump()
                 return .repeatLater
             },
@@ -55,11 +75,11 @@ struct MaintenanceSchedulerTests {
         let first = RunCounter()
         let second = RunCounter()
         let scheduler = MaintenanceScheduler(jobs: [
-            MaintenanceJob(name: "a", interval: .seconds(3600)) {
+            testJob(name: "a", interval: .seconds(3600)) {
                 await first.bump()
                 return .repeatLater
             },
-            MaintenanceJob(name: "b", interval: .seconds(3600)) {
+            testJob(name: "b", interval: .seconds(3600)) {
                 await second.bump()
                 return .repeatLater
             },
@@ -74,7 +94,7 @@ struct MaintenanceSchedulerTests {
     @Test func aSecondStartDoesNotDoubleUpTheLoops() async throws {
         let counter = RunCounter()
         let scheduler = MaintenanceScheduler(jobs: [
-            MaintenanceJob(name: "once", interval: .seconds(3600)) {
+            testJob(name: "once", interval: .seconds(3600)) {
                 await counter.bump()
                 return .repeatLater
             },
@@ -92,7 +112,7 @@ struct MaintenanceSchedulerTests {
     @Test func stopCancelsTheLoop() async throws {
         let counter = RunCounter()
         let scheduler = MaintenanceScheduler(jobs: [
-            MaintenanceJob(name: "ticker", interval: .milliseconds(5)) {
+            testJob(name: "ticker", interval: .milliseconds(5)) {
                 await counter.bump()
                 return .repeatLater
             },
@@ -113,7 +133,7 @@ struct MaintenanceSchedulerTests {
         let counter = RunCounter()
         let scheduler = MaintenanceScheduler(jobs: [
             // The link-backfill shape: drain, then stop until next launch.
-            MaintenanceJob(name: "drain", interval: .milliseconds(1)) {
+            testJob(name: "drain", interval: .milliseconds(1)) {
                 await counter.bump()
                 return .finished
             },
@@ -129,7 +149,7 @@ struct MaintenanceSchedulerTests {
     @Test func initialDelayHoldsTheFirstRunBack() async throws {
         let counter = RunCounter()
         let scheduler = MaintenanceScheduler(jobs: [
-            MaintenanceJob(
+            testJob(
                 name: "delayed",
                 interval: .milliseconds(5),
                 initialDelay: .seconds(30)
@@ -148,7 +168,7 @@ struct MaintenanceSchedulerTests {
     @Test func stopBeforeStartIsHarmlessAndRestartWorks() async {
         let counter = RunCounter()
         let scheduler = MaintenanceScheduler(jobs: [
-            MaintenanceJob(name: "once", interval: .seconds(3600)) {
+            testJob(name: "once", interval: .seconds(3600)) {
                 await counter.bump()
                 return .repeatLater
             },
