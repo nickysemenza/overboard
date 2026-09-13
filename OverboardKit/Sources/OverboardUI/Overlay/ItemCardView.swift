@@ -667,19 +667,19 @@ final class AppIconCache {
 #if DEBUG
     #Preview("Light") {
         let item = Fixtures.item(preview: "Pick up the package before 6pm — front desk closes early on Fridays.")
-        ItemCardView(item: item, index: 0, isSelected: false, store: try! Fixtures.store())
+        ItemCardView(item: item, index: 0, isSelected: false, store: Fixtures.previewStore())
             .padding()
     }
 
     #Preview("Selected") {
         let item = Fixtures.item(preview: "Pick up the package before 6pm — front desk closes early on Fridays.")
-        ItemCardView(item: item, index: 0, isSelected: true, store: try! Fixtures.store())
+        ItemCardView(item: item, index: 0, isSelected: true, store: Fixtures.previewStore())
             .padding()
     }
 
     #Preview("Dark") {
         let item = Fixtures.item(preview: "Pick up the package before 6pm — front desk closes early on Fridays.")
-        ItemCardView(item: item, index: 0, isSelected: false, store: try! Fixtures.store())
+        ItemCardView(item: item, index: 0, isSelected: false, store: Fixtures.previewStore())
             .padding()
             .preferredColorScheme(.dark)
     }
@@ -692,7 +692,7 @@ final class AppIconCache {
             linkDescription: "An object that creates images from SwiftUI views.",
             faviconData: Fixtures.solidPNG(width: 32, height: 32, red: 0.2, green: 0.5, blue: 0.9)
         )
-        ItemCardView(item: item, index: 2, isSelected: false, store: try! Fixtures.store())
+        ItemCardView(item: item, index: 2, isSelected: false, store: Fixtures.previewStore())
             .padding()
     }
 
@@ -707,13 +707,13 @@ final class AppIconCache {
             pixelWidth: 1920,
             pixelHeight: 1080
         )
-        ItemCardView(item: item, index: 5, isSelected: false, store: try! Fixtures.store())
+        ItemCardView(item: item, index: 5, isSelected: false, store: Fixtures.previewStore())
             .padding()
     }
 
     #Preview("Secret") {
         let item = Fixtures.item(preview: "AWS access key", isSecret: true)
-        ItemCardView(item: item, index: 4, isSelected: false, store: try! Fixtures.store())
+        ItemCardView(item: item, index: 4, isSelected: false, store: Fixtures.previewStore())
             .padding()
     }
 
@@ -722,7 +722,7 @@ final class AppIconCache {
             preview: "Overboard ⛵️ — everything you copy goes overboard.",
             isPinned: true
         )
-        ItemCardView(item: item, index: 0, isSelected: false, store: try! Fixtures.store())
+        ItemCardView(item: item, index: 0, isSelected: false, store: Fixtures.previewStore())
             .padding()
     }
 #endif

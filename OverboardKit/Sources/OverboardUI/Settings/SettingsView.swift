@@ -658,7 +658,7 @@ private struct AISettingsTab: View {
 
 #if DEBUG
     #Preview("All tabs") {
-        SettingsView(store: try! Fixtures.store())
+        SettingsView(store: Fixtures.previewStore())
     }
 
     #Preview("General") {
@@ -667,7 +667,7 @@ private struct AISettingsTab: View {
     }
 
     #Preview("History") {
-        HistorySettingsTab(store: try! Fixtures.store())
+        HistorySettingsTab(store: Fixtures.previewStore())
             .frame(width: 600, height: 500)
     }
 

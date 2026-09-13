@@ -287,7 +287,7 @@ struct LauncherRow: View {
     #Preview("Row: Calculation") {
         LauncherRow(
             result: .calculation(input: "12*4", display: "48"),
-            store: try! Fixtures.store(),
+            store: Fixtures.previewStore(),
             isSelected: false,
             runningAppPaths: []
         )
@@ -298,7 +298,7 @@ struct LauncherRow: View {
     #Preview("Row: App") {
         LauncherRow(
             result: .app(name: "Demo App", url: URL(fileURLWithPath: "/Applications/OverboardDemo.app")),
-            store: try! Fixtures.store(),
+            store: Fixtures.previewStore(),
             isSelected: false,
             runningAppPaths: []
         )
@@ -309,7 +309,7 @@ struct LauncherRow: View {
     #Preview("Row: Snippet") {
         LauncherRow(
             result: .snippet(Snippet(title: "Standup update", body: "Yesterday: shipped X.")),
-            store: try! Fixtures.store(),
+            store: Fixtures.previewStore(),
             isSelected: false,
             runningAppPaths: []
         )
@@ -320,7 +320,7 @@ struct LauncherRow: View {
     #Preview("Row: Clip") {
         LauncherRow(
             result: .clip(Fixtures.item(preview: "deploy checklist")),
-            store: try! Fixtures.store(),
+            store: Fixtures.previewStore(),
             isSelected: true,
             runningAppPaths: []
         )
@@ -331,7 +331,7 @@ struct LauncherRow: View {
     #Preview("Row: File") {
         LauncherRow(
             result: .file(name: "notes.md", url: URL(fileURLWithPath: "/tmp/overboard-missing/notes.md")),
-            store: try! Fixtures.store(),
+            store: Fixtures.previewStore(),
             isSelected: false,
             runningAppPaths: []
         )
@@ -345,7 +345,7 @@ struct LauncherRow: View {
                 query: "swiftui previews",
                 url: URL(string: "https://www.google.com/search?q=swiftui+previews")!
             ),
-            store: try! Fixtures.store(),
+            store: Fixtures.previewStore(),
             isSelected: false,
             runningAppPaths: []
         )
@@ -359,7 +359,7 @@ struct LauncherRow: View {
                 name: "Displays",
                 url: URL(string: "x-apple.systempreferences:com.apple.preference.displays")!
             ),
-            store: try! Fixtures.store(),
+            store: Fixtures.previewStore(),
             isSelected: false,
             runningAppPaths: []
         )
@@ -370,7 +370,7 @@ struct LauncherRow: View {
     #Preview("Row: Command") {
         LauncherRow(
             result: .command(.stats, subtitle: "128 items"),
-            store: try! Fixtures.store(),
+            store: Fixtures.previewStore(),
             isSelected: false,
             runningAppPaths: []
         )
@@ -381,7 +381,7 @@ struct LauncherRow: View {
     #Preview("Row: Recent search") {
         LauncherRow(
             result: .recentSearch(query: "deploy checklist"),
-            store: try! Fixtures.store(),
+            store: Fixtures.previewStore(),
             isSelected: false,
             runningAppPaths: []
         )
@@ -399,7 +399,7 @@ struct LauncherRow: View {
                     state: .playing
                 )
             ),
-            store: try! Fixtures.store(),
+            store: Fixtures.previewStore(),
             isSelected: false,
             runningAppPaths: []
         )
@@ -410,7 +410,7 @@ struct LauncherRow: View {
     #Preview("Row: Ask AI") {
         LauncherRow(
             result: .askAI(prompt: "Summarize this"),
-            store: try! Fixtures.store(),
+            store: Fixtures.previewStore(),
             isSelected: false,
             runningAppPaths: []
         )

@@ -333,7 +333,7 @@ public struct LauncherView: View {
         )
         viewModel.query = "zzz"
         viewModel.scheduleSearch()
-        return LauncherView(viewModel: viewModel, store: try! Fixtures.store())
+        return LauncherView(viewModel: viewModel, store: Fixtures.previewStore())
             .frame(width: 640, height: 370)
     }
 

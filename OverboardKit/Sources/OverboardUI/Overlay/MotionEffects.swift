@@ -234,7 +234,7 @@ struct BobbingBoat: View {
 
     #Preview("Card entrance") {
         let item = Fixtures.item(preview: "Cards ripple up into place when the drawer is summoned.")
-        ItemCardView(item: item, index: 0, isSelected: false, store: try! Fixtures.store())
+        ItemCardView(item: item, index: 0, isSelected: false, store: Fixtures.previewStore())
             .cardEntrance(index: 0)
             .padding()
     }
