@@ -46,9 +46,11 @@ struct LauncherActionPalette: View {
             }
             .task {
                 let model = LauncherViewModel(
-                    instantProviders: [StubLauncherProvider(rows: [
-                        .clip(Fixtures.item(kind: .link, preview: "https://example.com")),
-                    ])],
+                    instantProviders: [
+                        StubLauncherProvider(rows: [
+                            .clip(Fixtures.item(kind: .link, preview: "https://example.com")),
+                        ]),
+                    ],
                     secondaryProviders: []
                 )
                 model.query = "zzz"
