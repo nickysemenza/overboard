@@ -4,13 +4,16 @@ name: Release
 # shared ./.github/actions/build-signed composite action, also used by
 # ci.yml so every push/PR/workflow_dispatch run notarizes too when the
 # signing secrets are available (notarization is free and just takes a few
-# minutes) — and attach it to a GitHub Release. Requires five repo secrets
-# (see README.md § Release signing for how to generate each):
+# minutes) — attach it to a GitHub Release, and bump the cask in
+# nickysemenza/homebrew-tap. Requires six repo secrets (see README.md §
+# Release signing for how to generate each):
 #   DEVELOPER_ID_P12_BASE64      base64 of the exported .p12 (cert + key)
 #   DEVELOPER_ID_P12_PASSWORD    that .p12's export password
 #   APP_STORE_CONNECT_API_KEY_P8 contents of the notary API key's .p8
 #   APP_STORE_CONNECT_KEY_ID     that key's ID
 #   APP_STORE_CONNECT_ISSUER_ID  the API key's issuer ID
+#   HOMEBREW_TAP_TOKEN           fine-grained PAT, Actions read/write on
+#                                nickysemenza/homebrew-tap only
 on:
   push:
     tags: ["v*"]
@@ -62,35 +65,19 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
-      # Keep the in-repo Homebrew cask (Casks/overboard.rb) pointing at this
-      # release so `brew tap nickysemenza/overboard https://github.com/nickysemenza/overboard`
-      # users get it from `brew upgrade` without a manual bump. This is the one
-      # place CI pushes to main outside the PR flow, on purpose: the cask is
-      # derived data (tag + checksum of the asset just uploaded), and a human
-      # bumping it by hand is exactly the step that gets forgotten. Branch
-      # protection on main, if enabled, must let github-actions[bot] push.
-      # `permissions: contents: write` above covers the push.
-      - name: Update the Homebrew cask on main
+      # The cask lives in nickysemenza/homebrew-tap so `brew install --cask
+      # nickysemenza/tap/overboard` works cold and main here never receives a
+      # post-release commit. The tap's bump.yml does the real work with
+      # Homebrew's own `brew bump-cask-pr` (downloads the zip just published,
+      # rewrites version/sha256, audits, commits, pushes); this step only
+      # kicks it off, so it needs a token with Actions: write on the tap and
+      # nothing else. Fire-and-forget: a failed bump shows up in the tap's
+      # Actions tab and can be re-run there by hand.
+      - name: Bump the cask in nickysemenza/homebrew-tap
         run: |
-          version="${GITHUB_REF_NAME#v}"
-          checksum="$(shasum -a 256 "Overboard-${version}.zip" | cut -d' ' -f1)"
-          git fetch origin main
-          git checkout -B main origin/main
-          sed -i '' \
-            -e "s/^  version \".*\"$/  version \"${version}\"/" \
-            -e "s/^  sha256 .*$/  sha256 \"${checksum}\"/" \
-            Casks/overboard.rb
-          if git diff --quiet -- Casks/overboard.rb; then
-            echo "Cask already at ${version}; nothing to commit."
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Casks/overboard.rb
-          git commit -m "Cask: Overboard ${version}"
-          git push origin HEAD:main
-          {
-            echo "## Homebrew cask"
-            echo
-            echo "Bumped \`Casks/overboard.rb\` on main to ${version} (sha256 ${checksum})."
-          } >> "$GITHUB_STEP_SUMMARY"
+          gh workflow run bump.yml \
+            --repo nickysemenza/homebrew-tap \
+            --field cask=overboard \
+            --field "version=${GITHUB_REF_NAME#v}"
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}

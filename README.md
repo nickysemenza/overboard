@@ -18,14 +18,18 @@ person's workflow and taste.
 
 ## Install
 
-**Homebrew:** this repo doubles as a tap. The cask downloads the same
-signed and notarized zip as the Releases page, and `brew upgrade` picks up
-new releases (the release workflow bumps the cask on `main`).
+**Homebrew:**
 
 ```sh
-brew tap nickysemenza/overboard https://github.com/nickysemenza/overboard
-brew install --cask nickysemenza/overboard/overboard
+brew install --cask nickysemenza/tap/overboard
 ```
+
+The cask lives in [nickysemenza/homebrew-tap](https://github.com/nickysemenza/homebrew-tap)
+and downloads the same signed and notarized zip as the Releases page;
+`brew upgrade` picks up new releases because the release workflow bumps the
+cask there. If you installed back when this repo was its own tap, switch
+once with `brew untap nickysemenza/overboard` before installing from the
+new one, or `brew upgrade` will complain about the cask existing in two taps.
 
 Or grab the zip from
 [Releases](https://github.com/nickysemenza/overboard/releases) — releases are
@@ -361,9 +365,12 @@ git tag v1.0.0 && git push --tags
 ```
 
 The Release workflow builds a Developer-ID-signed, notarized zip, attaches
-it to a GitHub Release, and commits the new `version`/`sha256` to
-`Casks/overboard.rb` on `main` so the Homebrew tap upgrades on its own. There
-is no local release path — CI is it. Every push also uploads a notarized
+it to a GitHub Release, and triggers the `bump.yml` workflow in
+[nickysemenza/homebrew-tap](https://github.com/nickysemenza/homebrew-tap),
+which runs `brew bump-cask-pr` to commit the new `version`/`sha256` to
+`Casks/overboard.rb` there. Nothing lands on `main` here after a tag, so
+`main` stays at the tagged commit. There is no local release path — CI is
+it. Every push also uploads a notarized
 `Overboard.zip` artifact (`gh run download`) when the signing secrets are
 available.
 
@@ -379,7 +386,8 @@ repo secrets). Notarization is free and only adds a few minutes to the run.
 #### Release signing
 
 One-time setup, then CI handles every signed run on its own. Five repo
-secrets carry the credentials:
+secrets carry the signing credentials, and a sixth lets the Release workflow
+poke the Homebrew tap:
 
 1. **Developer ID Application certificate.** Xcode → Settings → Accounts →
    select your team → Manage Certificates → **+** → Developer ID Application.
@@ -406,13 +414,21 @@ secrets carry the credentials:
    it somewhere safe. Its file contents go in
    `APP_STORE_CONNECT_API_KEY_P8`; the Key ID and Issuer ID shown alongside it
    go in `APP_STORE_CONNECT_KEY_ID` and `APP_STORE_CONNECT_ISSUER_ID`.
-3. Push each secret to the repo:
+3. **Homebrew tap token.** GitHub → Settings → Developer settings →
+   Personal access tokens → Fine-grained tokens → **Generate new token**.
+   Repository access: only `nickysemenza/homebrew-tap`. Permissions: Actions →
+   Read and write (Metadata read comes along automatically). Nothing else —
+   the token only runs `gh workflow run bump.yml` against the tap; the bump
+   itself commits with the tap's own `GITHUB_TOKEN`. Goes in
+   `HOMEBREW_TAP_TOKEN`.
+4. Push each secret to the repo:
    ```sh
    gh secret set DEVELOPER_ID_P12_BASE64 < p12-base64.txt
    gh secret set DEVELOPER_ID_P12_PASSWORD
    gh secret set APP_STORE_CONNECT_API_KEY_P8 < AuthKey.p8
    gh secret set APP_STORE_CONNECT_KEY_ID
    gh secret set APP_STORE_CONNECT_ISSUER_ID
+   gh secret set HOMEBREW_TAP_TOKEN
    ```
    Sanity-check the API key locally before relying on it in CI:
    ```sh
