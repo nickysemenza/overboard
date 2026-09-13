@@ -75,8 +75,8 @@ struct LauncherRow: View {
                 }
             }
             .padding(.horizontal, 8)
-            .frame(height: 46)
-            .padding(.vertical, 3)
+            .frame(height: 40)
+            .padding(.vertical, 2)
             .contentShape(RoundedRectangle(cornerRadius: 8))
         }
         .buttonStyle(LauncherRowButtonStyle(isSelected: self.isSelected))

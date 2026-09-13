@@ -37,8 +37,8 @@ components:
   result-row:
     typography: "{typography.body}"
     rounded: "{rounded.inset-content}"
-    padding: "3pt 8pt"
-    height: "52pt"
+    padding: "2pt 8pt"
+    height: "44pt"
   palette-row:
     rounded: "{rounded.compact-control}"
     padding: "7pt 10pt"
