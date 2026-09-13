@@ -18,7 +18,10 @@ struct SecretDetectorTests {
     }
 
     @Test func detectsJWT() {
-        let jwt = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U"
+        let jwt = """
+        eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.\
+        dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U
+        """
         #expect(SecretDetector.detect(in: jwt) == .jwt)
     }
 
