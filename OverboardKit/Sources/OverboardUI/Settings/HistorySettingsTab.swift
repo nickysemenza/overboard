@@ -13,6 +13,7 @@ struct HistorySettingsTab: View {
     @Default(.secretTTLMinutes) private var secretTTLMinutes
     @State private var diskUsage: String?
     @State private var stats: LibraryStats?
+    @State private var activity: DailyActivity?
     @State private var confirmingClear = false
     @State var archiveOutcome: ArchiveOutcome?
     @State var isArchiving = false
@@ -78,30 +79,25 @@ struct HistorySettingsTab: View {
             }
             .disabled(self.isArchiving)
 
+            if let activity = self.activity {
+                Section {
+                    ActivityTimelineChart(activity: activity)
+                } header: {
+                    Text("Activity")
+                } footer: {
+                    Text("Clips captured per day over the last 30 days.")
+                }
+            }
+
             if let stats = self.stats, !stats.byKind.isEmpty {
                 Section("By type") {
-                    ForEach(stats.byKind) { entry in
-                        LabeledContent {
-                            Text(entry.count.formatted())
-                        } label: {
-                            Label {
-                                Text(entry.kind.displayName)
-                            } icon: {
-                                // The one place the kind-identity ramp is the
-                                // subject rather than incidental decoration.
-                                Image(systemName: entry.kind.symbolName)
-                                    .foregroundStyle(Color(entry.kind.tintName))
-                            }
-                        }
-                    }
+                    KindBreakdownChart(byKind: stats.byKind)
                 }
             }
 
             if let stats = self.stats, !stats.bySource.isEmpty {
                 Section("Top sources") {
-                    ForEach(stats.bySource) { entry in
-                        LabeledContent(entry.app, value: entry.count.formatted())
-                    }
+                    SourceBreakdownChart(bySource: stats.bySource)
                 }
             }
 
@@ -168,6 +164,7 @@ struct HistorySettingsTab: View {
     func refresh() async {
         await self.refreshDiskUsage()
         self.stats = try? await self.store.libraryStats()
+        self.activity = try? await self.store.dailyActivity()
     }
 
     private func refreshDiskUsage() async {
@@ -197,7 +194,7 @@ struct HistorySettingsTab: View {
 
 #if DEBUG
     #Preview("History") {
-        HistorySettingsTab(store: Fixtures.previewStore())
+        HistorySettingsTab(store: Fixtures.populatedPreviewStore())
             .frame(width: 600, height: 500)
     }
 #endif

@@ -9,6 +9,11 @@ public struct LibraryStats: Sendable {
         public var id: ItemKind {
             self.kind
         }
+
+        public init(kind: ItemKind, count: Int) {
+            self.kind = kind
+            self.count = count
+        }
     }
 
     public struct SourceCount: Sendable, Identifiable {
@@ -16,6 +21,11 @@ public struct LibraryStats: Sendable {
         public let count: Int
         public var id: String {
             self.app
+        }
+
+        public init(app: String, count: Int) {
+            self.app = app
+            self.count = count
         }
     }
 
