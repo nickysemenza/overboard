@@ -57,47 +57,49 @@ public nonisolated enum FileMetadataScanner {
         // Roots and incremental scopes must use the same filesystem identity.
         let root = self.canonicalURL(root)
         let directory = directory.map(self.canonicalURL)
-        var failures: [String] = []
+        // A reference type, not `inout` locals: the errorHandler closure below
+        // escapes into the enumerator and keeps firing while `indexEntries` is
+        // also mutating this state, and two `inout` borrows of the same local
+        // across that overlap trip Swift's exclusivity checks at runtime.
+        let accumulator = ScanAccumulator()
         guard let enumerator = FileManager.default.enumerator(
             at: directory ?? root,
             includingPropertiesForKeys: Array(self.resourceKeys),
             options: [.skipsHiddenFiles, .skipsPackageDescendants],
             errorHandler: { url, error in
-                if failures.count < 12 {
-                    failures.append("\(url.path): \(error.localizedDescription)")
+                if accumulator.failures.count < 12 {
+                    accumulator.failures.append("\(url.path): \(error.localizedDescription)")
                 }
                 return true
             }
         ) else { return ["\(root.path): Couldn’t read this location. Check access in System Settings."] }
 
-        var batch: [IndexedFile] = []
         // An incremental enumeration yields descendants, not the directory
         // itself. Refresh its record before pruning the old generation.
         if let directory, directory != root,
            let values = try? directory.resourceValues(forKeys: self.resourceKeys)
         {
-            batch.append(IndexedFile(path: directory.path, name: directory.lastPathComponent,
-                                     root: root.path, generation: generation,
-                                     modifiedAt: values.contentModificationDate ?? .distantPast,
-                                     availability: FileAvailability.status(at: directory, values: values),
-                                     isDirectory: true, location: FileIndexService.locationName(root)))
+            accumulator.batch.append(IndexedFile(path: directory.path, name: directory.lastPathComponent,
+                                                 root: root.path, generation: generation,
+                                                 modifiedAt: values.contentModificationDate ?? .distantPast,
+                                                 availability: FileAvailability.status(at: directory, values: values),
+                                                 isDirectory: true, location: FileIndexService.locationName(root)))
         }
 
         try await self.indexEntries(
             from: enumerator,
             context: ScanContext(root: root, exclusions: exclusions, generation: generation, index: index),
-            batch: &batch,
-            failures: &failures
+            accumulator: accumulator
         )
 
         try Task.checkCancellation()
-        try await index.upsert(batch)
+        try await index.upsert(accumulator.batch)
         try Task.checkCancellation()
         // Never erase known cloud/permission-denied entries after a partial scan.
-        if failures.isEmpty {
+        if accumulator.failures.isEmpty {
             try await index.finishScan(root: root.path, generation: generation, under: directory?.path)
         }
-        return failures
+        return accumulator.failures
     }
 
     /// Groups one scan invocation's fixed parameters so `indexEntries` stays
@@ -109,14 +111,21 @@ public nonisolated enum FileMetadataScanner {
         let index: FileNameIndex
     }
 
+    /// The in-flight batch and failure list, shared by reference between
+    /// `scan(...)`, its errorHandler closure, and `indexEntries` — see the
+    /// exclusivity note at the `ScanAccumulator()` call site.
+    private final class ScanAccumulator {
+        var batch: [IndexedFile] = []
+        var failures: [String] = []
+    }
+
     /// Walks the enumerator to completion, classifying each entry and
     /// flushing to the index in batches. Split out of `scan(...)` so that
     /// function stays orchestration-only.
     private static func indexEntries(
         from enumerator: FileManager.DirectoryEnumerator,
         context: ScanContext,
-        batch: inout [IndexedFile],
-        failures: inout [String]
+        accumulator: ScanAccumulator
     ) async throws {
         while let url = enumerator.nextObject() as? URL {
             try Task.checkCancellation()
@@ -132,7 +141,7 @@ public nonisolated enum FileMetadataScanner {
                 if values.isPackage == true {
                     enumerator.skipDescendants()
                 }
-                batch.append(IndexedFile(
+                accumulator.batch.append(IndexedFile(
                     path: url.path,
                     name: url.lastPathComponent,
                     root: context.root.path,
@@ -143,13 +152,13 @@ public nonisolated enum FileMetadataScanner {
                     location: FileIndexService.locationName(context.root)
                 ))
             } catch {
-                if failures.count < 12 {
-                    failures.append("\(url.path): \(error.localizedDescription)")
+                if accumulator.failures.count < 12 {
+                    accumulator.failures.append("\(url.path): \(error.localizedDescription)")
                 }
             }
-            if batch.count >= 400 {
-                try await context.index.upsert(batch)
-                batch.removeAll(keepingCapacity: true)
+            if accumulator.batch.count >= 400 {
+                try await context.index.upsert(accumulator.batch)
+                accumulator.batch.removeAll(keepingCapacity: true)
             }
         }
     }

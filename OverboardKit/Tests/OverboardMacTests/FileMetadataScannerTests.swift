@@ -118,12 +118,14 @@ struct FileMetadataScannerTests {
     @Test func missingLocationPreservesKnownFiles() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         let index = try FileNameIndex()
-        try await index.upsert([IndexedFile(
-            path: root.appendingPathComponent("known.pdf").path,
-            name: "known.pdf",
-            root: root.path,
-            generation: "old"
-        )])
+        try await index.upsert([
+            IndexedFile(
+                path: root.appendingPathComponent("known.pdf").path,
+                name: "known.pdf",
+                root: root.path,
+                generation: "old"
+            ),
+        ])
         let issues = try await FileMetadataScanner.scan(root: root, exclusions: [], generation: "new", index: index)
         #expect(!issues.isEmpty)
         #expect(try await index.search("known").count == 1)
