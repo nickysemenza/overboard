@@ -199,6 +199,12 @@ public struct ExportSummary: Sendable, Equatable {
     /// UI can say the backup is deliberately incomplete rather than silently
     /// dropping rows.
     public let secretsExcluded: Int
+    /// Blob-backed payloads that could not be copied: the file was already
+    /// gone (the same condition `maintenanceSweep` reports as a missing blob)
+    /// or it vanished mid-export, which the hourly purge can do because the
+    /// actor is released between pages. Not fatal — the row is still written
+    /// and the archive is still importable — but the caller must say so.
+    public let blobsMissing: Int
 }
 
 /// What an import found. Nothing here is fatal: an archive with unreadable
@@ -282,6 +288,7 @@ public extension ClipStore {
         let encoder = ClipJSONCoding.archiveEncoder()
         var written = 0
         var copiedHashes: Set<String> = []
+        var blobsMissing = 0
         // Paged rather than one big fetch: inline representation payloads run to
         // 32 KB each, so a full history would otherwise land in memory at once.
         for chunk in stride(from: 0, to: ids.count, by: 200).map({
@@ -294,11 +301,23 @@ public extension ClipStore {
                 try handle.write(contentsOf: line)
                 written += 1
                 for hash in record.representations.compactMap(\.blob) where !copiedHashes.contains(hash) {
-                    guard let source = self.blobFileURL(for: hash) else { continue }
+                    guard let source = self.blobFileURL(for: hash) else {
+                        blobsMissing += 1
+                        continue
+                    }
                     let destination = blobsDirectory.appendingPathComponent(hash)
                     // Content-addressed, so an existing file is already identical.
+                    // The copy itself is outside the writer (export is paged and
+                    // the actor suspends between pages), so a purge can unlink
+                    // the source after `blobFileURL` saw it — count that rather
+                    // than abort a half-written archive.
                     if !fileManager.fileExists(atPath: destination.path) {
-                        try fileManager.copyItem(at: source, to: destination)
+                        do {
+                            try fileManager.copyItem(at: source, to: destination)
+                        } catch {
+                            blobsMissing += 1
+                            continue
+                        }
                     }
                     copiedHashes.insert(hash)
                 }
@@ -309,7 +328,8 @@ public extension ClipStore {
             directory: directory,
             itemCount: written,
             blobCount: copiedHashes.count,
-            secretsExcluded: secretsExcluded
+            secretsExcluded: secretsExcluded,
+            blobsMissing: blobsMissing
         )
     }
 

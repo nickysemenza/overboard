@@ -226,6 +226,26 @@ struct ExportImportTests {
         #expect(summary.malformedLines.first?.hasPrefix("line 2:") == true)
     }
 
+    /// A blob that has already gone from disk (the same state
+    /// `maintenanceSweep` reports as missing) must not abort the export — the
+    /// row is still written and the archive still imports — but the summary
+    /// has to say so instead of reporting an unqualified success.
+    @Test func missingBlobIsCountedNotFatal() async throws {
+        let source = try Harness()
+        defer { source.cleanUp() }
+
+        try await source.store.ingest(textSnapshot("kept text"))
+        let image = try #require(try await source.store.ingest(largeImageSnapshot()))
+        let hash = try #require(try await source.store.representations(for: image.id).compactMap(\.blobHash).first)
+        let blobs = try BlobStore(directory: source.root.appendingPathComponent("blobs", isDirectory: true))
+        try FileManager.default.removeItem(at: blobs.url(for: hash))
+
+        let summary = try await source.store.export(to: source.exportDirectory)
+        #expect(summary.itemCount == 2)
+        #expect(summary.blobCount == 0)
+        #expect(summary.blobsMissing == 1)
+    }
+
     @Test func importingAFolderWithoutAnArchiveThrows() async throws {
         let harness = try Harness()
         defer { harness.cleanUp() }

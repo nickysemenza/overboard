@@ -340,8 +340,12 @@ public final class LauncherPanelController {
                 if self.viewModel.isPreviewVisible { self.viewModel.togglePreview(); return nil }
                 // Two-stage Esc (matches EmojiPanelController): a non-empty
                 // query is cleared first; only a second Esc, pressed once the
-                // bar is already empty, dismisses the panel.
+                // bar is already empty, dismisses the panel. Record the query
+                // before blanking it: `hide()` also records, but by then it
+                // sees "" — without this, an abandoned search never reaches
+                // the recents list, and Esc is how most searches end.
                 if !self.viewModel.query.isEmpty {
+                    self.viewModel.recordCurrentQuery()
                     self.viewModel.query = ""
                     self.viewModel.scheduleSearch()
                     return nil

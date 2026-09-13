@@ -48,6 +48,13 @@ jobs:
           sudo xcode-select -s "$(ls -d /Applications/Xcode_26*.app | sort -V | tail -n 1)/Contents/Developer"
           xcodebuild -version
 
+      # The cache key includes the selected toolchain: .swiftmodules from one
+      # Swift version don't load in the next, and the macos-26 image swaps
+      # Xcode point releases underneath us without any change in this repo.
+      - name: Toolchain fingerprint
+        id: toolchain
+        run: echo "id=$(swift --version 2>&1 | shasum | cut -c1-12)" >> "$GITHUB_OUTPUT"
+
       # Caches SwiftPM's resolved-dependency checkouts (.build) and its
       # global package cache, keyed on Package.resolved so a dependency bump
       # invalidates it automatically. Cuts most of the "resolve + fetch +
@@ -58,12 +65,15 @@ jobs:
           path: |
             OverboardKit/.build
             ~/Library/Caches/org.swift.swiftpm
-          key: ${{ runner.os }}-spm-${{ hashFiles('OverboardKit/Package.resolved') }}
+          key: ${{ runner.os }}-spm-${{ steps.toolchain.outputs.id }}-${{ hashFiles('OverboardKit/Package.resolved') }}
           restore-keys: |
-            ${{ runner.os }}-spm-
+            ${{ runner.os }}-spm-${{ steps.toolchain.outputs.id }}-
 
+      # Warnings are errors for first-party targets via Package.swift
+      # (`.treatAllWarnings(as: .error)`), not a global -Xswiftc flag, so a
+      # dependency's deprecation warning can't fail this job.
       - name: Run tests
-        run: swift test --package-path OverboardKit -Xswiftc -warnings-as-errors
+        run: swift test --package-path OverboardKit
 
       # Informational only, never a gate: prints the file-name index's warm
       # query timings (p95 in particular) into the job summary so a
@@ -93,9 +103,14 @@ jobs:
         with:
           fetch-depth: 0
 
-      # Same SwiftPM caches as the test job, plus xcodebuild's own copy of
-      # resolved packages under DerivedData/SourcePackages — xcodebuild
-      # doesn't share OverboardKit/.build, it re-resolves into DerivedData.
+      # Same SwiftPM caches as the test job (same toolchain-keyed reasoning),
+      # plus xcodebuild's own copy of resolved packages under
+      # DerivedData/SourcePackages — xcodebuild doesn't share
+      # OverboardKit/.build, it re-resolves into DerivedData.
+      - name: Toolchain fingerprint
+        id: toolchain
+        run: echo "id=$(swift --version 2>&1 | shasum | cut -c1-12)" >> "$GITHUB_OUTPUT"
+
       - name: Cache SwiftPM dependencies
         uses: actions/cache@v4
         with:
@@ -103,9 +118,9 @@ jobs:
             OverboardKit/.build
             ~/Library/Caches/org.swift.swiftpm
             ~/Library/Developer/Xcode/DerivedData/**/SourcePackages
-          key: ${{ runner.os }}-spm-${{ hashFiles('OverboardKit/Package.resolved') }}
+          key: ${{ runner.os }}-spm-${{ steps.toolchain.outputs.id }}-${{ hashFiles('OverboardKit/Package.resolved') }}
           restore-keys: |
-            ${{ runner.os }}-spm-
+            ${{ runner.os }}-spm-${{ steps.toolchain.outputs.id }}-
 
       # Secrets are unavailable to workflow runs triggered from a fork PR,
       # and a job-level `if:` can't reference `secrets` directly — so probe

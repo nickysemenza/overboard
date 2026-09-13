@@ -96,6 +96,10 @@ public final class LauncherViewModel {
         self.observationTask?.cancel()
         self.observationTask = nil
         self.searchTask?.cancel()
+        // A cancelled task never reaches `finishSearch`, so release anything
+        // parked in `settle()` and don't leave the spinner flag stuck on a
+        // hidden panel; `prepareForShow` re-arms it on the next summon.
+        self.finishSearch(self.searchGeneration)
     }
 
     /// Bumped on every summon so the view re-asserts text-field focus
@@ -170,7 +174,11 @@ public final class LauncherViewModel {
     /// Keystrokes that need a secondary pass funnel through here; one
     /// long-lived consumer debounces them so fast typing doesn't fan out to
     /// FTS/clipboard queries on every character. House pattern: see
-    /// `DrawerViewModel`'s `searchChannel`.
+    /// `DrawerViewModel`'s `searchChannel` — including the detail that the
+    /// send runs on its own short-lived `Task`, never on `searchTask`:
+    /// `AsyncChannel.send` drops the value when its task is cancelled, and a
+    /// send parked behind a busy consumer would otherwise vanish on the next
+    /// keystroke (or on `stopObserving`), leaving `isSearching` stuck.
     private let secondaryChannel = AsyncChannel<Void>()
     private var secondaryDebounceTask: Task<Void, Never>?
 
@@ -292,7 +300,7 @@ public final class LauncherViewModel {
             // `resultsAreStale` (set above) keeps ↩ from acting on the old
             // list until then.
             if scope == .clipboard, self.clipboardStore != nil {
-                await self.secondaryChannel.send(())
+                self.sendToSecondaryChannel()
                 return
             }
             let instantState = self.searchSignposter.beginInterval("instant pass")
@@ -317,8 +325,15 @@ public final class LauncherViewModel {
             // Secondary providers (indexed files FTS, clipboard FTS, snippet
             // scans) don't run on every keystroke — only once the query has
             // been stable for the debounce interval passed to `init`.
-            await self.secondaryChannel.send(())
+            self.sendToSecondaryChannel()
         }
+    }
+
+    /// See `secondaryChannel`: the send must outlive `searchTask`'s
+    /// cancellation, so it gets a task of its own. The debounce collapses
+    /// any pile-up into one pass.
+    private func sendToSecondaryChannel() {
+        Task { [secondaryChannel] in await secondaryChannel.send(()) }
     }
 
     /// The debounced half of a search: the clipboard-scope store query, or
@@ -445,7 +460,9 @@ public final class LauncherViewModel {
     // MARK: - Search history
 
     /// Save the current query as the most-recent history entry. Called on every
-    /// dismissal (commit / escape / click-outside); no-ops on empty queries.
+    /// dismissal (commit / click-outside) and by the first, query-clearing
+    /// stage of Esc; no-ops on empty queries and de-dupes, so a double call
+    /// (Esc, then `hide`) is harmless.
     public func recordCurrentQuery() {
         let trimmed = self.query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }

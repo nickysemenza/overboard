@@ -69,7 +69,7 @@ public struct LibraryStats: Sendable {
 /// method suspends, actor atomicity no longer separates blob writes from blob
 /// deletions. GRDB's single writer does that instead — **every blob-file
 /// mutation happens inside a `dbWriter` write block** (`ingest`, `purge`,
-/// `purgeExpiredSecrets`, `reconcileOrphanBlobs`), so a fresh blob can never be
+/// `purgeExpiredSecrets`, `reconcileOrphanBlobs`, `insertImported`), so a fresh blob can never be
 /// reclaimed as an orphan between its file appearing and its row landing.
 public actor ClipStore {
     private let dbWriter: any DatabaseWriter
@@ -612,8 +612,9 @@ public actor ClipStore {
     }
 
     /// The one INSERT that puts an item row *and* its FTS entry in place.
-    /// `ingest` and ``import(from:)`` both go through here: `item_fts` is a
-    /// contentless index, so a row inserted without this second write is
+    /// `ingest` and ``import(from:)`` both go through here: `item_fts` is an
+    /// external-content index that is only written explicitly, so a row
+    /// inserted without this second write is
     /// invisible to `search` forever — there is no reindex to fall back on.
     /// `searchText` is a column of `item` that ``ClipItem`` deliberately doesn't
     /// model (it's derived, and enrichment rewrites it), so it's passed

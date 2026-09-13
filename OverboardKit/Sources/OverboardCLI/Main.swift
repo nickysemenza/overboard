@@ -205,6 +205,11 @@ struct Overboard: AsyncParsableCommand {
                 "overboard: excluded \(CountPhrase.string(summary.secretsExcluded, of: "secret")) — pass --include-secrets to export them."
             )
         }
+        if summary.blobsMissing > 0 {
+            FileHandle.standardError.printLine(
+                "overboard: \(CountPhrase.string(summary.blobsMissing, of: "attachment")) could not be copied (missing on disk)."
+            )
+        }
         return summary.itemCount == 0 ? .notFound : .ok
     }
 

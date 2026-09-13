@@ -7,6 +7,10 @@ import PackageDescription
 let approachableConcurrency: [SwiftSetting] = [
     .enableUpcomingFeature("NonisolatedNonsendingByDefault"),
     .enableUpcomingFeature("InferIsolatedConformances"),
+    // First-party targets only. `swift test -Xswiftc -warnings-as-errors`
+    // would apply to every dependency in the graph too, and a deprecation in
+    // Highlightr or swift-syntax must not be able to turn CI red.
+    .treatAllWarnings(as: .error),
 ]
 
 /// UI and AppKit-facing targets are main-actor by default; every type in them

@@ -377,6 +377,11 @@ private struct HistorySettingsTab: View {
                         localized: "\(CountPhrase.string(summary.secretsExcluded, of: String(localized: "detected secret"))) excluded."
                     )
                 }
+                if summary.blobsMissing > 0 {
+                    message += " " + String(
+                        localized: "\(CountPhrase.string(summary.blobsMissing, of: String(localized: "attachment"))) could not be copied."
+                    )
+                }
                 self.archiveOutcome = ArchiveOutcome(
                     title: String(localized: "Export Complete"), message: message
                 )

@@ -187,6 +187,19 @@ struct LauncherScopeTests {
     /// spinner stuck forever spinning or falsely idle. A slow instant
     /// provider stands in for real provider latency so each search stays
     /// in flight long enough to observe both fixes.
+    /// Dismissing the panel cancels the search task, and a cancelled task never
+    /// reaches `finishSearch` — `stopObserving` has to release `settle()`
+    /// itself or a "type, Esc, settle" sequence parks forever.
+    @Test(.timeLimit(.minutes(1))) func settleReturnsAfterStopObserving() async {
+        let file = LauncherResult.file(name: "hello.txt", url: URL(fileURLWithPath: "/tmp/hello.txt"))
+        let model = LauncherViewModel(secondaryProviders: [DelayedLauncherProvider(rows: [file], delay: .milliseconds(200))])
+        model.query = "hello"
+        model.scheduleSearch()
+        model.stopObserving()
+        await model.settle()
+        #expect(!model.isSearching)
+    }
+
     @Test func rapidQueryChangesNeverFlashEmptyResultsAndClearTheSpinner() async {
         let terminal = LauncherResult.app(name: "Terminal", url: URL(fileURLWithPath: "/Applications/Terminal.app"))
         let model = LauncherViewModel(
