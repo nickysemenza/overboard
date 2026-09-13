@@ -105,7 +105,7 @@ extension OverlayController {
         case .escape, .space: // close
             self.viewModel.closePreview()
             return nil
-        case .y where event.modifierFlags.contains(.command): // ⌘Y closes too
+        case .letterY where event.modifierFlags.contains(.command): // ⌘Y closes too
             self.viewModel.closePreview()
             return nil
         case .returnKey, .keypadEnter: // pastes (⇧ plain)
@@ -118,7 +118,7 @@ extension OverlayController {
         case .rightArrow:
             self.viewModel.moveSelection(1)
             return nil
-        case .e where event.modifierFlags.contains(.command): // ⌘E edit
+        case .letterE where event.modifierFlags.contains(.command): // ⌘E edit
             self.viewModel.beginEdit()
             return nil
         default:
@@ -185,13 +185,13 @@ extension OverlayController {
         case .space where self.viewModel.query.isEmpty && self.viewModel.mode == .history: // previews
             self.viewModel.togglePreview()
             return true
-        case .y where event.modifierFlags.contains(.command): // ⌘Y previews even mid-search
+        case .letterY where event.modifierFlags.contains(.command): // ⌘Y previews even mid-search
             self.viewModel.togglePreview()
             return true
-        case .e where event.modifierFlags.contains(.command): // ⌘E edit before paste
+        case .letterE where event.modifierFlags.contains(.command): // ⌘E edit before paste
             self.viewModel.beginEdit()
             return true
-        case .k where event.modifierFlags.contains(.command): // ⌘K action palette
+        case .letterK where event.modifierFlags.contains(.command): // ⌘K action palette
             self.viewModel.togglePalette()
             return true
         default:
@@ -243,7 +243,7 @@ extension OverlayController {
     /// Per-item actions: ⌘P pin/unpin, ⌘⌫ delete.
     private func handleItemActionKeys(_ event: NSEvent) -> Bool {
         switch KeyCode(rawValue: event.keyCode) {
-        case .p where event.modifierFlags.contains(.command): // ⌘P pin/unpin
+        case .letterP where event.modifierFlags.contains(.command): // ⌘P pin/unpin
             self.viewModel.togglePinSelected()
             return true
         case .delete where event.modifierFlags.contains(.command): // ⌘⌫ delete item
