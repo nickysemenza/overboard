@@ -40,6 +40,16 @@ public final class FileIndexService {
         self.stopWatching()
     }
 
+    /// Tears down the FSEvents stream and cancels in-flight scan/refresh work.
+    /// `shared` is a singleton that otherwise only stops via `deinit`, which a
+    /// process `exit()` never runs — called explicitly from app shutdown
+    /// (`AppServices.stop()`) so the stream doesn't survive to `exit()`.
+    public func stop() {
+        self.scanTask?.cancel()
+        self.refreshTask?.cancel()
+        self.stopWatching()
+    }
+
     public static var defaultRoots: [URL] {
         let home = FileManager.default.homeDirectoryForCurrentUser
         let cloud = home.appendingPathComponent("Library/Mobile Documents/com~apple~CloudDocs", isDirectory: true)

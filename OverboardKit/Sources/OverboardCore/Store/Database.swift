@@ -247,6 +247,32 @@ enum Migrations {
             try self.reclassifyLinkSecrets(db)
         }
 
+        // v6: indexes for the query shapes every listing actually runs, not
+        // the ones v1 guessed at. `item_lastUsedAt` (v1) and a bare kind/pin
+        // filter don't match what `ClipStore` issues in practice:
+        // `browseHistory` filters on kind (and source/category/pin) with
+        // `deletedAt IS NULL` always present, and `purgeExpiredSecrets`
+        // predicates on `max(createdAt, lastUsedAt)`. Both new indexes are
+        // partial (`WHERE deletedAt IS NULL`) so they cover only the live rows
+        // every hot-path query already restricts to, and stay small as
+        // history churns through `purge`.
+        //
+        // The frecency ORDER BY (`recent()`, `purge`'s victim selection) sorts
+        // by a computed expression (`julianday(lastUsedAt) + 0.04*min(...)`),
+        // which SQLite can't satisfy from a plain column index — that's
+        // covered by `EXPLAIN QUERY PLAN` tests in
+        // OverboardCoreTests/QueryPlanTests.swift rather than a new index
+        // here, per the plan: don't add an expression index unless it
+        // demonstrably changes the plan.
+        migrator.registerMigration("v6-live-item-indexes") { db in
+            try db.execute(sql: """
+            CREATE INDEX item_live_recent
+              ON item(lastUsedAt DESC, useCount) WHERE deletedAt IS NULL;
+            CREATE INDEX item_live_kind
+              ON item(kind, lastUsedAt DESC) WHERE deletedAt IS NULL;
+            """)
+        }
+
         return migrator
     }
 

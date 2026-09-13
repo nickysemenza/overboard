@@ -65,6 +65,22 @@ jobs:
       - name: Run tests
         run: swift test --package-path OverboardKit -Xswiftc -warnings-as-errors
 
+      # Informational only, never a gate: prints the file-name index's warm
+      # query timings (p95 in particular) into the job summary so a
+      # regression is visible at a glance without digging through raw logs.
+      # `continue-on-error` covers both a hard failure (the benchmark itself
+      # throws past its own 100ms p95 budget) and a merely slow runner — a
+      # noisy CI machine shouldn't block a PR the way an actual test would.
+      - name: File index benchmark (informational)
+        continue-on-error: true
+        run: |
+          {
+            echo '### File index benchmark'
+            echo '```'
+            swift run --package-path OverboardKit -c release file-index-benchmark
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
   build:
     name: Build app artifact
     runs-on: macos-26

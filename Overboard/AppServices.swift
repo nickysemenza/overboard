@@ -91,8 +91,35 @@ final class AppServices {
                 self.store = ClipStore(dbWriter: pool, blobs: blobs)
             }
         } catch {
-            // Without a database there is no app; surface loudly in dev.
-            fatalError("Failed to open Overboard database: \(error)")
+            // `shared` is a `static let`, so this initializer can't fail or
+            // return early — every existing `AppServices.shared.x` callsite
+            // assumes a working instance. Rather than `fatalError` (which was
+            // the previous behavior: any open/migration failure — a corrupted
+            // file, a crash-torn WAL, disk-full — silently crashed the whole
+            // app with no explanation), fall back to an in-memory store so
+            // the rest of `init` can still build a usable (if inert) object
+            // graph, then get the user out of the broken state on the next
+            // run-loop turn: this initializer runs synchronously from
+            // `applicationDidFinishLaunching` (via this lazy `static let`),
+            // and presenting a modal alert or calling `NSApp.terminate` before
+            // that callback returns can preempt AppKit's own launch
+            // bookkeeping — so the alert is deferred rather than shown here.
+            self.logger.error("Failed to open Overboard database: \(String(describing: error), privacy: .public)")
+            let fallbackDirectory = FileManager.default.temporaryDirectory
+                .appendingPathComponent("overboard-fallback-\(UUID().uuidString)", isDirectory: true)
+            guard let queue = try? OverboardDatabase.openInMemory(),
+                  let blobs = try? BlobStore(directory: fallbackDirectory)
+            else {
+                // No I/O is involved in either fallback, so this is not a
+                // realistic failure — but `store` must end up initialized one
+                // way or another for `self` to exist at all.
+                fatalError("Failed to open Overboard database, and the in-memory fallback also failed: \(error)")
+            }
+            self.store = ClipStore(dbWriter: queue, blobs: blobs)
+            let openError = error
+            DispatchQueue.main.async {
+                Self.presentDatabaseOpenFailureAlert(openError)
+            }
         }
         self.monitor = ClipboardMonitor()
         self.pasteback = PastebackService(store: self.store)
@@ -188,6 +215,42 @@ final class AppServices {
         self.installEmojiCallbacks()
         // Decode the emoji dataset off-main now so the first ⌃⌘Space is instant.
         self.emojiViewModel.warm()
+    }
+
+    /// Cancels every background task and stops the OS-facing services started
+    /// in `start()`, then gives any in-flight paste-back restore a bounded
+    /// chance to hand the user's real clipboard back before the process
+    /// exits. Called from `AppDelegate.applicationWillTerminate`.
+    func stop() {
+        self.ingestTask?.cancel()
+        self.purgeTask?.cancel()
+        self.secretSweepTask?.cancel()
+        self.maintenanceTask?.cancel()
+        self.linkBackfillTask?.cancel()
+        self.updates.stop()
+        if !Self.isDemo {
+            self.monitor.stop()
+            FileIndexService.shared.stop()
+        }
+
+        // `applicationWillTerminate` is synchronous, so the async drain below
+        // is bridged onto this thread rather than simply awaited. A hard
+        // `DispatchSemaphore.wait()` alone would deadlock: `drain()` awaits a
+        // `Task { @MainActor in … }` (the in-flight restore in
+        // `PastebackService`), and that job can only run once the main
+        // dispatch queue gets to dequeue it — which a blocking wait on the
+        // main thread never allows. Spinning the run loop between polls keeps
+        // servicing that queue while we wait, bounded to 1s so a stuck paste
+        // target (wrong app focused, swallowed keystroke) never hangs quit.
+        let semaphore = DispatchSemaphore(value: 0)
+        Task { @MainActor in
+            await self.pasteback.drain()
+            semaphore.signal()
+        }
+        let deadline = Date().addingTimeInterval(1)
+        while semaphore.wait(timeout: .now()) == .timedOut, Date() < deadline {
+            RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))
+        }
     }
 
     /// Clipboard monitoring, ingest, and background maintenance — everything
@@ -560,6 +623,35 @@ final class AppServices {
 
     private static func settingsWindow() -> NSWindow? {
         NSApp.windows.first { $0.identifier?.rawValue == self.settingsWindowID }
+    }
+
+    /// Surfaces a database open/migration failure the way the CLI already
+    /// does for a reader that hits a bad database (see
+    /// `OverboardDatabase.ReadOnlyOpenError` and `OverboardCLI.Main`'s
+    /// read-error handling): plain-language recovery guidance plus a way to
+    /// get at the file, rather than the silent crash a `fatalError` gave. The
+    /// app is already running on the in-memory fallback store by the time
+    /// this shows, so there's nothing to lose by explaining and quitting.
+    private static func presentDatabaseOpenFailureAlert(_ error: Error) {
+        let alert = NSAlert()
+        alert.alertStyle = .critical
+        alert.messageText = "Overboard couldn't open its database"
+        alert.informativeText = """
+        \(error.localizedDescription)
+
+        This usually means the database file is corrupted or was left mid-write \
+        by a crash. Overboard can't run without it and will quit — moving the \
+        database file aside and relaunching starts fresh (losing clipboard \
+        history), or you can back it up first for support.
+        """
+        alert.addButton(withTitle: "Reveal in Finder")
+        alert.addButton(withTitle: "Quit")
+        NSApp.activate(ignoringOtherApps: true)
+        let response = alert.runModal()
+        if response == .alertFirstButtonReturn, let directory = try? OverboardDatabase.defaultDirectory() {
+            NSWorkspace.shared.activateFileViewerSelecting([directory])
+        }
+        NSApp.terminate(nil)
     }
 
     // MARK: - Capture pause / resume

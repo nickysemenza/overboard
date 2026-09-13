@@ -464,16 +464,33 @@ public actor ClipStore {
             )
             guard !victims.isEmpty else { return [] }
 
+            // Batched blob lookup + delete instead of a per-victim round trip:
+            // history can hold thousands of tombstones/overflow rows, and a
+            // purge used to issue two queries per row. Chunked at 500 to stay
+            // under SQLite's default ~999 bound-parameter limit.
             var hashes: Set<String> = []
-            for id in victims {
-                let blobHashes = try String.fetchAll(
+            for chunk in victims.chunked(into: 500) {
+                let placeholders = Self.placeholders(chunk.count)
+                let chunkHashes = try String.fetchAll(
                     db,
-                    sql: "SELECT blobHash FROM representation WHERE itemID = ? AND blobHash IS NOT NULL",
-                    arguments: [id]
+                    sql: "SELECT DISTINCT blobHash FROM representation WHERE itemID IN (\(placeholders)) AND blobHash IS NOT NULL",
+                    arguments: StatementArguments(chunk)
                 )
-                hashes.formUnion(blobHashes)
+                hashes.formUnion(chunkHashes)
+            }
+
+            // FTS removal needs each row's own (rowid, searchText) pair for the
+            // contentless-delete command, so it stays one call per victim.
+            for id in victims {
                 try Self.removeFromFTS(db, itemID: id)
-                try db.execute(sql: "DELETE FROM item WHERE id = ?", arguments: [id])
+            }
+
+            for chunk in victims.chunked(into: 500) {
+                let placeholders = Self.placeholders(chunk.count)
+                try db.execute(
+                    sql: "DELETE FROM item WHERE id IN (\(placeholders))",
+                    arguments: StatementArguments(chunk)
+                )
             }
             // A blob is only deletable if no surviving representation references it.
             let stillReferenced = try String.fetchSet(
@@ -486,6 +503,11 @@ public actor ClipStore {
         for hash in candidateHashes {
             try? self.blobs.delete(hash: hash)
         }
+    }
+
+    /// A `?, ?, …` placeholder list for an `IN (…)` clause of `count` items.
+    private static func placeholders(_ count: Int) -> String {
+        Array(repeating: "?", count: count).joined(separator: ",")
     }
 
     // MARK: - Maintenance
@@ -604,12 +626,18 @@ public actor ClipStore {
               let queryVector = embedding.vector(for: query)
         else { return [] }
 
+        // Capped to the 1000 most recently used items rather than scoring the
+        // whole embedding table in Swift: recent items are what people
+        // actually search for, and the cap bounds memory at ~3 MB (1000 ×
+        // ~768 dims × 4 bytes) regardless of how large history grows.
         let rows = try self.dbWriter.read { db in
             try Row.fetchAll(db, sql: """
             SELECT e.itemID, e.vector
             FROM item_embedding e
             JOIN item i ON i.id = e.itemID
             WHERE i.deletedAt IS NULL
+            ORDER BY i.lastUsedAt DESC
+            LIMIT 1000
             """)
         }
 
@@ -659,6 +687,7 @@ public actor ClipStore {
             guard !targetVector.isEmpty else { return ([], []) }
             let targetHash = targetRow["contentHash"] as String
 
+            // Same 1000-item recency cap as `semanticSearch` — see its comment.
             let rows = try Row.fetchAll(db, sql: """
             SELECT e.itemID AS itemID, e.vector AS vector
             FROM item_embedding e
@@ -667,6 +696,8 @@ public actor ClipStore {
               AND i.isSecret = 0
               AND e.itemID != ?
               AND i.contentHash != ?
+            ORDER BY i.lastUsedAt DESC
+            LIMIT 1000
             """, arguments: [itemID, targetHash])
 
             let vectors = rows.map { (id: $0["itemID"] as String, vector: $0["vector"] as Data) }
@@ -874,15 +905,24 @@ public actor ClipStore {
             )
             guard !victims.isEmpty else { return [] }
 
+            // Same batching as `purge`: one blob lookup and one delete per
+            // 500-id chunk instead of two queries per victim.
             var hashes: Set<String> = []
-            for id in victims {
-                let blobHashes = try String.fetchAll(
+            for chunk in victims.chunked(into: 500) {
+                let placeholders = Self.placeholders(chunk.count)
+                let chunkHashes = try String.fetchAll(
                     db,
-                    sql: "SELECT blobHash FROM representation WHERE itemID = ? AND blobHash IS NOT NULL",
-                    arguments: [id]
+                    sql: "SELECT DISTINCT blobHash FROM representation WHERE itemID IN (\(placeholders)) AND blobHash IS NOT NULL",
+                    arguments: StatementArguments(chunk)
                 )
-                hashes.formUnion(blobHashes)
-                try db.execute(sql: "DELETE FROM item WHERE id = ?", arguments: [id])
+                hashes.formUnion(chunkHashes)
+            }
+            for chunk in victims.chunked(into: 500) {
+                let placeholders = Self.placeholders(chunk.count)
+                try db.execute(
+                    sql: "DELETE FROM item WHERE id IN (\(placeholders))",
+                    arguments: StatementArguments(chunk)
+                )
             }
             let stillReferenced = try String.fetchSet(
                 db,
@@ -987,5 +1027,16 @@ public actor ClipStore {
                     .fetchAll(db)
             }
             .values(in: self.dbWriter)
+    }
+}
+
+private extension Array {
+    /// Splits into consecutive slices of at most `size` elements each — used
+    /// to keep batched `IN (…)` queries under SQLite's bound-parameter limit.
+    func chunked(into size: Int) -> [[Element]] {
+        guard !isEmpty else { return [] }
+        return stride(from: 0, to: count, by: size).map {
+            Array(self[$0 ..< Swift.min($0 + size, count)])
+        }
     }
 }

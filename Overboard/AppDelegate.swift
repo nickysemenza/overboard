@@ -3,6 +3,15 @@ import OverboardCore
 import OverboardUI
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    /// Set once `AppServices.shared.start()` actually runs. `shared` is a
+    /// lazy `static let`, so merely *referencing* it from
+    /// `applicationWillTerminate` would construct the whole store/monitor/
+    /// hotkey graph for an instance that never started one — which is exactly
+    /// what happens on the single-instance-guard's early-exit path below
+    /// (`NSApp.terminate(nil)` still runs the standard termination sequence,
+    /// including this delegate callback, before the process actually exits).
+    private var servicesStarted = false
+
     func applicationDidFinishLaunching(_: Notification) {
         // Single-instance guard (release only — DEBUG/demo builds intentionally
         // run alongside a daily driver). Two copies launched from different paths
@@ -18,10 +27,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         #endif
 
         AppServices.shared.start()
+        self.servicesStarted = true
 
         #if DEBUG
             self.installDebugHooks()
         #endif
+    }
+
+    func applicationWillTerminate(_: Notification) {
+        guard self.servicesStarted else { return }
+        AppServices.shared.stop()
     }
 
     #if !DEBUG
