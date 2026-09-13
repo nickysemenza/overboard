@@ -102,6 +102,64 @@
             }
         }
 
+        /// One clip to seed in `populatedPreviewStore()` — a named type in
+        /// place of a 3-member tuple (SwiftLint's `large_tuple` ceiling).
+        private struct SeedSample {
+            let text: String
+            let daysAgo: Int
+            let source: Int
+        }
+
+        /// `previewStore()` seeded with ~15 clips spread across the last 30
+        /// days and a few source apps, so History tab previews show real
+        /// chart bars instead of empty chrome. Seeding runs in a `Task` —
+        /// `#Preview` bodies are synchronous — so the store starts empty and
+        /// fills in shortly after the preview appears.
+        static func populatedPreviewStore() -> ClipStore {
+            let store = self.previewStore()
+            let sources = [
+                (bundleID: "com.apple.Safari", appName: "Safari"),
+                (bundleID: "com.apple.dt.Xcode", appName: "Xcode"),
+                (bundleID: "com.apple.MobileSMS", appName: "Messages"),
+            ]
+            // A mix of text and link kinds (link is inferred from a bare URL
+            // body) spread unevenly across the window so the timeline has
+            // real gaps.
+            let samples: [SeedSample] = [
+                SeedSample(text: "Pick up the package before 6pm.", daysAgo: 0, source: 0),
+                SeedSample(text: "https://example.com/docs", daysAgo: 0, source: 1),
+                SeedSample(text: "func total(for items: [Item]) -> Int { items.count }", daysAgo: 1, source: 1),
+                SeedSample(text: "https://developer.apple.com/documentation/swiftui", daysAgo: 2, source: 0),
+                SeedSample(text: "Grocery list: milk, eggs, bread", daysAgo: 3, source: 2),
+                SeedSample(text: "https://github.com/apple/swift", daysAgo: 4, source: 1),
+                SeedSample(text: "Meeting notes for Thursday standup", daysAgo: 6, source: 2),
+                SeedSample(text: "https://news.ycombinator.com", daysAgo: 8, source: 0),
+                SeedSample(text: "Remember to renew the domain", daysAgo: 10, source: 2),
+                SeedSample(text: "https://swift.org/blog", daysAgo: 12, source: 1),
+                SeedSample(text: "Draft reply to the vendor email", daysAgo: 15, source: 2),
+                SeedSample(text: "https://apple.com", daysAgo: 18, source: 0),
+                SeedSample(text: "Weekend trip packing list", daysAgo: 21, source: 2),
+                SeedSample(text: "https://opensource.apple.com", daysAgo: 25, source: 1),
+                SeedSample(text: "Follow up with design about the mockups", daysAgo: 29, source: 0),
+            ]
+            Task {
+                for sample in samples {
+                    let source = sources[sample.source]
+                    let capturedAt = Calendar.current.date(
+                        byAdding: .day, value: -sample.daysAgo, to: Date()
+                    ) ?? Date()
+                    let snapshot = PasteboardSnapshot(
+                        reps: [.init(uti: WellKnownUTI.plainText, data: Data(sample.text.utf8))],
+                        sourceBundleID: source.bundleID,
+                        sourceAppName: source.appName,
+                        capturedAt: capturedAt
+                    )
+                    _ = try? await store.ingest(snapshot)
+                }
+            }
+            return store
+        }
+
         static func textSnapshot(_ text: String) -> PasteboardSnapshot {
             PasteboardSnapshot(
                 reps: [.init(uti: WellKnownUTI.plainText, data: Data(text.utf8))],

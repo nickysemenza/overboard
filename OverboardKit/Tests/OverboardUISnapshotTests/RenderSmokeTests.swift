@@ -108,6 +108,13 @@ struct RenderSmokeTests {
         #expect(self.rendersNonEmpty(snapshotHost(view, width: 560, height: 520)))
     }
 
+    @Test func historyTabRendersInBothAppearances() {
+        for dark in [false, true] {
+            let view = HistorySettingsTab(store: self.store)
+            #expect(self.rendersNonEmpty(snapshotHost(view, width: 600, height: 700, dark: dark)))
+        }
+    }
+
     @Test func snippetCardRenders() {
         let snippet = Snippet(
             id: "smoke",
