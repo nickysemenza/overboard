@@ -83,10 +83,12 @@ public actor FileNameIndex {
                 INSERT INTO file_fts(rowid, foldedName, foldedPath) VALUES (new.rowid, new.foldedName, new.foldedPath);
             END;
             CREATE TRIGGER IF NOT EXISTS file_delete AFTER DELETE ON file_entry BEGIN
-                INSERT INTO file_fts(file_fts, rowid, foldedName, foldedPath) VALUES ('delete', old.rowid, old.foldedName, old.foldedPath);
+                INSERT INTO file_fts(file_fts, rowid, foldedName, foldedPath) VALUES \
+            ('delete', old.rowid, old.foldedName, old.foldedPath);
             END;
             CREATE TRIGGER IF NOT EXISTS file_update AFTER UPDATE ON file_entry BEGIN
-                INSERT INTO file_fts(file_fts, rowid, foldedName, foldedPath) VALUES ('delete', old.rowid, old.foldedName, old.foldedPath);
+                INSERT INTO file_fts(file_fts, rowid, foldedName, foldedPath) VALUES \
+            ('delete', old.rowid, old.foldedName, old.foldedPath);
                 INSERT INTO file_fts(rowid, foldedName, foldedPath) VALUES (new.rowid, new.foldedName, new.foldedPath);
             END;
             """)
@@ -109,7 +111,10 @@ public actor FileNameIndex {
         try await self.database.write { db in
             if let path {
                 try db.execute(
-                    sql: "DELETE FROM file_entry WHERE root = ? AND generation != ? AND (path = ? OR substr(path, 1, length(?)) = ?)",
+                    sql: """
+                    DELETE FROM file_entry WHERE root = ? AND generation != ? \
+                    AND (path = ? OR substr(path, 1, length(?)) = ?)
+                    """,
                     arguments: [root, generation, path, path + "/", path + "/"]
                 )
             } else {
@@ -201,16 +206,24 @@ public actor FileNameIndex {
         // Four-letter typos can share no trigram ("nots" -> "notes").
         // A bounded SQLite scan recovers these without widening every query.
         if tokens.count == 1, let token = tokens.first, token.count == 4 {
-            let extra = try await self.database.read { db in
-                try IndexedFile.fetchAll(
-                    db,
-                    sql: "SELECT * FROM file_entry WHERE foldedName LIKE ? OR foldedName LIKE ? ORDER BY length(name) LIMIT 500",
-                    arguments: [String(token.prefix(2)) + "%", "%" + String(token.suffix(2)) + "%"]
-                )
-            }
-            candidates += extra
+            candidates += try await self.fourLetterTypoFallback(token)
         }
         return candidates
+    }
+
+    /// Bounded prefix/suffix LIKE scan used only for the four-letter-typo
+    /// fallback above; split out to keep `candidates(for:limit:)` readable.
+    private func fourLetterTypoFallback(_ token: String) async throws -> [IndexedFile] {
+        try await self.database.read { db in
+            try IndexedFile.fetchAll(
+                db,
+                sql: """
+                SELECT * FROM file_entry WHERE foldedName LIKE ? OR foldedName LIKE ? \
+                ORDER BY length(name) LIMIT 500
+                """,
+                arguments: [String(token.prefix(2)) + "%", "%" + String(token.suffix(2)) + "%"]
+            )
+        }
     }
 
     /// Scores and orders retrieved candidates. Pure — no actor state, no I/O —
