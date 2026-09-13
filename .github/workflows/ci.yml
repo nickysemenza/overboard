@@ -17,7 +17,7 @@ jobs:
     name: Lint
     runs-on: macos-26
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       # SwiftFormat ships on the macos-26 image; SwiftLint is a bottled brew
       # install. Locally both come from Homebrew. A point-release drift
@@ -41,7 +41,7 @@ jobs:
     name: OverboardKit tests
     runs-on: macos-26
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       # The macos-26 image's default Xcode is its newest one.
       - run: xcodebuild -version
@@ -114,7 +114,7 @@ jobs:
       # goes through the same "Embed git version" build phase, which needs
       # `git describe` to resolve, and the default shallow checkout has
       # neither the tag objects nor the history for that.
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
