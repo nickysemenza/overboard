@@ -105,7 +105,7 @@ struct OverboardApp: App {
             // isn't a gate, and re-showing it every launch would be a nag.
             .onDisappear { Defaults[.hasCompletedOnboarding] = true }
         }
-        .defaultSize(width: 460, height: 520)
+        .defaultSize(width: 460, height: 400)
         .windowResizability(.contentSize)
         .restorationBehavior(.disabled)
 

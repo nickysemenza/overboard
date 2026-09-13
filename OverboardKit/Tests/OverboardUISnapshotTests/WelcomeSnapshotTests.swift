@@ -18,7 +18,7 @@ struct WelcomeSnapshotTests {
                 onDone: {}
             ),
             width: 460,
-            height: 520,
+            height: 400,
             dark: dark
         )
     }

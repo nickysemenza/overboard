@@ -91,7 +91,7 @@ public struct WelcomeView: View {
             }
         }
         .padding(24)
-        .frame(minWidth: 460, minHeight: 520)
+        .frame(minWidth: 460, minHeight: 400)
         // An ordinary window, explicitly: no glass, and a real background so
         // the content reads in both appearances (see DESIGN.md).
         .background(Color(nsColor: .windowBackgroundColor))
@@ -192,6 +192,6 @@ private struct WelcomeShortcutRow: View {
             openShortcutSettings: {},
             onDone: {}
         )
-        .frame(width: 460, height: 520)
+        .frame(width: 460, height: 400)
     }
 #endif
