@@ -42,11 +42,11 @@ public enum CalculatorEngine {
     private static let operatorCharacters = CharacterSet(charactersIn: "+-*/^%")
     private static let allowedPunctuation = CharacterSet(charactersIn: "+-*/^%().,")
 
-    private static func looksLikeMath(_ s: String) -> Bool {
-        guard !s.isEmpty, s.count <= 256 else { return false }
-        guard s.rangeOfCharacter(from: .decimalDigits) != nil else { return false }
+    private static func looksLikeMath(_ string: String) -> Bool {
+        guard !string.isEmpty, string.count <= 256 else { return false }
+        guard string.rangeOfCharacter(from: .decimalDigits) != nil else { return false }
 
-        for scalar in s.unicodeScalars {
+        for scalar in string.unicodeScalars {
             let isLetter = CharacterSet.lowercaseLetters.contains(scalar)
                 || CharacterSet.uppercaseLetters.contains(scalar)
             let ok = isLetter
@@ -58,22 +58,22 @@ public enum CalculatorEngine {
             }
         }
 
-        let words = s.lowercased().split(whereSeparator: { !$0.isLetter }).map(String.init)
+        let words = string.lowercased().split(whereSeparator: { !$0.isLetter }).map(String.init)
         guard words.allSatisfy({ self.allowedWords.contains($0) }) else { return false }
 
         // Something must actually compute: an operator, "of", or a function.
-        let hasOperator = s.rangeOfCharacter(from: self.operatorCharacters) != nil
+        let hasOperator = string.rangeOfCharacter(from: self.operatorCharacters) != nil
         let hasFunction = words.contains { self.functionWords.contains($0) || $0 == "of" }
         guard hasOperator || hasFunction else { return false }
 
         // A bare (possibly negative) number isn't worth a calculator row.
-        return !self.trimmedOfBareNumberCharacters(s).isEmpty
+        return !self.trimmedOfBareNumberCharacters(string).isEmpty
     }
 
     /// Empty result means the string is just a number like "42", "-3.14",
     /// or "1,000" — digits, separators, and at most a leading minus.
-    private static func trimmedOfBareNumberCharacters(_ s: String) -> String {
-        var rest = Substring(s)
+    private static func trimmedOfBareNumberCharacters(_ string: String) -> String {
+        var rest = Substring(string)
         if rest.first == "-" {
             rest = rest.dropFirst()
         }
@@ -95,11 +95,11 @@ public enum CalculatorEngine {
     /// work in comma-decimal locales, where the decimal use of `,` wins — but a
     /// bare decimal is by far the common launcher input.
     static func normalizeSeparators(
-        _ s: String,
+        _ string: String,
         decimalSeparator: String? = Locale.current.decimalSeparator
     ) -> String {
-        guard decimalSeparator == "," else { return s }
-        let degrouped = s.replacingOccurrences(
+        guard decimalSeparator == "," else { return string }
+        let degrouped = string.replacingOccurrences(
             of: #"\.(?=\d{3}(\D|$))"#, with: "", options: .regularExpression
         )
         return degrouped.replacingOccurrences(of: ",", with: ".")
@@ -108,8 +108,8 @@ public enum CalculatorEngine {
     // MARK: - Sugar
 
     /// "15% of 80" reads naturally; the parser just needs it spelled "*".
-    private static func preprocess(_ s: String) -> String {
-        s.replacingOccurrences(
+    private static func preprocess(_ string: String) -> String {
+        string.replacingOccurrences(
             of: #"\bof\b"#,
             with: "*",
             options: [.regularExpression, .caseInsensitive]
