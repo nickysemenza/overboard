@@ -151,24 +151,27 @@ public nonisolated enum FilePreviewLoader {
         return nil
     }
 
+    /// Extension → highlight.js language name. A table rather than a switch:
+    /// every entry is an independent fact, not a branch worth reasoning about.
+    private static let languageByExtension: [String: String] = [
+        "swift": "swift",
+        "py": "python",
+        "rb": "ruby",
+        "rs": "rust",
+        "js": "javascript", "jsx": "javascript",
+        "ts": "typescript", "tsx": "typescript",
+        "json": "json", "jsonc": "json",
+        "yaml": "yaml", "yml": "yaml",
+        "toml": "toml",
+        "xml": "xml", "plist": "xml",
+        "html": "html", "htm": "html", "xhtml": "html",
+        "css": "css", "scss": "css", "sass": "css", "less": "css",
+        "sh": "bash", "bash": "bash", "zsh": "bash", "fish": "bash",
+        "sql": "sql",
+        "c": "cpp", "h": "cpp", "cc": "cpp", "cpp": "cpp", "cxx": "cpp", "hpp": "cpp",
+    ]
+
     private static func language(for url: URL) -> String? {
-        switch url.pathExtension.lowercased() {
-        case "swift": "swift"
-        case "py": "python"
-        case "rb": "ruby"
-        case "rs": "rust"
-        case "js", "jsx": "javascript"
-        case "ts", "tsx": "typescript"
-        case "json", "jsonc": "json"
-        case "yaml", "yml": "yaml"
-        case "toml": "toml"
-        case "xml", "plist": "xml"
-        case "html", "htm", "xhtml": "html"
-        case "css", "scss", "sass", "less": "css"
-        case "sh", "bash", "zsh", "fish": "bash"
-        case "sql": "sql"
-        case "c", "h", "cc", "cpp", "cxx", "hpp": "cpp"
-        default: nil
-        }
+        self.languageByExtension[url.pathExtension.lowercased()]
     }
 }

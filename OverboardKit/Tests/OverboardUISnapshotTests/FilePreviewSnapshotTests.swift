@@ -10,7 +10,8 @@ import Testing
 struct FilePreviewSnapshotTests {
     private let markdown = FilePreviewContent(
         url: URL(fileURLWithPath: "/tmp/Preview.md"),
-        text: "# Preview\n\nA [link](https://example.com).\n\n```swift\nlet highlighted = true\n```\n\n| One | Two |\n| --- | --- |\n| 1 | 2 |",
+        text: "# Preview\n\nA [link](https://example.com).\n\n```swift\nlet highlighted = true\n```\n\n"
+            + "| One | Two |\n| --- | --- |\n| 1 | 2 |",
         language: nil, isMarkdown: true, isTruncated: false, fileSize: 112
     )
 

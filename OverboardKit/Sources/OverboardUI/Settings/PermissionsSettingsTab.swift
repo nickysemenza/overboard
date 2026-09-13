@@ -102,7 +102,10 @@ struct PermissionsSettingsTab: View {
                 Text("Accessibility")
             } footer: {
                 Text(
-                    "Lets Overboard paste directly into the app you were using. Without it, items are copied and you press ⌘V yourself."
+                    """
+                    Lets Overboard paste directly into the app you were using. Without it, items \
+                    are copied and you press ⌘V yourself.
+                    """
                 )
             }
 
@@ -128,7 +131,10 @@ struct PermissionsSettingsTab: View {
                 Text("Automation")
             } footer: {
                 Text(
-                    "Remembers the page or track you copied from. Only installed apps are listed, and each one is asked for separately."
+                    """
+                    Remembers the page or track you copied from. Only installed apps are listed, \
+                    and each one is asked for separately.
+                    """
                 )
             }
 
@@ -145,7 +151,10 @@ struct PermissionsSettingsTab: View {
                 Text("File Search")
             } footer: {
                 Text(
-                    "Folders the indexer couldn’t read. Some need Full Disk Access; others have simply moved. Locations are managed in Files."
+                    """
+                    Folders the indexer couldn’t read. Some need Full Disk Access; others have \
+                    simply moved. Locations are managed in Files.
+                    """
                 )
             }
         }

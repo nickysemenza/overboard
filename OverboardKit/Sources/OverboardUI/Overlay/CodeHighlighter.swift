@@ -43,9 +43,10 @@ struct CodeTextView: NSViewRepresentable {
 
     func makeNSView(context _: Context) -> NSScrollView {
         let scroll = NSTextView.scrollableTextView()
-        // scrollableTextView()'s documentView is an NSTextView by API contract.
-
-        let textView = scroll.documentView as! NSTextView
+        // scrollableTextView()'s documentView is an NSTextView by API contract,
+        // but the cast is guarded rather than forced since that's an AppKit
+        // implementation detail, not something this type can enforce.
+        guard let textView = scroll.documentView as? NSTextView else { return scroll }
         textView.isEditable = false
         textView.isSelectable = self.selectable
         textView.drawsBackground = false
@@ -57,9 +58,9 @@ struct CodeTextView: NSViewRepresentable {
     }
 
     func updateNSView(_ scroll: NSScrollView, context _: Context) {
-        // scrollableTextView()'s documentView is an NSTextView by API contract.
-
-        let textView = scroll.documentView as! NSTextView
+        // scrollableTextView()'s documentView is an NSTextView by API contract;
+        // see the guard in makeNSView(context:) above.
+        guard let textView = scroll.documentView as? NSTextView else { return }
         textView.textStorage?.setAttributedString(self.attributed)
     }
 }

@@ -215,12 +215,12 @@ struct BobbingBoat: View {
             Image(systemName: "sailboat").font(.largeTitle).foregroundStyle(.secondary)
         } else {
             TimelineView(.animation(minimumInterval: 1 / 30)) { context in
-                let t = context.date.timeIntervalSinceReferenceDate
+                let time = context.date.timeIntervalSinceReferenceDate
                 Image(systemName: "sailboat")
                     .font(.largeTitle)
                     .foregroundStyle(.secondary)
-                    .offset(y: sin(t * 1.6) * 3)
-                    .rotationEffect(.degrees(sin(t * 1.1) * 4))
+                    .offset(y: sin(time * 1.6) * 3)
+                    .rotationEffect(.degrees(sin(time * 1.1) * 4))
             }
         }
     }

@@ -36,7 +36,11 @@ struct FileSearchSettingsTab: View {
                 }
             } header: { Text("Included folders") } footer: {
                 Text(
-                    "One folder path per line. Defaults include your home folder, iCloud Drive and Finder-visible cloud storage. Home excludes Library; cloud locations inside Library are included explicitly."
+                    """
+                    One folder path per line. Defaults include your home folder, iCloud Drive and \
+                    Finder-visible cloud storage. Home excludes Library; cloud locations inside \
+                    Library are included explicitly.
+                    """
                 )
             }
             Section {
@@ -44,7 +48,11 @@ struct FileSearchSettingsTab: View {
                     .accessibilityLabel("Excluded folder names or absolute paths, one per line")
             } header: { Text("Excluded folders") } footer: {
                 Text(
-                    "One folder name or absolute path per line. Hidden internals and app-package contents are skipped. Only names, paths, dates and cloud availability are indexed; file contents are never read."
+                    """
+                    One folder name or absolute path per line. Hidden internals and app-package \
+                    contents are skipped. Only names, paths, dates and cloud availability are \
+                    indexed; file contents are never read.
+                    """
                 )
             }
             HStack(spacing: 10) {
