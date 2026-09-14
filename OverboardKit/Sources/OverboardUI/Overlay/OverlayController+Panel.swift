@@ -10,6 +10,13 @@ extension OverlayController {
             rootView: DrawerView(viewModel: self.viewModel)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
         )
+        // The panel's frame is set from AppKit (`show()` / `resizePanel`), and
+        // the content fills it. The default sizing options let the hosting
+        // view resize the window to SwiftUI's intrinsic height instead —
+        // which, once the preview pane (a `maxHeight: .infinity` body) is
+        // showing, is just its header and footer: the panel collapsed to
+        // ~190pt with an empty pane.
+        hosting.sizingOptions = []
         panel.contentView = hosting
         return panel
     }
