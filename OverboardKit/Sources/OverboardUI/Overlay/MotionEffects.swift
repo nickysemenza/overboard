@@ -10,13 +10,14 @@ struct CardEntrance: ViewModifier {
     let index: Int
     @State private var shown = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.skipsEntranceMotion) private var skipsEntranceMotion
 
     func body(content: Content) -> some View {
         content
             .opacity(self.shown ? 1 : 0)
             .offset(y: self.shown ? 0 : 26)
             .onAppear {
-                if self.reduceMotion {
+                if self.reduceMotion || self.skipsEntranceMotion {
                     self.shown = true; return
                 }
                 withAnimation(
@@ -244,6 +245,15 @@ extension EnvironmentValues {
     /// The instant relative timestamps are computed against. `nil` means the
     /// wall clock; snapshot tests pin it so "5 minutes ago" is stable forever.
     @Entry var referenceDate: Date?
+
+    /// Skips `cardEntrance`'s spring so cards appear settled on first layout.
+    /// `accessibilityReduceMotion` is get-only, and the entrance is an explicit
+    /// `withAnimation`, which an ambient `disablesAnimations` transaction
+    /// doesn't reach. A hosting view that never joins a window gets no
+    /// display-link ticks, so without this the snapshot host captured the
+    /// cards parked at opacity 0 — and hosting it in a real window instead
+    /// rasterized text at the CI VM's 1× scale.
+    @Entry var skipsEntranceMotion = false
 }
 
 private struct AccessibleGlassPanel<S: Shape>: ViewModifier {

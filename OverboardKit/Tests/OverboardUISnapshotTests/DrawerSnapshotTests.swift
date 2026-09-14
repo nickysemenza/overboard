@@ -30,35 +30,13 @@ struct DrawerSnapshotTests {
         return viewModel
     }
 
-    /// Cards ripple in via `cardEntrance`'s spring, an explicit `withAnimation`
-    /// fired from `onAppear` — unlike `ItemCardSnapshotTests`, which renders
-    /// `ItemCardView` directly and never passes through that modifier.
-    /// `accessibilityReduceMotion` is get-only (no `.environment` override),
-    /// and an explicit `withAnimation` also ignores an ambient `.transaction
-    /// { $0.disablesAnimations = true }`, so neither the usual snapshot-test
-    /// escape hatch applies here. What the animation *does* need is a real
-    /// window: `snapshotHost`'s bare, never-added-to-a-window `NSHostingView`
-    /// never receives a display-link tick, so the spring stays parked at its
-    /// start value (opacity 0) no matter how long the run loop is pumped
-    /// afterwards. Hosting it in an actual (off-screen, borderless) window
-    /// lets the animation drive forward in real time; waiting out its worst
-    /// case (0.36s spring + this strip's up to 3-card, 0.028s-each stagger)
-    /// before capturing then reliably lands on the settled, fully-shown state.
+    /// Cards ripple in via `cardEntrance`, an explicit `withAnimation` fired
+    /// from `onAppear`; `snapshotHost` sets `skipsEntranceMotion` so they land
+    /// settled on the first layout pass, the way every other suite captures.
     private func drawerImage(_ viewModel: DrawerViewModel, dark: Bool = false) -> NSImage {
-        let host = snapshotHost(
+        snapshotImage(
             DrawerView(viewModel: viewModel), width: 900, height: CardMetrics.collapsedPanelHeight, dark: dark
         )
-        let window = NSWindow(
-            contentRect: NSRect(x: 20000, y: 20000, width: 900, height: CardMetrics.collapsedPanelHeight),
-            styleMask: [.borderless], backing: .buffered, defer: false
-        )
-        window.contentView = host
-        window.orderFrontRegardless()
-        RunLoop.main.run(until: Date().addingTimeInterval(0.8))
-        host.layoutSubtreeIfNeeded()
-        let image = capture(host)
-        window.orderOut(nil)
-        return image
     }
 
     @Test func light() async throws {
