@@ -44,8 +44,8 @@ struct GeneralSettingsTab: View {
             return base + " Install cloudflared to preview links behind Cloudflare Access."
         }
         return base + """
-         Links behind Cloudflare Access reuse the login already cached by cloudflared; \
-        Overboard never opens a browser to sign you in.
+         Links behind Cloudflare Access reuse the login cloudflared already has cached; \
+        Overboard only opens a browser to sign in when you ask it to below.
         """
     }
 
