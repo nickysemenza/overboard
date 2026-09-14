@@ -23,25 +23,30 @@ public struct DrawerView: View {
 
     public var body: some View {
         VStack(spacing: 10) {
-            // The outgoing view leaves the layout instantly (`.identity`
-            // removal) so the VStack never briefly holds both the strip and
-            // the pane — which would squeeze the incoming view and then jump
-            // once the outgoing one finally cleared. The incoming view fades
-            // in (`.opacity` insertion) while the VStack's height, and the
-            // glass shell drawn behind it, animate between the two states
-            // under the `.motion` below.
-            Group {
+            // The two states overlap in a ZStack rather than swapping in the
+            // VStack, so the height the outgoing content still occupies never
+            // adds to the incoming one. Opening: the strip block fades out in
+            // place while the pane fades in and the shell grows around it.
+            // Closing: the pane leaves the layout instantly (`.identity`) —
+            // its `maxHeight: .infinity` body would otherwise hold the shell
+            // at full height until the fade finished and then snap — and the
+            // strip block fades in as the shell shrinks. Both under the
+            // `.motion` on `previewState` below.
+            ZStack(alignment: .bottom) {
                 if self.viewModel.previewState == .hidden {
-                    self.searchBar
-                    if self.viewModel.mode == .history, !self.savedSearches.isEmpty {
-                        self.savedSearchBar
+                    VStack(spacing: 10) {
+                        self.searchBar
+                        if self.viewModel.mode == .history, !self.savedSearches.isEmpty {
+                            self.savedSearchBar
+                        }
+                        self.cardStrip
                     }
-                    self.cardStrip
+                    .transition(.opacity)
                 } else {
                     PreviewPane(viewModel: self.viewModel)
+                        .transition(.asymmetric(insertion: .opacity, removal: .identity))
                 }
             }
-            .transition(.asymmetric(insertion: .opacity, removal: .identity))
             Divider()
             self.footerBar
         }
