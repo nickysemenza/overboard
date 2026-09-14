@@ -119,7 +119,7 @@ struct LauncherPreview: View {
                 } else {
                     ProgressView()
                 }
-            case .clip, .snippet, .calculation, .webSearch:
+            case .clip, .snippet, .calculation, .webSearch, .quicklink, .shellCommand, .calendarEvent:
                 if let image {
                     Image(nsImage: image).resizable().scaledToFit().frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if let code {
@@ -217,9 +217,28 @@ struct LauncherPreview: View {
             self.text = "\(input) = \(display)"
         case let .webSearch(query, _):
             self.text = query
+        case let .quicklink(_, _, url):
+            self.text = url.absoluteString
+        case let .shellCommand(command):
+            self.text = command
+        case let .calendarEvent(event):
+            self.text = self.calendarPreviewText(for: event)
         default:
             break
         }
+    }
+
+    /// Title + time range + location + join link — a plain-text stand-in
+    /// until `UpcomingEventFormatter.preview` supplies the richer version.
+    private func calendarPreviewText(for event: CalendarEvent) -> String {
+        var lines = [event.title, UpcomingEventFormatter.timeRange(for: event, now: .now)]
+        if let location = event.location, !location.isEmpty {
+            lines.append(location)
+        }
+        if let link = event.meetingLink {
+            lines.append(link.url.absoluteString)
+        }
+        return lines.joined(separator: "\n")
     }
 
     private func loadClipContent(_ item: ClipItem) async throws {

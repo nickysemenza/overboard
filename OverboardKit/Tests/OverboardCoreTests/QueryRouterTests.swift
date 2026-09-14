@@ -111,4 +111,18 @@ struct QueryRouterTests {
         #expect(!query.contains("&"), "ampersand must be encoded, got \(query)")
         #expect(!query.contains("ö"), "non-ASCII must be encoded, got \(query)")
     }
+
+    @Test func percentEncodeMatchesSearchURLEncoding() {
+        #expect(WebSearchProvider.percentEncode("c++ & =") == "c%2B%2B%20%26%20%3D")
+    }
+
+    /// ">"-prefixed queries are shell commands (Stream C) — the standing web
+    /// and Ask AI rows must not crowd them out.
+    @Test func greaterThanPrefixedQuerySuppressesWebAndAskAI() async {
+        let web = await WebSearchProvider().results(for: "> brew upgrade")
+        #expect(web.isEmpty)
+
+        let askAI = await AskAIProvider(isAvailable: { true }).results(for: "> brew upgrade now")
+        #expect(askAI.isEmpty)
+    }
 }

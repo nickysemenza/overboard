@@ -165,6 +165,19 @@ public final class LauncherViewModel {
     public var onQuitApp: (URL) -> Void = { _ in }
     /// Open a link clip's URL in the browser (⌘K → Open Link on a link clip).
     public var onOpenClipLink: (URL) -> Void = { _ in }
+    /// Run a system action (lock/sleep/restart) row's ↩.
+    public var onRunSystemAction: (SystemAction) -> Void = { _ in }
+    /// Switch the system default output to this device (⌘K/↩ on an audio
+    /// output row).
+    public var onSwitchAudioOutput: (AudioOutputDevice) -> Void = { _ in }
+    /// Run a ">"-prefixed shell command's ↩ (opens Ghostty).
+    public var onRunShellCommand: (String) -> Void = { _ in }
+    /// ↩ on a calendar event with a detected join link.
+    public var onJoinMeeting: (CalendarEvent, URL) -> Void = { _, _ in }
+    /// ⌘↩ on a calendar event with a detected join link.
+    public var onCopyMeetingLink: (CalendarEvent, URL) -> Void = { _, _ in }
+    /// ⌥↩ (or ↩, when there's no join link) on a calendar event.
+    public var onOpenInCalendar: (CalendarEvent) -> Void = { _ in }
     /// Only explicit scope/preview changes resize the window; result updates
     /// stay inside the existing scrolling viewport.
     public var onLayoutChanged: () -> Void = {}

@@ -109,6 +109,27 @@ extension LauncherViewModel {
             self.performAskAIAction(action, prompt: prompt)
         case let .recentSearch(query):
             self.performRecentSearchAction(action, query: query)
+        case .systemAction, .audioOutput, .quicklink, .shellCommand, .calendarEvent:
+            self.performLauncherExtraAction(action, on: result)
+        default:
+            break
+        }
+    }
+
+    /// Stream A's new result kinds — split out of `performMiscAction` purely
+    /// to keep its cyclomatic complexity under budget.
+    private func performLauncherExtraAction(_ action: LauncherAction, on result: LauncherResult) {
+        switch result {
+        case let .systemAction(systemAction):
+            self.performSystemAction(action, systemAction: systemAction)
+        case let .audioOutput(device):
+            self.performAudioOutputAction(action, device: device)
+        case let .quicklink(_, _, url):
+            self.performQuicklinkAction(action, url: url)
+        case let .shellCommand(command):
+            self.performShellCommandAction(action, command: command)
+        case let .calendarEvent(event):
+            self.performCalendarAction(action, event: event)
         default:
             break
         }
@@ -198,6 +219,44 @@ extension LauncherViewModel {
         switch action {
         case .paste: self.onAskAI(prompt, .paste)
         case .copy: self.onAskAI(prompt, .copy)
+        default: break
+        }
+    }
+
+    private func performSystemAction(_ action: LauncherAction, systemAction: SystemAction) {
+        guard action == .runCommand else { return }
+        self.onRunSystemAction(systemAction)
+    }
+
+    private func performAudioOutputAction(_ action: LauncherAction, device: AudioOutputDevice) {
+        guard action == .switchTo else { return }
+        self.onSwitchAudioOutput(device)
+    }
+
+    /// A quicklink's ↩ opens the already-resolved URL through the same
+    /// callback a web-search row uses — it needs no dedicated closure.
+    private func performQuicklinkAction(_ action: LauncherAction, url: URL) {
+        guard action == .openLink else { return }
+        self.onOpenWebSearch(url)
+    }
+
+    private func performShellCommandAction(_ action: LauncherAction, command: String) {
+        guard action == .runCommand else { return }
+        self.onRunShellCommand(command)
+    }
+
+    private func performCalendarAction(_ action: LauncherAction, event: CalendarEvent) {
+        switch action {
+        case .joinMeeting:
+            if let link = event.meetingLink {
+                self.onJoinMeeting(event, link.url)
+            }
+        case .copyLink:
+            if let link = event.meetingLink {
+                self.onCopyMeetingLink(event, link.url)
+            }
+        case .openInCalendar:
+            self.onOpenInCalendar(event)
         default: break
         }
     }

@@ -4,7 +4,7 @@ import Foundation
 /// priority order, so a provider's rows are already contiguous — headers
 /// annotate those consecutive runs rather than re-sorting the list.
 public enum LauncherSection: Sendable, Equatable {
-    case commands, apps, snippets, clipboard, files, settings, recent
+    case commands, apps, snippets, clipboard, files, settings, recent, system, calendar
 
     public var title: String {
         switch self {
@@ -15,12 +15,14 @@ public enum LauncherSection: Sendable, Equatable {
         case .files: "Files"
         case .settings: "System Settings"
         case .recent: "Recent"
+        case .system: "System"
+        case .calendar: "Calendar"
         }
     }
 
-    /// The section a row belongs to. Calculation, web-search, ask-AI, and
-    /// now-playing rows are singletons that read fine bare, so they're never
-    /// headered.
+    /// The section a row belongs to. Calculation, web-search, ask-AI,
+    /// now-playing, quicklink, and shell-command rows are singletons that read
+    /// fine bare, so they're never headered.
     public static func section(for result: LauncherResult) -> LauncherSection? {
         switch result {
         case .command: .commands
@@ -30,7 +32,9 @@ public enum LauncherSection: Sendable, Equatable {
         case .file: .files
         case .systemSetting: .settings
         case .recentSearch: .recent
-        case .calculation, .webSearch, .askAI, .nowPlaying: nil
+        case .systemAction, .audioOutput: .system
+        case .calendarEvent: .calendar
+        case .calculation, .webSearch, .askAI, .nowPlaying, .quicklink, .shellCommand: nil
         }
     }
 

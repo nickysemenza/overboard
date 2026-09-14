@@ -77,20 +77,24 @@ public struct WebSearchProvider: LauncherProvider {
     public init() {}
 
     /// URLComponents alone is wrong here: it leaves "+" literal in the query,
-    /// which Google decodes as a space ("c++" would search for "c").
-    public static func searchURL(for query: String) -> URL? {
+    /// which Google decodes as a space ("c++" would search for "c"). Shared
+    /// with `Quicklink.url(for:)` so a user-defined search template gets the
+    /// same fix.
+    public static func percentEncode(_ query: String) -> String? {
         let allowed = CharacterSet.urlQueryAllowed.subtracting(CharacterSet(charactersIn: "+&="))
-        guard let encoded = query.addingPercentEncoding(withAllowedCharacters: allowed) else {
-            return nil
-        }
+        return query.addingPercentEncoding(withAllowedCharacters: allowed)
+    }
+
+    public static func searchURL(for query: String) -> URL? {
+        guard let encoded = self.percentEncode(query) else { return nil }
         var components = URLComponents(string: "https://www.google.com/search")!
         components.percentEncodedQuery = "q=" + encoded
         return components.url
     }
 
     public func results(for query: String) async -> [LauncherResult] {
-        // ":"-prefixed queries are commands — don't offer to google them.
-        guard !query.hasPrefix(":"), let url = Self.searchURL(for: query) else { return [] }
+        // ":"/">"-prefixed queries are commands — don't offer to google them.
+        guard !LauncherQuery.isCommandLike(query), let url = Self.searchURL(for: query) else { return [] }
         return [.webSearch(query: query, url: url)]
     }
 }

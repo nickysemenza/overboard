@@ -93,6 +93,49 @@ struct LauncherActionsTests {
         #expect(LauncherActions.actions(for: result) == [.paste, .copy])
     }
 
+    @Test func systemAction() {
+        let result = LauncherResult.systemAction(.lockScreen)
+        #expect(LauncherActions.actions(for: result) == [.runCommand])
+    }
+
+    @Test func audioOutput() {
+        let result = LauncherResult.audioOutput(AudioOutputDevice(id: 1, name: "AirPods Pro", isDefault: false))
+        #expect(LauncherActions.actions(for: result) == [.switchTo])
+    }
+
+    @Test func quicklink() throws {
+        let link = Quicklink(keyword: "gh", name: "GitHub", template: "https://github.com/search?q={query}")
+        let url = try #require(URL(string: "https://github.com/search?q=swift"))
+        let result = LauncherResult.quicklink(link, query: "swift", url: url)
+        #expect(LauncherActions.actions(for: result) == [.openLink])
+    }
+
+    @Test func shellCommand() {
+        let result = LauncherResult.shellCommand("brew upgrade")
+        #expect(LauncherActions.actions(for: result) == [.runCommand])
+    }
+
+    private func calendarEvent(url: URL? = nil) -> CalendarEvent {
+        CalendarEvent(
+            eventIdentifier: "evt1",
+            title: "Standup",
+            start: Date(),
+            end: Date().addingTimeInterval(1800),
+            url: url
+        )
+    }
+
+    @Test func calendarEventWithMeetingLink() throws {
+        let url = try #require(URL(string: "https://meet.google.com/abc-defg-hij"))
+        let result = LauncherResult.calendarEvent(self.calendarEvent(url: url))
+        #expect(LauncherActions.actions(for: result) == [.joinMeeting, .copyLink, .openInCalendar])
+    }
+
+    @Test func calendarEventWithoutMeetingLink() {
+        let result = LauncherResult.calendarEvent(self.calendarEvent())
+        #expect(LauncherActions.actions(for: result) == [.openInCalendar])
+    }
+
     // MARK: Positional hint mapping
 
     @Test func hintMapsFirstThreePositions() {

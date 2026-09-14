@@ -178,6 +178,12 @@ public enum LauncherRanking {
                 .match(query: query, title: item.title, context: item.body) ?? SearchMatch(tier: .related)
         case let .systemSetting(name, _):
             return SearchMatcher.match(query: query, title: name) ?? SearchMatch(tier: .related)
+        case let .systemAction(action):
+            return SearchMatcher.match(query: query, title: action.title, context: action.keywords)
+                ?? SearchMatch(tier: .related)
+        case let .audioOutput(device):
+            return SearchMatcher.match(query: query, title: device.name, context: "audio output speaker sound")
+                ?? SearchMatch(tier: .related)
         default: return SearchMatch(tier: .related)
         }
     }
@@ -204,10 +210,11 @@ public enum LauncherRanking {
 
     private static func priority(_ result: LauncherResult, query: String, aliases: [String: String]) -> Int {
         switch result {
-        case .command, .calculation: -1
+        case .command, .calculation, .quicklink, .shellCommand: -1
         case .webSearch: 10
         case .askAI: 11
-        case .nowPlaying: 12
+        case .calendarEvent: 12
+        case .nowPlaying: 13
         default: self.match(for: result, query: query, aliases: aliases).tier.rawValue
         }
     }

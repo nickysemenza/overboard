@@ -117,7 +117,7 @@ public extension LauncherViewModel {
             // clip rows land.
             self.matchExcerpts = [:]
             let providers = self.secondaryProviders.filter { $0.searchScopes.contains(scope) }
-            guard !query.hasPrefix(":"), !providers.isEmpty else {
+            guard !LauncherQuery.isCommandLike(query), !providers.isEmpty else {
                 self.finishSearch(generation)
                 return
             }
@@ -178,7 +178,7 @@ public extension LauncherViewModel {
         // a command-mode query that arrives while an older, non-command
         // send is still sitting in the debounce window must not let that
         // stale send fan out to secondary providers once it fires.
-        guard !query.hasPrefix(":"), !providers.isEmpty else {
+        guard !LauncherQuery.isCommandLike(query), !providers.isEmpty else {
             self.finishSearch(generation)
             return
         }

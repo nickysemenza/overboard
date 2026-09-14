@@ -82,6 +82,8 @@ public struct AppSearchProvider: LauncherProvider {
     }
 
     public func results(for query: String) async -> [LauncherResult] {
+        // ":"/">"-prefixed queries are commands — don't surface apps for them.
+        guard !LauncherQuery.isCommandLike(query) else { return [] }
         guard !query.isEmpty else {
             return await self.index.entries().sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
                 .map { .app(

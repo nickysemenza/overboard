@@ -122,6 +122,19 @@ is cached to disk.
 - **Launcher commands**: `:stats` (word/char/line stats), `:pause` / `:resume`
   (toggles clipboard capture; menu-bar indicator), `:clear` (clears history,
   keeps pins), `:settings`, `:version`. Plus `:` to open the commands palette.
+- **System actions**: `lock` / `sleep` / `restart` rows run Lock Screen, Sleep,
+  and Restart without leaving the launcher.
+- **Audio output**: switch the system's default output device from a launcher
+  row, current device marked.
+- **Quicklinks**: user-defined keywords (Settings → General) open or search a
+  URL template, same alias syntax as app aliases.
+- **Shell commands**: `> <command>` runs a command line in a new Ghostty window.
+- **Scope cycling**: Tab / ⇧Tab cycle All → Files → Clipboard → Apps without
+  leaving the search field.
+- **Unit conversion**: `5 mi in km` and friends convert length, mass,
+  temperature, and more inline, alongside the calculator.
+- **Calendar**: an up-next row above Now Playing, plus `cal` / `today` /
+  `tomorrow` listings, with one-key join and Open in Calendar actions.
 - **Backup**: Settings → History exports the library to a folder of NDJSON plus
   the large payloads it references, and imports one back (skipping clips you
   already have, by content hash). Detected secrets are left out unless asked

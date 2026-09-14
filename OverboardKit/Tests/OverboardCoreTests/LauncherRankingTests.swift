@@ -47,4 +47,32 @@ struct LauncherRankingTests {
         #expect(LauncherScope.apps.includes(app))
         #expect(!LauncherScope.files.includes(app))
     }
+
+    @Test func quicklinkAndShellCommandSortFirst() {
+        let link = Quicklink(keyword: "gh", name: "GitHub", template: "https://github.com/search?q={query}")
+        let quicklink = LauncherResult.quicklink(link, query: "", url: URL(fileURLWithPath: "/dev/null"))
+        let shell = LauncherResult.shellCommand("brew upgrade")
+        let app = LauncherResult.app(name: "GitHub Desktop", url: URL(fileURLWithPath: "/Applications/GitHub.app"))
+        let sorted = LauncherRanking.sorted([app, quicklink, shell], query: "gh")
+        #expect(sorted.prefix(2).contains(quicklink))
+        #expect(sorted.prefix(2).contains(shell))
+        #expect(sorted.last == app)
+    }
+
+    @Test func audioOutputKeywordHitsWordsTier() {
+        let device = AudioOutputDevice(id: 1, name: "AirPods Pro", isDefault: false)
+        let result = LauncherResult.audioOutput(device)
+        #expect(LauncherRanking.match(for: result, query: "audio").tier == .words)
+    }
+
+    @Test func calendarEventSortsBeforeNowPlaying() {
+        let event = CalendarEvent(
+            eventIdentifier: "evt1", title: "Standup", start: Date(), end: Date().addingTimeInterval(1800)
+        )
+        let calendar = LauncherResult.calendarEvent(event)
+        let nowPlaying = LauncherResult.nowPlaying(
+            NowPlayingTrack(title: "Imagine", artist: "John Lennon", trackID: "spotify:track:abc", state: .playing)
+        )
+        #expect(LauncherRanking.sorted([nowPlaying, calendar], query: "zzz") == [calendar, nowPlaying])
+    }
 }

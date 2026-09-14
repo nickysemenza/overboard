@@ -29,6 +29,8 @@ struct LauncherSectionTests {
         #expect(LauncherSection.files.title == "Files")
         #expect(LauncherSection.settings.title == "System Settings")
         #expect(LauncherSection.recent.title == "Recent")
+        #expect(LauncherSection.system.title == "System")
+        #expect(LauncherSection.calendar.title == "Calendar")
     }
 
     @Test func neverHeaderedKindsHaveNoSection() {
@@ -36,6 +38,22 @@ struct LauncherSectionTests {
         #expect(LauncherSection.section(for: Self.webSearch) == nil)
         #expect(LauncherSection.section(for: Self.nowPlaying) == nil)
         #expect(LauncherSection.section(for: .askAI(prompt: "make this concise")) == nil)
+        let link = Quicklink(keyword: "gh", name: "GitHub", template: "https://github.com/search?q={query}")
+        #expect(LauncherSection.section(for: .quicklink(
+            link, query: "", url: URL(fileURLWithPath: "/dev/null")
+        )) == nil)
+        #expect(LauncherSection.section(for: .shellCommand("brew upgrade")) == nil)
+    }
+
+    @Test func systemAndCalendarSections() {
+        #expect(LauncherSection.section(for: .systemAction(.lockScreen)) == .system)
+        #expect(LauncherSection.section(for: .audioOutput(
+            AudioOutputDevice(id: 1, name: "AirPods Pro", isDefault: true)
+        )) == .system)
+        let event = CalendarEvent(
+            eventIdentifier: "evt1", title: "Standup", start: Date(), end: Date().addingTimeInterval(1800)
+        )
+        #expect(LauncherSection.section(for: .calendarEvent(event)) == .calendar)
     }
 
     @Test func recentSearchMapsToRecentSection() {

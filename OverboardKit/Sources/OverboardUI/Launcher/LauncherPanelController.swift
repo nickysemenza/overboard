@@ -50,6 +50,18 @@ public final class LauncherPanelController {
     public var onQuitApp: (URL) -> Void = { _ in }
     /// Open a link clip's URL in the browser (⌘K → Open Link on a link clip).
     public var onOpenClipLink: (URL) -> Void = { _ in }
+    /// Run a system action (lock/sleep/restart) row's ↩.
+    public var onRunSystemAction: (SystemAction) -> Void = { _ in }
+    /// Switch the system default output to this device.
+    public var onSwitchAudioOutput: (AudioOutputDevice) -> Void = { _ in }
+    /// Run a ">"-prefixed shell command's ↩ (opens Ghostty).
+    public var onRunShellCommand: (String) -> Void = { _ in }
+    /// ↩ on a calendar event with a detected join link.
+    public var onJoinMeeting: (CalendarEvent, URL) -> Void = { _, _ in }
+    /// ⌘↩ on a calendar event with a detected join link.
+    public var onCopyMeetingLink: (CalendarEvent, URL) -> Void = { _, _ in }
+    /// ⌥↩ (or ↩, when there's no join link) on a calendar event.
+    public var onOpenInCalendar: (CalendarEvent) -> Void = { _ in }
     /// Called as the launcher is summoned, before rows render — the hook that
     /// reconciles the Spotify now-playing snapshot so a missed notification is
     /// caught exactly when the stale row would otherwise be visible. Also
@@ -64,6 +76,7 @@ public final class LauncherPanelController {
         self.configureFileActions()
         self.configureClipActions()
         self.configureMiscActions()
+        self.configureLauncherExtrasActions()
     }
 
     /// Wires the callbacks whose completion is "hide the panel, then hand the
@@ -174,6 +187,41 @@ public final class LauncherPanelController {
         }
         self.viewModel.onLayoutChanged = { [weak self] in
             self?.resizePanel()
+        }
+    }
+
+    /// See `configureFileActions`: the system-action/audio-output/shell/calendar
+    /// callbacks Stream A's new result kinds add.
+    private func configureLauncherExtrasActions() {
+        self.viewModel.onRunSystemAction = { [weak self] action in
+            guard let self else { return }
+            self.hide()
+            self.onRunSystemAction(action)
+        }
+        self.viewModel.onSwitchAudioOutput = { [weak self] device in
+            guard let self else { return }
+            self.hide()
+            self.onSwitchAudioOutput(device)
+        }
+        self.viewModel.onRunShellCommand = { [weak self] command in
+            guard let self else { return }
+            self.hide()
+            self.onRunShellCommand(command)
+        }
+        self.viewModel.onJoinMeeting = { [weak self] event, url in
+            guard let self else { return }
+            self.hide()
+            self.onJoinMeeting(event, url)
+        }
+        self.viewModel.onCopyMeetingLink = { [weak self] event, url in
+            guard let self else { return }
+            self.hide()
+            self.onCopyMeetingLink(event, url)
+        }
+        self.viewModel.onOpenInCalendar = { [weak self] event in
+            guard let self else { return }
+            self.hide()
+            self.onOpenInCalendar(event)
         }
     }
 
