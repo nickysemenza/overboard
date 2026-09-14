@@ -158,6 +158,8 @@ struct LauncherRow: View {
             Image(systemName: "sparkles")
                 .font(.title2)
                 .foregroundStyle(.purple)
+        case .systemAction, .audioOutput, .quicklink, .shellCommand, .calendarEvent:
+            LauncherRow.systemKindIcon(for: self.result)
         }
     }
 
@@ -189,6 +191,8 @@ struct LauncherRow: View {
         case let .recentSearch(query): query
         case let .nowPlaying(track): track.title
         case let .askAI(prompt): String(localized: "Ask AI: “\(prompt)”", bundle: .module)
+        case .systemAction, .audioOutput, .quicklink, .shellCommand, .calendarEvent:
+            LauncherRow.systemKindTitle(for: self.result)
         }
     }
 
@@ -221,6 +225,8 @@ struct LauncherRow: View {
                 ? (track.state == .playing ? "Now playing" : "Paused")
                 : "\(track.artist) · \(track.state == .playing ? "Now playing" : "Paused")"
         case .askAI: "Runs on your current clipboard text"
+        case .systemAction, .audioOutput, .quicklink, .shellCommand, .calendarEvent:
+            LauncherRow.systemKindSubtitle(for: self.result)
         }
     }
 

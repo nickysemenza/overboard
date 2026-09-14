@@ -66,6 +66,34 @@ struct AccessibilityPermissionRow: View {
     }
 }
 
+/// The Calendar status plus its two possible actions. Shared by Settings →
+/// Permissions and the Welcome window, same shape as `AccessibilityPermissionRow`.
+struct CalendarPermissionRow: View {
+    let permissions: PermissionService
+    /// "Calendar" where the permission needs naming; "Status" under a section
+    /// header that already names it.
+    var label = "Calendar"
+
+    var body: some View {
+        LabeledContent(self.label) {
+            HStack(spacing: 10) {
+                PermissionStatusPill(state: self.permissions.calendar)
+                if self.permissions.calendar == .denied {
+                    // macOS won't show its own prompt again once denied —
+                    // System Settings is the only way back.
+                    Button("Open System Settings…") {
+                        self.permissions.openCalendarSettings()
+                    }
+                } else if self.permissions.calendar != .granted {
+                    Button("Request…") {
+                        self.permissions.requestCalendar()
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// Every permission Overboard can ask for, what each one buys, and the state
 /// macOS reports right now — in one place, instead of a prompt that only
 /// appears after a paste has already fallen back.
@@ -105,6 +133,19 @@ struct PermissionsSettingsTab: View {
                     """
                     Lets Overboard paste directly into the app you were using. Without it, items \
                     are copied and you press ⌘V yourself.
+                    """
+                )
+            }
+
+            Section {
+                CalendarPermissionRow(permissions: self.permissions, label: "Status")
+            } header: {
+                Text("Calendar")
+            } footer: {
+                Text(
+                    """
+                    Shows your next meeting in the launcher and lets ↩ open its join link. Requested \
+                    only here — never from the launcher itself.
                     """
                 )
             }
@@ -209,7 +250,8 @@ private struct FileIndexIssueRow: View {
         PermissionsSettingsTab(
             permissions: PermissionService(
                 accessibility: .granted,
-                automation: ["com.apple.Safari": .granted, "com.google.Chrome": .denied]
+                automation: ["com.apple.Safari": .granted, "com.google.Chrome": .denied],
+                calendar: .denied
             ),
             fileIssues: { ["/Users/you/Library/Mail: You don’t have permission to view this folder."] }
         )

@@ -96,11 +96,12 @@ The palette follows macOS appearance and accent preferences; it is not a fixed s
 A small fixed ramp of system colors names *what a result is* where no icon already says so. It is a recognition aid, not a brand palette: each color belongs to a content kind and is never reused decoratively.
 
 - **Orange:** calculations, and the `.color` content kind.
-- **Blue:** folders, web searches, and the `.link` content kind.
+- **Blue:** folders, web searches, quicklinks, and the `.link` content kind.
 - **Purple:** snippets, Ask AI, and the `.image` content kind.
-- **Gray:** system settings and the `.text` content kind.
-- **Teal:** launcher commands and the `.file` content kind.
+- **Gray:** system settings, system actions, audio outputs, and the `.text` content kind.
+- **Teal:** launcher commands, shell commands, and the `.file` content kind.
 - **Green:** the now-playing row.
+- **Red:** calendar events.
 - **Secret badge:** a filled orange capsule with a white lock and label. The one place the ramp is a warning rather than a label, so it is filled rather than tinted type, and it survives Increase Contrast unchanged.
 
 The content-kind half of the ramp is named in `OverboardCore` (`ItemKind.tintName`) and resolved to a color in exactly one place in `OverboardUI`.

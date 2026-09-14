@@ -119,7 +119,7 @@ struct LauncherPreview: View {
                 } else {
                     ProgressView()
                 }
-            case .clip, .snippet, .calculation, .webSearch:
+            case .clip, .snippet, .calculation, .webSearch, .quicklink, .shellCommand, .calendarEvent:
                 if let image {
                     Image(nsImage: image).resizable().scaledToFit().frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if let code {
@@ -217,6 +217,12 @@ struct LauncherPreview: View {
             self.text = "\(input) = \(display)"
         case let .webSearch(query, _):
             self.text = query
+        case let .quicklink(_, _, url):
+            self.text = url.absoluteString
+        case let .shellCommand(command):
+            self.text = command
+        case let .calendarEvent(event):
+            self.text = UpcomingEventFormatter.preview(for: event, now: .now)
         default:
             break
         }

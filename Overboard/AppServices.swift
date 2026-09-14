@@ -68,6 +68,7 @@ final class AppServices {
     let overlay: OverlayController
     let launcher: LauncherPanelController
     let spotify: SpotifyNowPlayingMonitor
+    let calendar: CalendarSource
     let launcherViewModel: LauncherViewModel
     let emojiPicker: EmojiPanelController
     let emojiViewModel: EmojiPickerViewModel
@@ -125,10 +126,13 @@ final class AppServices {
         self.overlay = OverlayController(store: self.store, stack: self.stack)
         let spotify = SpotifyNowPlayingMonitor()
         self.spotify = spotify
+        let calendar = CalendarSource()
+        self.calendar = calendar
 
         let launcherViewModel = Self.makeLauncherViewModel(
             store: self.store,
             spotify: spotify,
+            calendar: calendar,
             pausedSnapshot: self.captureState.snapshot
         )
         self.launcherViewModel = launcherViewModel
@@ -155,6 +159,7 @@ final class AppServices {
             self.registerHotkeys()
             self.updates.start()
             self.startSpotifyMonitor()
+            self.startCalendarSource()
         }
 
         self.installOverlayCallbacks()
@@ -175,6 +180,7 @@ final class AppServices {
         if !Self.isDemo {
             self.monitor.stop()
             FileIndexService.shared.stop()
+            self.calendar.stop()
         }
 
         // `applicationWillTerminate` is synchronous, so the async drain below

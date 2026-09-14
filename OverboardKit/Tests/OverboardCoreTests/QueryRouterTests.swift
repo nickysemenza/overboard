@@ -88,6 +88,20 @@ struct QueryRouterTests {
         #expect(await disabled.results(for: "a").isEmpty)
     }
 
+    @Test func calculatorProviderFallsBackToUnitConversion() async {
+        // "5 mi in km" isn't math (CalculatorEngine's gate rejects the unit
+        // words), so CalculatorProvider must fall back to UnitConversionEngine
+        // and still produce exactly one calculation row.
+        let results = await CalculatorProvider().results(for: "5 mi in km")
+        #expect(results.count == 1)
+        guard case let .calculation(input, display) = results.first else {
+            Issue.record("expected a calculation row from the unit conversion fallback, got \(results)")
+            return
+        }
+        #expect(input == "5 mi in km")
+        #expect(display == "8.05 km")
+    }
+
     @Test func webSearchURLEncodesPlusAndUnicode() {
         let url = WebSearchProvider.searchURL(for: "c++ tutorial")
         #expect(url?.absoluteString == "https://www.google.com/search?q=c%2B%2B%20tutorial")
@@ -96,5 +110,19 @@ struct QueryRouterTests {
         let query = unicode?.absoluteString.split(separator: "?").last ?? ""
         #expect(!query.contains("&"), "ampersand must be encoded, got \(query)")
         #expect(!query.contains("ö"), "non-ASCII must be encoded, got \(query)")
+    }
+
+    @Test func percentEncodeMatchesSearchURLEncoding() {
+        #expect(WebSearchProvider.percentEncode("c++ & =") == "c%2B%2B%20%26%20%3D")
+    }
+
+    /// ">"-prefixed queries are shell commands (Stream C) — the standing web
+    /// and Ask AI rows must not crowd them out.
+    @Test func greaterThanPrefixedQuerySuppressesWebAndAskAI() async {
+        let web = await WebSearchProvider().results(for: "> brew upgrade")
+        #expect(web.isEmpty)
+
+        let askAI = await AskAIProvider(isAvailable: { true }).results(for: "> brew upgrade now")
+        #expect(askAI.isEmpty)
     }
 }

@@ -41,6 +41,31 @@ enum DemoSeed {
         }
     }
 
+    /// Two fake upcoming events for the launcher's calendar row and `cal`
+    /// listing — a Meet link starting soon (so the pinned up-next row and the
+    /// join-link screenshot both have something current to show) and a Zoom
+    /// meeting tomorrow (so the `cal` listing shows more than one row).
+    nonisolated static func calendarEvents(now: Date) -> [CalendarEvent] {
+        [
+            CalendarEvent(
+                eventIdentifier: "demo-design-review",
+                title: "Design review",
+                start: now.addingTimeInterval(12 * 60),
+                end: now.addingTimeInterval(42 * 60),
+                location: "https://meet.google.com/abc-defg-hij",
+                calendarTitle: "Work"
+            ),
+            CalendarEvent(
+                eventIdentifier: "demo-1-1-sam",
+                title: "1:1 with Sam",
+                start: now.addingTimeInterval(86400 + 3600),
+                end: now.addingTimeInterval(86400 + 5400),
+                notes: "Zoom: https://zoom.us/j/1234567890",
+                calendarTitle: "Work"
+            ),
+        ]
+    }
+
     static func populate(_ store: ClipStore) async {
         let now = Date()
         do {

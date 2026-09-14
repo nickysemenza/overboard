@@ -24,6 +24,21 @@ public enum LauncherResult: Sendable, Equatable, Identifiable {
     /// clipboard text — the launcher's "Ask AI" fallback row. Sits last in the
     /// instant section (after the web row), above the pinned now-playing footer.
     case askAI(prompt: String)
+    /// A macOS system action (lock, sleep, restart) run via OverboardMac's
+    /// `SystemActionService`.
+    case systemAction(SystemAction)
+    /// A CoreAudio output device; committing switches the system default output.
+    case audioOutput(AudioOutputDevice)
+    /// A user-defined quicklink (Settings → General). `query` is the trailing
+    /// text typed after the keyword — used to render the row's title — and
+    /// `url` is the already-resolved destination (nil when the template
+    /// didn't parse as a URL).
+    case quicklink(Quicklink, query: String, url: URL)
+    /// A ">"-prefixed command line; committing runs it in Ghostty.
+    case shellCommand(String)
+    /// An upcoming calendar event: the pinned up-next row, or a `cal`/`today`
+    /// listing.
+    case calendarEvent(CalendarEvent)
 
     public var id: String {
         switch self {
@@ -39,6 +54,12 @@ public enum LauncherResult: Sendable, Equatable, Identifiable {
         // State in the id re-renders the row on play↔pause.
         case let .nowPlaying(track): "nowplaying:\(track.trackID):\(track.state.rawValue)"
         case let .askAI(prompt): "askai:\(prompt)"
+        case let .systemAction(action): "sysaction:\(action.rawValue)"
+        // State in the id re-renders the checkmark when the default changes.
+        case let .audioOutput(device): "audio:\(device.id):\(device.isDefault)"
+        case let .quicklink(link, query, _): "quicklink:\(link.keyword):\(query)"
+        case let .shellCommand(command): "shell:\(command)"
+        case let .calendarEvent(event): "calendar:\(event.id)"
         }
     }
 }

@@ -17,6 +17,7 @@ enum KeyCode: UInt16 {
     case letterK = 40
     case comma = 43
     case slash = 44
+    case tab = 48
     case space = 49
     case delete = 51
     case escape = 53

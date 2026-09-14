@@ -7,7 +7,7 @@ import OverboardCore
 /// What macOS currently says about one permission. `unknown` is a real third
 /// state for Automation: TCC has neither granted nor denied it yet, so asking
 /// would show the consent dialog.
-public enum PermissionState: Sendable, Equatable {
+public nonisolated enum PermissionState: Sendable, Equatable {
     case granted
     case denied
     case unknown
@@ -41,6 +41,9 @@ public final class PermissionService {
     public static let shared = PermissionService()
 
     public private(set) var accessibility: PermissionState = .unknown
+
+    /// EventKit's full-access state, read from `CalendarSource.authorization`.
+    public private(set) var calendar: PermissionState = .unknown
 
     /// Per-bundle-ID Automation state; a missing entry means "not read yet".
     public private(set) var automationStates: [String: PermissionState] = [:]
@@ -78,10 +81,15 @@ public final class PermissionService {
 
     /// Test seam: fixed states, no system calls. `visibleAutomationTargets`
     /// becomes exactly the seeded apps, in supported order.
-    public init(accessibility: PermissionState, automation: [String: PermissionState] = [:]) {
+    public init(
+        accessibility: PermissionState,
+        automation: [String: PermissionState] = [:],
+        calendar: PermissionState = .unknown
+    ) {
         self.isStubbed = true
         self.accessibility = accessibility
         self.automationStates = automation
+        self.calendar = calendar
         self.visibleAutomationTargets = Self.supportedAutomationTargets
             .filter { automation[$0.bundleID] != nil }
     }
@@ -127,6 +135,22 @@ public final class PermissionService {
         Self.open("x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")
     }
 
+    // MARK: - Calendar
+
+    /// Shows the system consent dialog for full Calendar access. Only called
+    /// from an explicit user action (Settings → Permissions, or the Welcome
+    /// window) — never from the launcher itself.
+    public func requestCalendar() {
+        guard !self.isStubbed else { return }
+        Task { [weak self] in
+            self?.calendar = await CalendarSource.requestAccess()
+        }
+    }
+
+    public func openCalendarSettings() {
+        Self.open("x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars")
+    }
+
     private static func open(_ string: String) {
         guard let url = URL(string: string) else { return }
         NSWorkspace.shared.open(url)
@@ -140,7 +164,10 @@ public final class PermissionService {
     /// the features actually talk to.
     public nonisolated static let supportedAutomationTargets: [AutomationTarget] =
         BrowserScript.scriptableBrowsers.map { AutomationTarget(name: $0.name, bundleID: $0.bundleID) }
-            + [AutomationTarget(name: "Spotify", bundleID: SpotifyNowPlayingMonitor.spotifyBundleID)]
+            + [
+                AutomationTarget(name: "Spotify", bundleID: SpotifyNowPlayingMonitor.spotifyBundleID),
+                AutomationTarget(name: "System Events", bundleID: SystemActionService.systemEventsBundleID),
+            ]
 
     public func automation(for bundleID: String) -> PermissionState {
         self.automationStates[bundleID] ?? .unknown
@@ -166,6 +193,7 @@ public final class PermissionService {
     public func refresh() {
         guard !self.isStubbed else { return }
         self.accessibility = AXIsProcessTrusted() ? .granted : .denied
+        self.calendar = CalendarSource.authorization
         let targets = Self.supportedAutomationTargets.filter { Self.isInstalled($0.bundleID) }
         self.visibleAutomationTargets = targets
         let bundleIDs = targets.map(\.bundleID)

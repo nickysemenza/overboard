@@ -63,6 +63,9 @@ extension AppServices {
         self.installLauncherClipCallbacks()
         self.installLauncherCommandCallbacks()
         self.installLauncherMiscCallbacks()
+        self.installLauncherShellCallbacks()
+        self.installLauncherSystemCallbacks()
+        self.installLauncherCalendarCallbacks()
     }
 
     /// Summon-time refresh (Spotify snapshot, running-app dots) and the
@@ -86,6 +89,7 @@ extension AppServices {
             guard let self else { return }
             if !Self.isDemo {
                 self.spotify.refreshSnapshot()
+                self.calendar.refreshSnapshot()
             }
             self.launcherViewModel.runningAppPaths = self.runningApps.snapshot()
             self.runningApps.startObserving()
@@ -244,6 +248,55 @@ extension AppServices {
         }
         self.launcher.onOpenClipLink = { url in
             NSWorkspace.shared.open(url)
+        }
+    }
+
+    /// The `>`-prefixed shell row: runs the command in Ghostty. Quicklinks
+    /// need no callback of their own — they route through the existing
+    /// `onOpenWebSearch(url)`.
+    private func installLauncherShellCallbacks() {
+        self.launcher.onRunShellCommand = { command in
+            Task {
+                do {
+                    try await GhosttyLauncher.run(command)
+                } catch {
+                    HUDController.shared.flash("Couldn't open Ghostty")
+                }
+            }
+        }
+    }
+
+    /// Lock/sleep/restart and audio-output switching. `SystemActionService`
+    /// can't flash a HUD itself (OverboardMac sits below OverboardUI in the
+    /// module graph), so its failures are routed here.
+    private func installLauncherSystemCallbacks() {
+        SystemActionService.shared.onFailure = { message in
+            HUDController.shared.flash(message)
+        }
+        self.launcher.onRunSystemAction = { action in
+            SystemActionService.shared.perform(action)
+        }
+        self.launcher.onSwitchAudioOutput = { device in
+            do {
+                try AudioOutputService.shared.setDefaultOutput(device)
+                HUDController.shared.flash("Output → \(device.name)")
+            } catch {
+                HUDController.shared.flash("Couldn't switch output")
+            }
+        }
+    }
+
+    /// ↩/⌘↩/⌥↩ on a calendar-event row: join the meeting, copy its link, or
+    /// open the event in Calendar.app.
+    private func installLauncherCalendarCallbacks() {
+        self.launcher.onJoinMeeting = { _, url in
+            NSWorkspace.shared.open(url)
+        }
+        self.launcher.onCopyMeetingLink = { [weak self] _, url in
+            self?.copyString(url.absoluteString, hud: "Meeting link copied — ⌘V to paste")
+        }
+        self.launcher.onOpenInCalendar = { event in
+            CalendarSource.openInCalendar(event)
         }
     }
 

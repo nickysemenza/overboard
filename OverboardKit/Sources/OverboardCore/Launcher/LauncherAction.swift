@@ -26,6 +26,8 @@ public enum LauncherAction: String, Sendable, CaseIterable, Identifiable {
     case pin
     case unpin
     case openSource
+    case joinMeeting
+    case openInCalendar
 
     public var id: String {
         self.rawValue
@@ -54,6 +56,8 @@ public enum LauncherAction: String, Sendable, CaseIterable, Identifiable {
         case .pin: "Pin"
         case .unpin: "Unpin"
         case .openSource: "Open Source Page"
+        case .joinMeeting: "Join Meeting"
+        case .openInCalendar: "Open in Calendar"
         }
     }
 
@@ -78,6 +82,8 @@ public enum LauncherAction: String, Sendable, CaseIterable, Identifiable {
         case .preview: "eye"
         case .pin, .unpin: "pin"
         case .openSource: "globe"
+        case .joinMeeting: "video.fill"
+        case .openInCalendar: "calendar"
         }
     }
 }
@@ -110,6 +116,8 @@ public enum LauncherActions {
             self.clipActions(for: item)
         case let .file(_, _, info):
             [info.availability == .cloud ? .downloadAndOpen : .open, .revealInFinder, .copyPath, .preview]
+        case let .calendarEvent(event):
+            self.calendarActions(for: event)
         default:
             // Every other result's action list is a static function of the
             // case alone — split out so this switch's data-dependent cases
@@ -144,6 +152,12 @@ public enum LauncherActions {
         return actions
     }
 
+    /// ↩ join (when a link was detected), ⌘↩ copy the link, ⌥↩ open in
+    /// Calendar; a linkless event only offers Open in Calendar.
+    private static func calendarActions(for event: CalendarEvent) -> [LauncherAction] {
+        event.meetingLink != nil ? [.joinMeeting, .copyLink, .openInCalendar] : [.openInCalendar]
+    }
+
     /// Action lists for results whose actions depend only on which case they
     /// are, never on associated data (unlike app/clip/file, handled above).
     private static func staticActions(for result: LauncherResult) -> [LauncherAction] {
@@ -168,9 +182,24 @@ public enum LauncherActions {
         case .askAI:
             // ↩ run + paste the result, ⌘↩ run + copy it.
             [.paste, .copy]
-        case .app, .clip, .file:
+        case .systemAction, .audioOutput, .quicklink, .shellCommand:
+            self.launcherExtraActions(for: result)
+        case .app, .clip, .file, .calendarEvent:
             // Unreachable: `actions(for:context:)` handles these itself.
             []
+        }
+    }
+
+    /// Static action lists for the system-action/audio-output/quicklink/
+    /// shell-command kinds — split out purely to keep `staticActions`'s
+    /// cyclomatic complexity under budget.
+    private static func launcherExtraActions(for result: LauncherResult) -> [LauncherAction] {
+        switch result {
+        case .systemAction: [.runCommand]
+        case .audioOutput: [.switchTo]
+        case .quicklink: [.openLink]
+        case .shellCommand: [.runCommand]
+        default: []
         }
     }
 

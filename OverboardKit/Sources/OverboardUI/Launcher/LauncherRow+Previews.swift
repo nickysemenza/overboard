@@ -135,4 +135,69 @@ import SwiftUI
         .padding()
         .frame(width: 400)
     }
+
+    #Preview("Row: System action") {
+        LauncherRow(
+            result: .systemAction(.lockScreen),
+            store: Fixtures.previewStore(),
+            isSelected: false,
+            runningAppPaths: []
+        )
+        .padding()
+        .frame(width: 400)
+    }
+
+    #Preview("Row: Audio output") {
+        LauncherRow(
+            result: .audioOutput(AudioOutputDevice(id: 1, name: "AirPods Pro", isDefault: true)),
+            store: Fixtures.previewStore(),
+            isSelected: false,
+            runningAppPaths: []
+        )
+        .padding()
+        .frame(width: 400)
+    }
+
+    #Preview("Row: Quicklink") {
+        LauncherRow(
+            result: .quicklink(
+                Quicklink(keyword: "gh", name: "GitHub", template: "https://github.com/search?q={query}"),
+                query: "swift grdb",
+                url: URL(string: "https://github.com/search?q=swift%20grdb")!
+            ),
+            store: Fixtures.previewStore(),
+            isSelected: false,
+            runningAppPaths: []
+        )
+        .padding()
+        .frame(width: 400)
+    }
+
+    #Preview("Row: Shell command") {
+        LauncherRow(
+            result: .shellCommand("brew upgrade"),
+            store: Fixtures.previewStore(),
+            isSelected: false,
+            runningAppPaths: []
+        )
+        .padding()
+        .frame(width: 400)
+    }
+
+    #Preview("Row: Calendar event") {
+        LauncherRow(
+            result: .calendarEvent(CalendarEvent(
+                eventIdentifier: "abc123",
+                title: "Design review",
+                start: Date().addingTimeInterval(720),
+                end: Date().addingTimeInterval(2400),
+                url: URL(string: "https://meet.google.com/abc-defg-hij")
+            )),
+            store: Fixtures.previewStore(),
+            isSelected: false,
+            runningAppPaths: []
+        )
+        .padding()
+        .frame(width: 400)
+    }
 #endif

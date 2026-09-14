@@ -6,7 +6,7 @@ import Foundation
 ///
 /// Deliberately conservative so it never crowds real results — it only fires
 /// when the model is available and the query is long enough (>= 12 chars),
-/// multi-word (contains a space), and not a ":"-prefixed command. `isAvailable`
+/// multi-word (contains a space), and not a ":"/">"-prefixed command. `isAvailable`
 /// is injected (rather than read here) so OverboardCore stays free of the
 /// FoundationModels + Defaults gate, and tests/previews leave it dark.
 public struct AskAIProvider: LauncherProvider {
@@ -21,7 +21,7 @@ public struct AskAIProvider: LauncherProvider {
         guard self.isAvailable(),
               trimmed.count >= 12,
               trimmed.contains(" "),
-              !trimmed.hasPrefix(":")
+              !LauncherQuery.isCommandLike(trimmed)
         else { return [] }
         return [.askAI(prompt: trimmed)]
     }

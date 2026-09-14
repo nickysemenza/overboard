@@ -101,7 +101,8 @@ public struct SettingsPaneSearchProvider: LauncherProvider {
     }
 
     public func results(for query: String) async -> [LauncherResult] {
-        guard query.count >= 2 else { return [] }
+        // ":"/">"-prefixed queries are commands — don't surface panes for them.
+        guard !LauncherQuery.isCommandLike(query), query.count >= 2 else { return [] }
         let entries = await self.index.entries()
         let ranked = AppMatcher.rank(query: query, names: entries.map(\.name), limit: self.limit)
         return ranked.map { .systemSetting(name: entries[$0].name, url: entries[$0].url) }
