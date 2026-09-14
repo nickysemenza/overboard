@@ -6,7 +6,9 @@ import Testing
 /// signature table itself, including the cases that must *not* match so a
 /// source file is never mistaken for a container.
 struct MagicBytesTests {
-    @Test(arguments: [
+    /// The literals are typed explicitly: Swift 6.4's type-checker gives up on
+    /// an untyped array that mixes `Data([bytes])` and `Data("…".utf8)`.
+    static let binarySignatures: [Data] = [
         Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]), // PNG
         Data([0xFF, 0xD8, 0xFF, 0xE0]), // JPEG
         Data("GIF89a".utf8),
@@ -24,12 +26,9 @@ struct MagicBytesTests {
         Data("fLaC".utf8),
         Data("icns".utf8),
         Data([0x42, 0x4D, 0x36, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]), // BMP
-    ])
-    func recognizesBinarySignatures(data: Data) {
-        #expect(MagicBytes.looksBinary(data))
-    }
+    ]
 
-    @Test(arguments: [
+    static let plausibleText: [Data] = [
         Data("let answer = 42\n".utf8),
         Data("# Heading\n\nSome prose.\n".utf8),
         Data("{\"key\": \"value\"}".utf8),
@@ -39,7 +38,14 @@ struct MagicBytesTests {
         Data("GIF is a file format\n".utf8), // "GIF " — the digit matters
         Data(),
         Data([0x89]), // truncated PNG signature
-    ])
+    ]
+
+    @Test(arguments: Self.binarySignatures)
+    func recognizesBinarySignatures(data: Data) {
+        #expect(MagicBytes.looksBinary(data))
+    }
+
+    @Test(arguments: Self.plausibleText)
     func leavesPlausibleTextAlone(data: Data) {
         #expect(!MagicBytes.looksBinary(data))
     }

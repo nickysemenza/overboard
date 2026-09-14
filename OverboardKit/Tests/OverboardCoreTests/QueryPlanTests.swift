@@ -111,10 +111,16 @@ struct QueryPlanTests {
     /// NULL` partial indexes, the opposite condition, so they can't cover
     /// "find the tombstones" at all. That's inherent to a live-only partial
     /// index, not something this migration was meant to fix (tombstones are
-    /// a small, transient fraction of the table between purges). The live
-    /// branch's two scans (the outer `NOT IN` filter and the inner `LIMIT`
-    /// subquery) do use `item_live_recent` — same expression-sort caveat as
-    /// `recentQueryPlan` for the final ORDER BY.
+    /// a small, transient fraction of the table between purges).
+    ///
+    /// SQLite 3.54 (macOS 27) plans the UNION differently: `MERGE (UNION)`
+    /// with both outer branches walking the primary-key autoindex (so the
+    /// merge needs no temp b-tree), and only the inner `LIMIT` subquery on
+    /// `item_live_recent`. Either shape is fine; what this test guards is
+    /// that the frecency-ordered `LIMIT` subquery — the part that scales
+    /// with history size — keeps using the partial index, so that's the
+    /// only assertion. Same expression-sort caveat as `recentQueryPlan` for
+    /// the final ORDER BY.
     @Test func purgeVictimSelectionQueryPlan() throws {
         let queue = try makeQueue()
         for index in 0 ..< 20 {
@@ -135,9 +141,6 @@ struct QueryPlanTests {
         let plan = try self.plan(queue, sql: sql, arguments: [5])
 
         let liveRecentScans = plan.count(where: { $0.contains("USING INDEX item_live_recent") })
-        #expect(liveRecentScans >= 2, "plan: \(plan)")
-        // The tombstone branch's bare table scan is documented above as
-        // inherent, not asserted away.
-        #expect(plan.contains { $0 == "SCAN item" }, "plan: \(plan)")
+        #expect(liveRecentScans >= 1, "plan: \(plan)")
     }
 }
