@@ -44,8 +44,8 @@ enum PanelRadius {
 /// The one Liquid Glass recipe every summonable surface draws with: regular
 /// glass tinted toward the window background so whatever sits behind the
 /// panel (a busy terminal, a photo) never competes with its text. Untinted
-/// `.regular` glass on macOS 26 lets that backdrop bleed straight through.
-/// `tintOpacity` is the knob the main session will tune by screenshot.
+/// `.regular` glass on macOS 27 lets that backdrop bleed straight through.
+/// `tintOpacity` is the one knob: 0 is bare glass, 1 an opaque slab.
 enum PanelGlass {
     static let tintOpacity: Double = 0.55
     static var shell: Glass {
