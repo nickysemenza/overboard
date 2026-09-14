@@ -94,6 +94,6 @@ struct ActionsSettingsTab: View {
 #if DEBUG
     #Preview("Actions") {
         ActionsSettingsTab()
-            .frame(width: 600, height: 500)
+            .frame(width: 520, height: 580)
     }
 #endif

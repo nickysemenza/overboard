@@ -200,6 +200,10 @@ The drawer preserves compact, equal-size cards with source-app headers, content 
 
 The launcher and drawer share a compact palette with an opaque `NSColor.windowBackgroundColor` fill, a subtle border, and a shadow: a plain query field, divider, filtered action rows, and accent selection. Use the same chrome and focus behavior while preserving the actions appropriate to each host. Its launcher placement leaves the reserved footer exposed.
 
+### Settings
+
+Settings follows the System Settings idiom: a fixed-width sidebar of panes (`NavigationSplitView`) rather than a top `TabView`. The window is a fixed 700pt wide and vertically resizable, so a tall pane like History can grow without widening the sidebar. Each pane is a grouped `Form` in the detail column. The sidebar's icon tiles borrow System Settings' own convention of one system color per pane (general gray, history blue, files teal, apps indigo, actions purple, permissions red) — this is a platform convention for wayfinding among settings panes, not the Kind Identity ramp above, and the two must not be conflated or share colors decoratively.
+
 ## Do's and Don'ts
 
 ### Do:

@@ -335,6 +335,6 @@ private struct FileIndexIssueRow: View {
             ),
             fileIssues: { ["/Users/you/Library/Mail: You don’t have permission to view this folder."] }
         )
-        .frame(width: 600, height: 500)
+        .frame(width: 520, height: 580)
     }
 #endif
