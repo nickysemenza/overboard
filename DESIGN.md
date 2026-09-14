@@ -148,7 +148,7 @@ The empty All scope presents sentence-case Suggestions before Recent searches. B
 
 ## Elevation & Depth
 
-Summonable surfaces share `glassPanel`, using regular Liquid Glass and a rounded silhouette. Floating action menus use an independent opaque native surface; overlapping glass shapes would merge behind the host content. Reduce Transparency supplies an opaque native window background; Reduce Motion disables the glass subtree's animations. Tonal content backgrounds and native dividers do most of the internal separation.
+Summonable surfaces share `glassPanel`, using regular Liquid Glass tinted toward the window background — so whatever sits behind the panel never competes with its text — and a rounded silhouette. Floating action menus use an independent opaque native surface; overlapping glass shapes would merge behind the host content. Reduce Transparency supplies an opaque native window background; Reduce Motion disables the glass subtree's animations. Tonal content backgrounds and native dividers do most of the internal separation.
 
 The command palette has an ambient shadow (black at 0.25 opacity, radius 18pt, vertical offset 6pt). Selected clipboard and snippet cards use a modest lift (scale 1.04) and a shadow (black at 0.28 opacity, radius 9pt, vertical offset 4pt). These soft shadows express elevation; they are not hard offset decoration.
 
