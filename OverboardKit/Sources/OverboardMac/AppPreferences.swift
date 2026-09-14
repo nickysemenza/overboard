@@ -82,6 +82,87 @@ public nonisolated extension Defaults.Keys {
     /// ("Sign in ・ Cloudflare Access") as a link's title; this heals every
     /// existing user's history exactly once rather than on every launch.
     static let didResetAccessLoginPreviews = Key<Bool>("didResetAccessLoginPreviews", default: false)
+    /// Every origin that has answered a link-preview fetch with a Cloudflare
+    /// Access challenge on this machine, for Settings › General › Cloudflare
+    /// Access. Sorted most-recently-challenged first; capped at
+    /// `CloudflareAccessHost.maxRecordedHosts`. Kept in `Defaults` rather than
+    /// the clipboard DB: each laptop keeps its own list of hosts and its own
+    /// `cloudflared` login state.
+    static let cloudflareAccessHosts = Key<[CloudflareAccessHost]>("cloudflareAccessHosts", default: [])
+}
+
+/// One origin ("https://wiki.cfdata.org") that has challenged a link-preview
+/// fetch with Cloudflare Access on this machine. `CloudflaredAccessTokens.token(for:)`
+/// is only ever called after such a challenge, so that's where entries get
+/// recorded (see `recordChallenge`).
+public nonisolated struct CloudflareAccessHost: Codable, Hashable, Identifiable, Sendable, Defaults.Serializable {
+    public var origin: String
+    public var firstSeen: Date
+    public var lastChallenged: Date
+    public var lastSignedIn: Date?
+
+    public var id: String {
+        self.origin
+    }
+
+    /// `origin` without its scheme, for display ("wiki.cfdata.org" rather
+    /// than "https://wiki.cfdata.org").
+    public var host: String {
+        Self.host(fromOrigin: self.origin)
+    }
+
+    public init(origin: String, firstSeen: Date, lastChallenged: Date, lastSignedIn: Date? = nil) {
+        self.origin = origin
+        self.firstSeen = firstSeen
+        self.lastChallenged = lastChallenged
+        self.lastSignedIn = lastSignedIn
+    }
+}
+
+public nonisolated extension CloudflareAccessHost {
+    /// Bound on the persisted host list. Generous headroom rather than a real
+    /// limit in practice: one entry per Access-gated internal service the
+    /// user's ever copied a link to, not per link.
+    static let maxRecordedHosts = 50
+
+    /// `origin` without its scheme. A static helper (not just the `host`
+    /// property) so the app target's HUD hint — which only has the origin
+    /// string `CloudflaredAccessTokens` hands it, not a `CloudflareAccessHost`
+    /// — can render the same short form.
+    static func host(fromOrigin origin: String) -> String {
+        guard let range = origin.range(of: "://") else { return origin }
+        return String(origin[range.upperBound...])
+    }
+
+    /// Upserts `origin`'s challenge into `hosts` — bumping `lastChallenged`
+    /// for an existing entry, appending a new one otherwise — then re-sorts
+    /// most-recently-challenged first and caps the result. The pure decision
+    /// behind `CloudflaredAccessTokens.token(for:)`'s `Defaults` write,
+    /// factored out so it's testable without shelling out to `cloudflared`.
+    static func recordChallenge(
+        in hosts: [CloudflareAccessHost], origin: String, now: Date
+    ) -> [CloudflareAccessHost] {
+        var updated = hosts
+        if let index = updated.firstIndex(where: { $0.origin == origin }) {
+            updated[index].lastChallenged = now
+        } else {
+            updated.append(CloudflareAccessHost(origin: origin, firstSeen: now, lastChallenged: now))
+        }
+        updated.sort { $0.lastChallenged > $1.lastChallenged }
+        return Array(updated.prefix(self.maxRecordedHosts))
+    }
+
+    /// Records a successful `cloudflared access login` for `origin`. A no-op
+    /// if the host isn't in the list — sign-in only ever runs from a row
+    /// Settings is already showing, which means it's already recorded.
+    static func recordSignIn(
+        in hosts: [CloudflareAccessHost], origin: String, now: Date
+    ) -> [CloudflareAccessHost] {
+        var updated = hosts
+        guard let index = updated.firstIndex(where: { $0.origin == origin }) else { return updated }
+        updated[index].lastSignedIn = now
+        return updated
+    }
 }
 
 /// Parsed views over the newline-list preference keys.

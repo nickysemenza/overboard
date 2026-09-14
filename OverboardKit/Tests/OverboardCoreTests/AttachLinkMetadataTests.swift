@@ -156,6 +156,40 @@ struct AttachLinkMetadataTests {
         #expect(try await store.search("Real page").count == 1)
     }
 
+    @Test func resetLinkMetadataForOriginHealsOnlyMatchingURLs() async throws {
+        let store = try makeStore()
+        // Under "https://wiki.x": the origin itself, and a path beneath it.
+        let exact = try #require(try await store.ingest(self.linkSnapshot("https://wiki.x")))
+        let nested = try #require(try await store.ingest(self.linkSnapshot("https://wiki.x/a")))
+        // Must NOT match: a different (if similar-prefixed) host, and the
+        // same path segment under an unrelated host.
+        let similarHost = try #require(try await store.ingest(self.linkSnapshot("https://wiki.xyz/a")))
+        let unrelatedHost = try #require(try await store.ingest(self.linkSnapshot("https://other/wiki.x")))
+
+        for item in [exact, nested, similarHost, unrelatedHost] {
+            try await store.attachLinkMetadata(
+                itemID: item.id, title: "Sign in ・ Cloudflare Access", description: nil,
+                faviconPNG: nil, previewImagePNG: nil
+            )
+        }
+        // All four are attempted, so none need a fetch right now.
+        #expect(try await store.linksNeedingMetadata(limit: 10).isEmpty)
+
+        let healed = try await store.resetLinkMetadata(forOrigin: "https://wiki.x")
+        #expect(Set(healed.map(\.id)) == Set([exact.id, nested.id]))
+
+        // Only the two under "https://wiki.x" are back in the backfill queue…
+        #expect(try await Set(store.linksNeedingMetadata(limit: 10).map(\.id)) == Set([exact.id, nested.id]))
+
+        let all = try await store.recent(limit: 10)
+        let byID = Dictionary(uniqueKeysWithValues: all.map { ($0.id, $0) })
+        #expect(byID[exact.id]?.linkTitle == nil)
+        #expect(byID[nested.id]?.linkTitle == nil)
+        // …the unrelated hosts are untouched.
+        #expect(byID[similarHost.id]?.linkTitle == "Sign in ・ Cloudflare Access")
+        #expect(byID[unrelatedHost.id]?.linkTitle == "Sign in ・ Cloudflare Access")
+    }
+
     @Test func backfillDrainsInNewestFirstOrder() async throws {
         let store = try makeStore()
         let older = try #require(try await store.ingest(self.linkSnapshot("https://example.com/older")))

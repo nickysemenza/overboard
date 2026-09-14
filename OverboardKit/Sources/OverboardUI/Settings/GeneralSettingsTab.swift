@@ -7,6 +7,8 @@ import ServiceManagement
 import SwiftUI
 
 struct GeneralSettingsTab: View {
+    let enrichment: ClipEnrichmentPipeline
+
     @Default(.restoreClipboard) private var restoreClipboard
     @Default(.launcherFileResults) private var launcherFileResults
     @Default(.launcherClipResults) private var launcherClipResults
@@ -26,12 +28,11 @@ struct GeneralSettingsTab: View {
             : "matching the tag means it’s a clean release build."
     }
 
-    /// The base footer, plus — only when `cloudflared` is actually installed,
-    /// since the sentence is meaningless otherwise — a note that a link
-    /// behind Cloudflare Access silently reuses the login `cloudflared`
-    /// already has cached rather than ever prompting the user. No toggle for
-    /// this: it's automatic, and silent when `cloudflared` is missing or has
-    /// no cached token for the host.
+    /// The base footer, plus one of two `cloudflared`-specific sentences:
+    /// installed hosts get the "Cloudflare Access" section below to sign in
+    /// from, so the footer just explains the automatic (no-toggle, silent)
+    /// reuse of `cloudflared`'s own cached login; without `cloudflared` there's
+    /// no section to point at, so the footer suggests installing it instead.
     private static var linkPreviewsFooter: String {
         let base = """
         Connects to the URLs you copy to fetch each page’s title, description, \
@@ -39,7 +40,9 @@ struct GeneralSettingsTab: View {
         your Mac; nothing is sent anywhere else. Turn this off to keep Overboard fully \
         offline.
         """
-        guard CloudflaredAccessTokens.isInstalled() else { return base }
+        guard CloudflaredAccessTokens.isInstalled() else {
+            return base + " Install cloudflared to preview links behind Cloudflare Access."
+        }
         return base + """
          Links behind Cloudflare Access reuse the login already cached by cloudflared; \
         Overboard never opens a browser to sign you in.
@@ -130,6 +133,10 @@ struct GeneralSettingsTab: View {
                 Text(Self.linkPreviewsFooter)
             }
 
+            if CloudflaredAccessTokens.isInstalled() {
+                CloudflareAccessSection(enrichment: self.enrichment)
+            }
+
             Section {
                 LabeledContent("Version", value: AppVersion.marketing)
                     .help("The tagged release this build descends from; it only changes when a release is cut.")
@@ -186,7 +193,8 @@ struct LaunchAtLoginToggle: View {
 
 #if DEBUG
     #Preview("General") {
-        GeneralSettingsTab()
+        let store = Fixtures.previewStore()
+        GeneralSettingsTab(enrichment: Fixtures.noOpEnrichmentPipeline(store: store))
             .frame(width: 520, height: 580)
     }
 #endif

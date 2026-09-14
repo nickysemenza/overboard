@@ -279,6 +279,28 @@ struct ClipEnrichmentPipelineTests {
         #expect(try await self.reload(item.id, from: store).linkTitle == "Example")
     }
 
+    @Test func refetchLinkMetadataResetsThenRefetchesMatchingItems() async throws {
+        let store = try self.makeStore()
+        let calls = SeamCalls()
+        let underOrigin = try #require(try await store.ingest(self.textSnapshot("https://wiki.x/a")))
+        let elsewhere = try #require(try await store.ingest(self.textSnapshot("https://example.com/x")))
+        for item in [underOrigin, elsewhere] {
+            try await store.attachLinkMetadata(
+                itemID: item.id, title: "Sign in ・ Cloudflare Access", description: nil,
+                faviconPNG: nil, previewImagePNG: nil
+            )
+        }
+
+        let pipeline = self.makePipeline(store: store, calls: calls, metadata: LinkMetadata(title: "Wiki Home"))
+        await pipeline.refetchLinkMetadata(origin: "https://wiki.x")
+
+        // Only the item under the origin was reset and re-fetched…
+        #expect(await calls.fetched.map(\.absoluteString) == ["https://wiki.x/a"])
+        #expect(try await self.reload(underOrigin.id, from: store).linkTitle == "Wiki Home")
+        // …the other host's link is untouched.
+        #expect(try await self.reload(elsewhere.id, from: store).linkTitle == "Sign in ・ Cloudflare Access")
+    }
+
     // MARK: - Images
 
     @Test func imageClipAttachesRecognizedText() async throws {
