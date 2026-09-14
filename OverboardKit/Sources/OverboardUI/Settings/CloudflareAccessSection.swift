@@ -144,17 +144,21 @@ private struct CloudflareAccessHostRow: View {
         LabeledContent {
             HStack(spacing: 10) {
                 self.trailingContent
-                if self.isHovering, self.activity == .idle {
-                    Button {
-                        self.onForget()
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.borderless)
-                    .help("Forget this host")
-                    .accessibilityLabel("Forget \(self.host.host)")
+                // Always laid out, only faded: inserting it on hover would
+                // shove the Sign in button sideways under the pointer.
+                let showsForget = self.isHovering && self.activity == .idle
+                Button {
+                    self.onForget()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
                 }
+                .buttonStyle(.borderless)
+                .help("Forget this host")
+                .accessibilityLabel("Forget \(self.host.host)")
+                .opacity(showsForget ? 1 : 0)
+                .allowsHitTesting(showsForget)
+                .accessibilityHidden(!showsForget)
             }
         } label: {
             VStack(alignment: .leading, spacing: 2) {
