@@ -15,18 +15,25 @@ import Foundation
 final class RedirectGuard: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
     func urlSession(
         _: URLSession,
-        task _: URLSessionTask,
+        task: URLSessionTask,
         willPerformHTTPRedirection _: HTTPURLResponse,
-        newRequest request: URLRequest,
+        newRequest: URLRequest,
         completionHandler: @escaping (URLRequest?) -> Void
     ) {
-        guard let url = request.url else {
+        guard let url = newRequest.url else {
             completionHandler(nil)
             return
         }
         if LinkMetadataFetcher.isCloudflareAccessLogin(url) {
             completionHandler(nil)
             return
+        }
+        // URLSession carries the original headers onto the redirected
+        // request. The Access JWT is scoped to the page's own origin and
+        // must not follow a hop to some other host.
+        var request = newRequest
+        if url.host != task.originalRequest?.url?.host {
+            request.setValue(nil, forHTTPHeaderField: LinkMetadataFetcher.accessTokenHeader)
         }
         // The DNS check is now async (see `isConnectPermitted`), so the
         // decision can't be made before this synchronous delegate callback

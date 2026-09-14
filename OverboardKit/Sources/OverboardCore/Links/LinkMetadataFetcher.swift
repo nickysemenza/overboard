@@ -28,6 +28,10 @@ public struct LinkMetadataFetcher: Sendable {
     /// See `accessToken`.
     public typealias AccessTokenProvider = @Sendable (URL) async -> String?
 
+    /// The header Access validates a JWT from — the same one
+    /// `cloudflared access curl` adds.
+    static let accessTokenHeader = "cf-access-token"
+
     /// Cap on streamed HTML — enough for any real `<head>`, small enough that a
     /// pathological page can't exhaust memory. Internal (not `private`) so
     /// `fetchHTML` can reach it from LinkMetadataFetcher+Decoding.swift.
@@ -243,7 +247,7 @@ public struct LinkMetadataFetcher: Sendable {
             // means the token was rejected, expired, or missing, and we give
             // up rather than looping.
             guard let accessToken, let jwt = await accessToken(url) else { return nil }
-            headers = ["cf-access-token": jwt]
+            headers = [Self.accessTokenHeader: jwt]
             switch await self.fetchHTML(url, headers: headers) {
             case let .page(pageHTML, pageFinalURL):
                 html = pageHTML

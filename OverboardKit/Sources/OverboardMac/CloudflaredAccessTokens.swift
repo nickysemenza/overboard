@@ -24,10 +24,11 @@ public actor CloudflaredAccessTokens {
     /// process per link during a backfill burst, not about respecting the
     /// JWT's actual expiry.
     private static let positiveTTL: TimeInterval = 5 * 60
-    /// Held longer than the positive TTL: a host with no Access application
-    /// (the common case — `cloudflared` prints its "failed to find" sentinel)
-    /// isn't going to gain one in the next few minutes, so it's worth caching
-    /// harder to avoid spawning `cloudflared` for every non-Access link too.
+    /// Held longer than the positive TTL. Lookups only happen after an
+    /// Access challenge, so a miss means this machine has no cached login
+    /// for the host (the other laptop, or `cloudflared access login` never
+    /// run) — and that isn't going to change in the next few minutes, while a
+    /// backfill batch may hold many links from that host.
     private static let negativeTTL: TimeInterval = 10 * 60
     /// `cloudflared access token` should return near-instantly (it reads a
     /// local credential cache, no network round trip for a cache hit) or not
@@ -183,10 +184,12 @@ public actor CloudflaredAccessTokens {
                 let data = stdout.fileHandleForReading.readDataToEndOfFile()
                 let output = String(data: data, encoding: .utf8)?
                     .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                // `cloudflared` prints "failed to find Access application at
-                // …" to stdout with exit code 0 for a host that isn't behind
-                // Access at all, so the exit code alone can't distinguish
-                // success from that case — only the JWT shape can.
+                // Only the JWT shape counts as success. `cloudflared`'s
+                // "failed to find Access application" / "Unable to find
+                // token" messages have moved between stdout and stderr and
+                // between exit codes across versions (2026.9.1: stderr,
+                // exit 1), so neither the exit code nor "stdout non-empty"
+                // is a reliable signal.
                 resume(self.isJWTShaped(output) ? output : nil)
             }
 
