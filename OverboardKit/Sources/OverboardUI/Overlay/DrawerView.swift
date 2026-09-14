@@ -12,6 +12,11 @@ public struct DrawerView: View {
     /// unscaled base in `CardMetrics` (see its note on macOS Dynamic Type).
     @ScaledMetric(relativeTo: .callout) var cardHeight: CGFloat = CardMetrics.height
 
+    /// Transparent margin between the glass shell and the borderless panel's
+    /// edge; `OverlayController` adds it back when sizing the panel from
+    /// `collapsedShellHeight`.
+    static let outerPadding: CGFloat = 12
+
     public init(viewModel: DrawerViewModel) {
         self.viewModel = viewModel
     }
@@ -44,13 +49,20 @@ public struct DrawerView: View {
         .motion(DrawerViewModel.previewMotion, value: self.viewModel.previewState)
         .padding(14)
         .glassPanel(cornerRadius: PanelRadius.drawer)
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+            // Model geometry, not per-frame animation values, so during the
+            // close spring this reports the settled collapsed height once.
+            if self.viewModel.previewState == .hidden {
+                self.viewModel.collapsedShellHeight = height
+            }
+        }
         .overlay {
             if self.viewModel.isPaletteOpen {
                 ActionPalette(viewModel: self.viewModel)
                     .transition(.scale(scale: 0.95).combined(with: .opacity))
             }
         }
-        .padding(12)
+        .padding(Self.outerPadding)
         .onAppear {
             self.searchFocused = true
             // The overlay controller can't reach SwiftUI environment actions;

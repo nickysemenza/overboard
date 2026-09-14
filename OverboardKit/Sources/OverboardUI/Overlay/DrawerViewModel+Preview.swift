@@ -27,8 +27,16 @@ public extension DrawerViewModel {
             // incoming PreviewPane out inside the still-collapsed frame,
             // clipping or squeezing it until the resize catches up.
             self.onPreviewVisibilityChanged(true)
-            withAnimation(self.motion) {
-                self.previewState = .viewing
+            // On the next run-loop turn, not now: the resize above reaches
+            // SwiftUI as an unanimated root-size update, and a state change
+            // made in the same turn is folded into it — the pane then appears
+            // as a hard cut. One turn later the frame change has flushed and
+            // this transaction keeps its spring. The panel is transparent, so
+            // the one-frame gap shows nothing.
+            DispatchQueue.main.async {
+                withAnimation(self.motion) {
+                    self.previewState = .viewing
+                }
             }
         case .viewing, .editing:
             self.closePreview()
