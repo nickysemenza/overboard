@@ -212,13 +212,15 @@ extension ItemCardView {
     /// behind Cloudflare Access — the one thing the card can say without
     /// making the user go find Settings first.
     private var accessWarning: some View {
-        HStack(spacing: 4) {
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
             Image(systemName: "lock.shield")
+            // Two lines: the card is 190pt wide and one line truncates
+            // "Cloudflare Access" to "Cloudflare A…".
             Text("Sign in required · Cloudflare Access")
+                .lineLimit(2)
         }
         .font(.caption)
         .foregroundStyle(.orange)
-        .lineLimit(1)
         .help("Behind Cloudflare Access — sign in from ⌘K or Settings › General")
     }
 
