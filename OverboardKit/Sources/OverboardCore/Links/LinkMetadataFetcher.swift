@@ -4,7 +4,7 @@ import UniformTypeIdentifiers
 
 /// Fetches rich-link metadata for a URL over the network: streams the page's
 /// `<head>`, parses it, then pulls and downscales the favicon and preview
-/// image. Silent-fail throughout (nil on any error), like `UpdateChecker` —
+/// image. Silent-fail throughout (nil on any error), by design —
 /// a link works fine without a preview. Networking is user-opt-in and gated by
 /// the caller; this type assumes it's allowed to run.
 public struct LinkMetadataFetcher: Sendable {

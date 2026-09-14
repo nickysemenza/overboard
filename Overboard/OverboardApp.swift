@@ -6,18 +6,10 @@ import SwiftUI
 struct OverboardApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @Environment(\.openWindow) private var openWindow
-    private let updates = AppServices.shared.updates
     private let captureState = AppServices.shared.captureState
 
     var body: some Scene {
         MenuBarExtra {
-            if let tag = self.updates.availableTag {
-                Button("Download \(tag)…") {
-                    AppServices.shared.updates.openReleasePage()
-                }
-                Divider()
-            }
-
             SummonMenuItem(
                 title: "Show Launcher",
                 shortcutDescription: HotkeyService.toggleLauncherShortcutDescription
@@ -60,10 +52,6 @@ struct OverboardApp: App {
 
             Divider()
 
-            Button("Check for Updates…") {
-                Task { await AppServices.shared.updates.checkNow() }
-            }
-
             Button("About Overboard") {
                 NSApp.activate(ignoringOtherApps: true)
                 NSApp.orderFrontStandardAboutPanel(nil)
@@ -91,7 +79,6 @@ struct OverboardApp: App {
         } label: {
             MenuBarLabel(
                 signal: AppServices.shared.signal,
-                updates: self.updates,
                 captureState: self.captureState
             )
             // The menu-bar label is the only view SwiftUI renders at launch, so
@@ -134,8 +121,7 @@ struct OverboardApp: App {
         Settings {
             SettingsView(
                 store: AppServices.shared.store,
-                navigation: AppServices.shared.settingsNavigation,
-                checkForUpdates: { await AppServices.shared.updates.checkNow() }
+                navigation: AppServices.shared.settingsNavigation
             )
         }
     }
@@ -163,26 +149,18 @@ private struct SummonMenuItem: View {
     }
 }
 
-/// The boat bounces whenever something is captured, and gains a badge when a
-/// newer release is waiting to be downloaded. While capture is paused it dims
-/// to the secondary style so an off clipboard is visible at a glance.
+/// The boat bounces whenever something is captured. While capture is paused it
+/// dims to the secondary style so an off clipboard is visible at a glance.
 private struct MenuBarLabel: View {
     let signal: CaptureSignal
-    let updates: UpdateChecker
     let captureState: CaptureState
 
     var body: some View {
-        Image(systemName: self.symbolName)
-            .contentTransition(.symbolEffect(.replace))
+        Image(systemName: "sailboat.fill")
             .symbolEffect(.bounce, value: self.signal.count)
-            // Dim the boat while paused so an off clipboard is obvious. Update
-            // state still owns the circle-badge variant; pause owns the opacity.
+            // Dim the boat while paused so an off clipboard is obvious.
             .foregroundStyle(self.captureState.isPaused ? .secondary : .primary)
             .accessibilityLabel("Overboard")
             .accessibilityValue(self.captureState.isPaused ? "Capture paused" : "Capturing")
-    }
-
-    private var symbolName: String {
-        self.updates.availableTag != nil ? "sailboat.fill.circle" : "sailboat.fill"
     }
 }
