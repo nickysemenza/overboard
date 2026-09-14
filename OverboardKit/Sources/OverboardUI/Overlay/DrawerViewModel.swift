@@ -89,6 +89,11 @@ public final class DrawerViewModel {
     public var onCommitEditedText: (String) -> Void = { _ in }
     /// The controller resizes the panel when the preview pane opens/closes.
     public var onPreviewVisibilityChanged: (Bool) -> Void = { _ in }
+    /// Height of the drawer's glass shell in the collapsed state, reported by
+    /// `DrawerView` from its own layout so the controller can size the panel
+    /// to what the content actually needs (the saved-search chip bar comes
+    /// and goes). `nil` until the drawer has laid out once.
+    public internal(set) var collapsedShellHeight: CGFloat?
 
     let store: ClipStore
     /// `internal`: cancelled and restarted from `jump(toItemID:)` in the

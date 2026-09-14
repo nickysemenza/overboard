@@ -148,7 +148,7 @@ public final class OverlayController {
 
         let screen = self.screenWithMouse()
         let visible = screen.visibleFrame
-        let height = CardMetrics.collapsedPanelHeight
+        let height = self.collapsedPanelHeight
         panel.setFrame(
             NSRect(x: visible.minX, y: visible.minY, width: visible.width, height: height),
             display: false

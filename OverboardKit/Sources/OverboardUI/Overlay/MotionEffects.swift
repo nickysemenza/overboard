@@ -73,11 +73,13 @@ enum CardMetrics {
     /// The card strip's 2pt vertical breathing room on each side.
     private static let stripPadding: CGFloat = 2
 
-    /// Everything in the collapsed drawer that isn't the card strip: the panel
-    /// padding, the search bar, the stack spacing, the divider above the
-    /// footer, and the shared `PanelFooterBar` itself (replacing what used to
-    /// be a plain ~13pt caption hint line).
-    private static let drawerChrome: CGFloat = 98 - 13 + PanelFooterBar.height + 1
+    /// Everything in the collapsed drawer that isn't the card strip, top to
+    /// bottom: the transparent outer margin and the shell's inner padding
+    /// (both sides), the search field, the three `VStack(spacing: 10)` gaps,
+    /// the divider, and the shared `PanelFooterBar`. Measured against the live
+    /// drawer; `OverlayController` prefers the height the drawer reports from
+    /// its own layout and only falls back to this before the first show.
+    private static let drawerChrome: CGFloat = 12 * 2 + 14 * 2 + 20 + 10 * 3 + 1 + PanelFooterBar.height
 
     /// Height of the horizontal card strip for a (possibly scaled) card.
     static func stripHeight(cardHeight: CGFloat = height) -> CGFloat {

@@ -12,34 +12,62 @@ public struct DrawerView: View {
     /// unscaled base in `CardMetrics` (see its note on macOS Dynamic Type).
     @ScaledMetric(relativeTo: .callout) var cardHeight: CGFloat = CardMetrics.height
 
+    /// Transparent margin between the glass shell and the borderless panel's
+    /// edge; `OverlayController` adds it back when sizing the panel from
+    /// `collapsedShellHeight`.
+    static let outerPadding: CGFloat = 12
+
     public init(viewModel: DrawerViewModel) {
         self.viewModel = viewModel
     }
 
     public var body: some View {
         VStack(spacing: 10) {
-            if self.viewModel.previewState == .hidden {
-                self.searchBar
-                if self.viewModel.mode == .history, !self.savedSearches.isEmpty {
-                    self.savedSearchBar
+            // The two states overlap in a ZStack rather than swapping in the
+            // VStack, so the height the outgoing content still occupies never
+            // adds to the incoming one. Opening: the strip block fades out in
+            // place while the pane fades in and the shell grows around it.
+            // Closing: the pane leaves the layout instantly (`.identity`) —
+            // its `maxHeight: .infinity` body would otherwise hold the shell
+            // at full height until the fade finished and then snap — and the
+            // strip block fades in as the shell shrinks. Both under the
+            // `.motion` on `previewState` below.
+            ZStack(alignment: .bottom) {
+                if self.viewModel.previewState == .hidden {
+                    VStack(spacing: 10) {
+                        self.searchBar
+                        if self.viewModel.mode == .history, !self.savedSearches.isEmpty {
+                            self.savedSearchBar
+                        }
+                        self.cardStrip
+                    }
+                    .transition(.opacity)
+                } else {
+                    PreviewPane(viewModel: self.viewModel)
+                        .transition(.asymmetric(insertion: .opacity, removal: .identity))
                 }
-                self.cardStrip
-            } else {
-                PreviewPane(viewModel: self.viewModel)
             }
             Divider()
             self.footerBar
         }
         .motion(.spring(response: 0.22, dampingFraction: 0.85), value: self.viewModel.isPaletteOpen)
+        .motion(DrawerViewModel.previewMotion, value: self.viewModel.previewState)
         .padding(14)
         .glassPanel(cornerRadius: PanelRadius.drawer)
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+            // Model geometry, not per-frame animation values, so during the
+            // close spring this reports the settled collapsed height once.
+            if self.viewModel.previewState == .hidden {
+                self.viewModel.collapsedShellHeight = height
+            }
+        }
         .overlay {
             if self.viewModel.isPaletteOpen {
                 ActionPalette(viewModel: self.viewModel)
                     .transition(.scale(scale: 0.95).combined(with: .opacity))
             }
         }
-        .padding(12)
+        .padding(Self.outerPadding)
         .onAppear {
             self.searchFocused = true
             // The overlay controller can't reach SwiftUI environment actions;
