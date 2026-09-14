@@ -222,23 +222,10 @@ struct LauncherPreview: View {
         case let .shellCommand(command):
             self.text = command
         case let .calendarEvent(event):
-            self.text = self.calendarPreviewText(for: event)
+            self.text = UpcomingEventFormatter.preview(for: event, now: .now)
         default:
             break
         }
-    }
-
-    /// Title + time range + location + join link — a plain-text stand-in
-    /// until `UpcomingEventFormatter.preview` supplies the richer version.
-    private func calendarPreviewText(for event: CalendarEvent) -> String {
-        var lines = [event.title, UpcomingEventFormatter.timeRange(for: event, now: .now)]
-        if let location = event.location, !location.isEmpty {
-            lines.append(location)
-        }
-        if let link = event.meetingLink {
-            lines.append(link.url.absoluteString)
-        }
-        return lines.joined(separator: "\n")
     }
 
     private func loadClipContent(_ item: ClipItem) async throws {

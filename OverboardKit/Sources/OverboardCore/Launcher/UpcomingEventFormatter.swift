@@ -52,4 +52,38 @@ public enum UpcomingEventFormatter {
     {
         "\(self.relative(to: event, now: now)) · \(self.timeRange(for: event, now: now, calendar: calendar))"
     }
+
+    /// The preview pane's multi-line body: title, a full date + time range,
+    /// the source calendar, location, join link, and notes — whichever of the
+    /// optional fields are actually present, in that order.
+    public static func preview(for event: CalendarEvent, now: Date,
+                               calendar: Calendar = .autoupdatingCurrent) -> String
+    {
+        var lines = [event.title, self.fullDateAndRange(for: event, now: now, calendar: calendar)]
+        if let calendarTitle = event.calendarTitle, !calendarTitle.isEmpty {
+            lines.append(calendarTitle)
+        }
+        if let location = event.location, !location.isEmpty {
+            lines.append(location)
+        }
+        if let link = event.meetingLink {
+            lines.append(link.url.absoluteString)
+        }
+        if let notes = event.notes, !notes.isEmpty {
+            lines.append(notes)
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    /// "Tuesday, September 15, 2026 at 10:30 – 11:00 AM" — the preview's full
+    /// date, unlike `timeRange`'s bare clock time.
+    private static func fullDateAndRange(for event: CalendarEvent, now _: Date, calendar: Calendar) -> String {
+        let formatter = DateIntervalFormatter()
+        formatter.calendar = calendar
+        formatter.locale = calendar.locale ?? .autoupdatingCurrent
+        formatter.timeZone = calendar.timeZone
+        formatter.dateStyle = .full
+        formatter.timeStyle = .short
+        return formatter.string(from: event.start, to: event.end)
+    }
 }

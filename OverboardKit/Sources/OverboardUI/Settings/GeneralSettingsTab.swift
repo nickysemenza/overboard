@@ -15,6 +15,7 @@ struct GeneralSettingsTab: View {
     @Default(.launcherSnippetResults) private var launcherSnippetResults
     @Default(.launcherSettingsResults) private var launcherSettingsResults
     @Default(.launcherNowPlaying) private var launcherNowPlaying
+    @Default(.launcherCalendarEvents) private var launcherCalendarEvents
     @Default(.launcherAppAliases) private var launcherAppAliases
     @Default(.launcherQuicklinks) private var launcherQuicklinks
     @Default(.updateCheckEnabled) private var updateCheckEnabled
@@ -46,6 +47,7 @@ struct GeneralSettingsTab: View {
                     isOn: self.$launcherSettingsResults
                 )
                 Toggle("Show Spotify now playing in launcher", isOn: self.$launcherNowPlaying)
+                Toggle("Show calendar events in launcher", isOn: self.$launcherCalendarEvents)
                 LabeledContent("App aliases") {
                     TextEditor(text: self.$launcherAppAliases)
                         .font(.body.monospaced())
@@ -66,12 +68,12 @@ struct GeneralSettingsTab: View {
                 Text(
                     """
                     All mixes apps, files, clipboard, snippets, calculator, system settings, AI, \
-                    and now playing. System settings, actions, and audio outputs also add Lock \
-                    Screen, Sleep, Restart, and switching your Mac’s audio output device. Use \
-                    ⌘1–4 to switch scopes. File search locations are managed in Files. Aliases are \
-                    one “sm = Sublime Merge” per line; initials work automatically. Quicklinks are \
-                    one “gh = https://github.com/search?q={query}” per line (optionally \
-                    “gh = GitHub | URL”) — type the keyword, a space, then your search.
+                    now playing, and calendar events. System settings, actions, and audio outputs \
+                    also add Lock Screen, Sleep, Restart, and switching your Mac’s audio output \
+                    device. Use ⌘1–4 to switch scopes. File search locations are managed in Files. \
+                    Aliases are one “sm = Sublime Merge” per line; initials work automatically. \
+                    Quicklinks are one “gh = https://github.com/search?q={query}” per line \
+                    (optionally “gh = GitHub | URL”) — type the keyword, a space, then your search.
                     """
                 )
             }

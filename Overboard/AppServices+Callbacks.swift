@@ -65,6 +65,7 @@ extension AppServices {
         self.installLauncherMiscCallbacks()
         self.installLauncherShellCallbacks()
         self.installLauncherSystemCallbacks()
+        self.installLauncherCalendarCallbacks()
     }
 
     /// Summon-time refresh (Spotify snapshot, running-app dots) and the
@@ -88,6 +89,7 @@ extension AppServices {
             guard let self else { return }
             if !Self.isDemo {
                 self.spotify.refreshSnapshot()
+                self.calendar.refreshSnapshot()
             }
             self.launcherViewModel.runningAppPaths = self.runningApps.snapshot()
             self.runningApps.startObserving()
@@ -281,6 +283,20 @@ extension AppServices {
             } catch {
                 HUDController.shared.flash("Couldn't switch output")
             }
+        }
+    }
+
+    /// ↩/⌘↩/⌥↩ on a calendar-event row: join the meeting, copy its link, or
+    /// open the event in Calendar.app.
+    private func installLauncherCalendarCallbacks() {
+        self.launcher.onJoinMeeting = { _, url in
+            NSWorkspace.shared.open(url)
+        }
+        self.launcher.onCopyMeetingLink = { [weak self] _, url in
+            self?.copyString(url.absoluteString, hud: "Meeting link copied — ⌘V to paste")
+        }
+        self.launcher.onOpenInCalendar = { event in
+            CalendarSource.openInCalendar(event)
         }
     }
 

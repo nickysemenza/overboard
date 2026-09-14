@@ -153,6 +153,16 @@ extension AppServices {
         self.spotify.start()
     }
 
+    /// Calendar up-next: observe EventKit changes, refresh an open panel on
+    /// change, and reconcile a fresh snapshot each time the launcher opens.
+    func startCalendarSource() {
+        self.calendar.onChange = { [weak self] in
+            guard let self, self.launcher.isVisible else { return }
+            self.launcher.refreshRows()
+        }
+        self.calendar.start()
+    }
+
     /// Applies the user's auto-transform-on-copy rules to a snapshot's
     /// plain-text representation before it's stored, so e.g. tracking params are
     /// stripped from browser URLs at capture. Rich (RTF/HTML) reps are left

@@ -76,4 +76,39 @@ struct LauncherCommitRoutingCalendarTests {
 
         #expect(opened == [event])
     }
+
+    /// `pinnedResults` puts the calendar row before the now-playing row, and
+    /// on an empty query that order is preserved verbatim (no re-sort). The
+    /// empty field also lists recent searches from the process-wide
+    /// `Defaults[.launcherSearchHistory]`, which other suites write, so only
+    /// the pinned suffix is asserted.
+    @Test func calendarPinsBeforeNowPlayingOnEmptyQuery() async {
+        let event = self.event()
+        let track = LauncherCommitRoutingFixtures.track
+        let viewModel = LauncherViewModel(instantProviders: [], secondaryProviders: [])
+        viewModel.pinnedResults = { [.calendarEvent(event), .nowPlaying(track)] }
+
+        viewModel.query = ""
+        viewModel.scheduleSearch()
+        await viewModel.settle()
+
+        #expect(viewModel.results.suffix(2) == [.calendarEvent(event), .nowPlaying(track)])
+    }
+
+    /// A calendar event surfaced by both the instant provider (matching the
+    /// query) and `pinnedResults` (the up-next row) appears once, not twice.
+    @Test func pinnedCalendarDedupsAgainstProviderRow() async {
+        let event = self.event()
+        let viewModel = LauncherViewModel(
+            instantProviders: [StubProvider(rows: [.calendarEvent(event)])],
+            secondaryProviders: []
+        )
+        viewModel.pinnedResults = { [.calendarEvent(event)] }
+
+        viewModel.query = "cal"
+        viewModel.scheduleSearch()
+        await viewModel.settle()
+
+        #expect(viewModel.results.filter { $0.id == LauncherResult.calendarEvent(event).id }.count == 1)
+    }
 }

@@ -39,6 +39,9 @@ public nonisolated extension Defaults.Keys {
     static let launcherSettingsResults = Key<Bool>("launcherSettingsResults", default: true)
     /// Spotify now-playing row pinned to the bottom of the launcher.
     static let launcherNowPlaying = Key<Bool>("launcherNowPlaying", default: true)
+    /// Upcoming calendar events results (and the pinned up-next row) in the
+    /// launcher.
+    static let launcherCalendarEvents = Key<Bool>("launcherCalendarEvents", default: true)
     /// Launcher app-search aliases, one "alias = App Name" per line.
     static let launcherAppAliases = Key<String>("launcherAppAliases", default: "")
     /// User-defined launcher quicklinks, one `keyword = URL` (or `keyword = Name | URL`)

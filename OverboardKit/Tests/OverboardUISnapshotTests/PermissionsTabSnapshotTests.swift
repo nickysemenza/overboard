@@ -19,7 +19,8 @@ struct PermissionsTabSnapshotTests {
                         "com.apple.Safari": .granted,
                         "com.google.Chrome": .denied,
                         "com.spotify.client": .unknown,
-                    ]
+                    ],
+                    calendar: .denied
                 ),
                 fileIssues: {
                     ["/Users/overboard/Library/Mail: You don’t have permission to view this folder."]
@@ -32,6 +33,6 @@ struct PermissionsTabSnapshotTests {
     }
 
     @Test func permissionsTab() {
-        assertSnapshot(of: self.host(), as: snapshotImageStrategy)
+        assertSnapshot(of: self.host(), as: snapshotImageStrategy, record: snapshotRecordingMode)
     }
 }

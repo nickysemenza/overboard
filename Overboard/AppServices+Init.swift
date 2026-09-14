@@ -60,10 +60,11 @@ extension AppServices {
     static func makeLauncherViewModel(
         store: ClipStore,
         spotify: SpotifyNowPlayingMonitor,
+        calendar: CalendarSource,
         pausedSnapshot: OSAllocatedUnfairLock<Bool>
     ) -> LauncherViewModel {
         let launcherViewModel = LauncherViewModel(
-            instantProviders: Self.makeInstantProviders(),
+            instantProviders: Self.makeInstantProviders(calendar: calendar),
             secondaryProviders: [
                 ConditionalProvider(SnippetSearchProvider(store: store)) {
                     Defaults[.launcherSnippetResults]
@@ -104,21 +105,18 @@ extension AppServices {
                 isAvailable: { AITransformer.isAvailable && Defaults[.aiFeatures] }
             )
         )
-        // Pin the Spotify now-playing row under every result list when enabled
-        // and a track is present. The monitor stays nil in demo mode (never
-        // started), so screenshots never leak listening.
-        launcherViewModel.pinnedResults = { [spotify] in
-            guard Defaults[.launcherNowPlaying], let track = spotify.current else { return [] }
-            return [.nowPlaying(track)]
-        }
+        // Pin the up-next calendar event and the Spotify now-playing row under
+        // every result list, in that order, when each is enabled and has
+        // something to show.
+        launcherViewModel.pinnedResults = Self.pinnedLauncherResults(spotify: spotify, calendar: calendar)
         return launcherViewModel
     }
 
     /// Quicklinks, `>` shell commands, apps, system settings panes, system
-    /// actions (lock/sleep/restart), and audio outputs — every result cheap
+    /// actions (lock/sleep/restart), audio outputs, and calendar events — every result cheap
     /// enough to compute on each keystroke. Split out of
     /// `makeLauncherViewModel` to keep that initializer readable.
-    private static func makeInstantProviders() -> [any LauncherProvider] {
+    private static func makeInstantProviders(calendar: CalendarSource) -> [any LauncherProvider] {
         [
             QuicklinkProvider { Quicklink.parse(Defaults[.launcherQuicklinks]) },
             ShellCommandProvider(isAvailable: { GhosttyLauncher.isInstalled() }),
@@ -138,6 +136,54 @@ extension AppServices {
             )) {
                 Defaults[.launcherSettingsResults]
             },
+            self.calendarEventsProvider(calendar: calendar),
         ]
+    }
+
+    /// The launcher's `cal`/`calendar`/`today`/`tomorrow`/`meetings`/`events`
+    /// instant provider. Demo mode reads `DemoSeed`'s fake events and reports
+    /// itself always-authorized (never touches EventKit); the real build reads
+    /// `CalendarSource`'s live snapshot and its actual authorization state.
+    private static func calendarEventsProvider(calendar: CalendarSource) -> ConditionalProvider {
+        isDemo
+            ? ConditionalProvider(UpcomingEventsProvider(
+                events: { DemoSeed.calendarEvents(now: .now) },
+                isAuthorized: { true }
+            )) { Defaults[.launcherCalendarEvents] }
+            : ConditionalProvider(UpcomingEventsProvider(
+                events: { calendar.snapshot.withLock { $0 } },
+                isAuthorized: { CalendarSource.authorization == .granted }
+            )) { Defaults[.launcherCalendarEvents] }
+    }
+
+    /// The pinned-footer rows: the up-next calendar event, then the Spotify
+    /// now-playing row, each included only when its toggle is on and it has
+    /// something to show. Demo mode pins from `DemoSeed`'s fake events (its
+    /// near-term one is deliberately a few minutes out, for screenshots)
+    /// instead of the developer's own calendar; the real Spotify monitor is
+    /// never started in demo mode, so `spotify.current` is already nil there.
+    private static func pinnedLauncherResults(
+        spotify: SpotifyNowPlayingMonitor,
+        calendar: CalendarSource
+    ) -> () -> [LauncherResult] {
+        { [spotify] in
+            let pinnedEvent: LauncherResult? = {
+                guard Defaults[.launcherCalendarEvents] else { return nil }
+                let next: CalendarEvent? = Self.isDemo
+                    ? Self.nextEvent(in: DemoSeed.calendarEvents(now: .now), now: .now)
+                    : (CalendarSource.authorization == .granted ? calendar.nextEvent(now: .now) : nil)
+                return next.map { .calendarEvent($0) }
+            }()
+            let pinnedTrack: LauncherResult? = Defaults[.launcherNowPlaying]
+                ? spotify.current.map { .nowPlaying($0) }
+                : nil
+            return [pinnedEvent, pinnedTrack].compactMap(\.self)
+        }
+    }
+
+    /// The earliest not-yet-ended event — the same rule `CalendarSource.nextEvent`
+    /// applies to its live snapshot, reused here for `DemoSeed`'s fake array.
+    private static func nextEvent(in events: [CalendarEvent], now: Date) -> CalendarEvent? {
+        events.filter { $0.end > now }.min { $0.start < $1.start }
     }
 }

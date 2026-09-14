@@ -86,4 +86,34 @@ struct UpcomingEventFormatterTests {
         #expect(subtitle == "in 12m · \(range)")
         #expect(range.hasPrefix("10:12") && range.hasSuffix("10:42"), "\(range)")
     }
+
+    @Test func previewListsTitleDateCalendarLocationLinkAndNotes() throws {
+        let url = try #require(URL(string: "https://meet.google.com/abc-defg-hij"))
+        let event = CalendarEvent(
+            eventIdentifier: "evt1",
+            title: "Standup",
+            start: Self.now.addingTimeInterval(30 * 60),
+            end: Self.now.addingTimeInterval(60 * 60),
+            location: "Zoom",
+            notes: "Bring status updates",
+            url: url,
+            calendarTitle: "Work"
+        )
+        let preview = UpcomingEventFormatter.preview(for: event, now: Self.now, calendar: Self.calendar)
+        let lines = preview.components(separatedBy: "\n")
+        #expect(lines[0] == "Standup")
+        #expect(lines[1].contains("2026"))
+        #expect(lines[1].contains("10:30"))
+        #expect(lines[2] == "Work")
+        #expect(lines[3] == "Zoom")
+        #expect(lines[4] == "https://meet.google.com/abc-defg-hij")
+        #expect(lines[5] == "Bring status updates")
+    }
+
+    @Test func previewOmitsMissingOptionalFields() {
+        let event = self.event(startOffset: 30 * 60, duration: 30 * 60)
+        let preview = UpcomingEventFormatter.preview(for: event, now: Self.now, calendar: Self.calendar)
+        let lines = preview.components(separatedBy: "\n")
+        #expect(lines == [event.title, lines[1]])
+    }
 }

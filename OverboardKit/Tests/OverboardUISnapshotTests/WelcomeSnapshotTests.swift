@@ -23,10 +23,10 @@ struct WelcomeSnapshotTests {
     }
 
     @Test func welcome() {
-        assertSnapshot(of: self.host(), as: snapshotImageStrategy)
+        assertSnapshot(of: self.host(), as: snapshotImageStrategy, record: snapshotRecordingMode)
     }
 
     @Test func welcomeDark() {
-        assertSnapshot(of: self.host(dark: true), as: snapshotImageStrategy)
+        assertSnapshot(of: self.host(dark: true), as: snapshotImageStrategy, record: snapshotRecordingMode)
     }
 }
