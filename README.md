@@ -259,7 +259,9 @@ into the frontmost app), global hotkeys, continuous pasteboard polling, and
 file-metadata indexing across the home folder and iCloud Drive — none of
 which App Sandbox permits. The Quick Look extension, which only renders a
 preview for a file the system already handed it, is sandboxed. Hardened
-runtime is on for both targets regardless. Clipboard and index data live in
+runtime is on for both targets regardless, which is why the app carries the
+Apple Events and Calendars entitlements — hardened apps can't script other
+apps or read EventKit without them. Clipboard and index data live in
 an Application Support directory created `0700`, so no other user or
 sandboxed process on the machine can read it.
 

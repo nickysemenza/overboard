@@ -54,13 +54,15 @@ public final class CalendarSource {
     /// Shows the system consent dialog. Only ever called from an explicit
     /// user action (Settings → Permissions, or the Welcome window) — never
     /// from the launcher itself.
+    ///
+    /// Returns the status TCC actually recorded afterward rather than
+    /// trusting the call's Bool: a request that throws or returns `false`
+    /// without ever showing a dialog (a signing or entitlement hiccup, say)
+    /// must leave the state at "not asked" — reporting it as denied would hide
+    /// the Request button for good, since macOS never re-prompts once denied.
     public static func requestAccess() async -> PermissionState {
-        do {
-            let granted = try await EKEventStore().requestFullAccessToEvents()
-            return granted ? .granted : .denied
-        } catch {
-            return .denied
-        }
+        _ = try? await EKEventStore().requestFullAccessToEvents()
+        return self.authorization
     }
 
     public func start() {

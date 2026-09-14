@@ -4,5 +4,9 @@
 <dict>
 	<key>com.apple.security.automation.apple-events</key>
 	<true/>
+	<!-- Hardened runtime blocks EventKit without this: requestFullAccessToEvents
+	     returns false with no dialog. Needed for the launcher's calendar row. -->
+	<key>com.apple.security.personal-information.calendars</key>
+	<true/>
 </dict>
 </plist>
