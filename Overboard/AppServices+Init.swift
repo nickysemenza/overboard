@@ -63,16 +63,7 @@ extension AppServices {
         pausedSnapshot: OSAllocatedUnfairLock<Bool>
     ) -> LauncherViewModel {
         let launcherViewModel = LauncherViewModel(
-            instantProviders: [
-                QuicklinkProvider { Quicklink.parse(Defaults[.launcherQuicklinks]) },
-                ShellCommandProvider(isAvailable: { GhosttyLauncher.isInstalled() }),
-                AppSearchProvider(index: AppIndex(), limit: 60) {
-                    AppMatcher.parseAliases(Defaults[.launcherAppAliases])
-                },
-                ConditionalProvider(SettingsPaneSearchProvider(index: SettingsPaneIndex())) {
-                    Defaults[.launcherSettingsResults]
-                },
-            ],
+            instantProviders: Self.makeInstantProviders(),
             secondaryProviders: [
                 ConditionalProvider(SnippetSearchProvider(store: store)) {
                     Defaults[.launcherSnippetResults]
@@ -121,5 +112,32 @@ extension AppServices {
             return [.nowPlaying(track)]
         }
         return launcherViewModel
+    }
+
+    /// Quicklinks, `>` shell commands, apps, system settings panes, system
+    /// actions (lock/sleep/restart), and audio outputs — every result cheap
+    /// enough to compute on each keystroke. Split out of
+    /// `makeLauncherViewModel` to keep that initializer readable.
+    private static func makeInstantProviders() -> [any LauncherProvider] {
+        [
+            QuicklinkProvider { Quicklink.parse(Defaults[.launcherQuicklinks]) },
+            ShellCommandProvider(isAvailable: { GhosttyLauncher.isInstalled() }),
+            AppSearchProvider(index: AppIndex(), limit: 60) {
+                AppMatcher.parseAliases(Defaults[.launcherAppAliases])
+            },
+            ConditionalProvider(SettingsPaneSearchProvider(index: SettingsPaneIndex())) {
+                Defaults[.launcherSettingsResults]
+            },
+            ConditionalProvider(SystemActionProvider(
+                isAvailable: { $0 != .lockScreen || SystemActionService.canLockScreen }
+            )) {
+                Defaults[.launcherSettingsResults]
+            },
+            ConditionalProvider(AudioOutputSearchProvider(
+                devices: { AudioOutputService.shared.devices() }
+            )) {
+                Defaults[.launcherSettingsResults]
+            },
+        ]
     }
 }

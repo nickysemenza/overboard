@@ -41,7 +41,10 @@ struct GeneralSettingsTab: View {
                 Toggle("Show snippet results in launcher", isOn: self.$launcherSnippetResults)
                 Toggle("Show clipboard history in launcher", isOn: self.$launcherClipResults)
                 Toggle("Show file results in launcher", isOn: self.$launcherFileResults)
-                Toggle("Show system settings in launcher", isOn: self.$launcherSettingsResults)
+                Toggle(
+                    "Show system settings, actions, and audio outputs in launcher",
+                    isOn: self.$launcherSettingsResults
+                )
                 Toggle("Show Spotify now playing in launcher", isOn: self.$launcherNowPlaying)
                 LabeledContent("App aliases") {
                     TextEditor(text: self.$launcherAppAliases)
@@ -63,11 +66,12 @@ struct GeneralSettingsTab: View {
                 Text(
                     """
                     All mixes apps, files, clipboard, snippets, calculator, system settings, AI, \
-                    and now playing. Use ⌘1–4 to switch scopes. File search locations are managed \
-                    in Files. Aliases are one “sm = Sublime Merge” per line; initials work \
-                    automatically. Quicklinks are one “gh = https://github.com/search?q={query}” \
-                    per line (optionally “gh = GitHub | URL”) — type the keyword, a space, then \
-                    your search.
+                    and now playing. System settings, actions, and audio outputs also add Lock \
+                    Screen, Sleep, Restart, and switching your Mac’s audio output device. Use \
+                    ⌘1–4 to switch scopes. File search locations are managed in Files. Aliases are \
+                    one “sm = Sublime Merge” per line; initials work automatically. Quicklinks are \
+                    one “gh = https://github.com/search?q={query}” per line (optionally \
+                    “gh = GitHub | URL”) — type the keyword, a space, then your search.
                     """
                 )
             }

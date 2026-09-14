@@ -140,7 +140,10 @@ public final class PermissionService {
     /// the features actually talk to.
     public nonisolated static let supportedAutomationTargets: [AutomationTarget] =
         BrowserScript.scriptableBrowsers.map { AutomationTarget(name: $0.name, bundleID: $0.bundleID) }
-            + [AutomationTarget(name: "Spotify", bundleID: SpotifyNowPlayingMonitor.spotifyBundleID)]
+            + [
+                AutomationTarget(name: "Spotify", bundleID: SpotifyNowPlayingMonitor.spotifyBundleID),
+                AutomationTarget(name: "System Events", bundleID: SystemActionService.systemEventsBundleID),
+            ]
 
     public func automation(for bundleID: String) -> PermissionState {
         self.automationStates[bundleID] ?? .unknown

@@ -64,6 +64,7 @@ extension AppServices {
         self.installLauncherCommandCallbacks()
         self.installLauncherMiscCallbacks()
         self.installLauncherShellCallbacks()
+        self.installLauncherSystemCallbacks()
     }
 
     /// Summon-time refresh (Spotify snapshot, running-app dots) and the
@@ -259,6 +260,26 @@ extension AppServices {
                 } catch {
                     HUDController.shared.flash("Couldn't open Ghostty")
                 }
+            }
+        }
+    }
+
+    /// Lock/sleep/restart and audio-output switching. `SystemActionService`
+    /// can't flash a HUD itself (OverboardMac sits below OverboardUI in the
+    /// module graph), so its failures are routed here.
+    private func installLauncherSystemCallbacks() {
+        SystemActionService.shared.onFailure = { message in
+            HUDController.shared.flash(message)
+        }
+        self.launcher.onRunSystemAction = { action in
+            SystemActionService.shared.perform(action)
+        }
+        self.launcher.onSwitchAudioOutput = { device in
+            do {
+                try AudioOutputService.shared.setDefaultOutput(device)
+                HUDController.shared.flash("Output → \(device.name)")
+            } catch {
+                HUDController.shared.flash("Couldn't switch output")
             }
         }
     }
