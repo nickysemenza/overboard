@@ -86,7 +86,7 @@ The palette follows macOS appearance and accent preferences; it is not a fixed s
 ### Neutral
 
 - **Primary Ink:** `.primary` for result titles and the primary footer action.
-- **Supporting Ink:** `.secondary` for filenames' breadcrumbs, source metadata, scope shortcuts, and drawer action hints. Drawer hints use `.caption`; do not reduce their legibility to make them recede.
+- **Supporting Ink:** `.secondary` for filenames' breadcrumbs, source metadata, and scope shortcuts.
 - **Quiet Surface:** `.background` supports preview and card content. The launcher preview uses opacity `0.35`; clipboard cards use `0.6`.
 - **Subtle Control Fill:** `.quaternary.opacity(0.6)` supplies source badges, saved-search chips, and keyboard keycaps. `.primary.opacity(0.10)` marks the active scope without competing with result selection.
 - **Opaque Panel:** `NSColor.windowBackgroundColor` replaces glass when Reduce Transparency is enabled. Native `Divider` separates structural regions.
@@ -138,7 +138,7 @@ App icons, file icons, syntax highlighting, image previews, and source-derived c
 
 The search field and scope controls sit above a vertically scrolling result region. A reserved footer follows that region in the layout. The optional preview sits beside the list with a native divider and its own content padding. Both columns share available width; long content scrolls within its region.
 
-The launcher uses a stable 740×612pt viewport for ordinary searches, including its first appearance before results arrive. Result counts and home section headings never resize the window. An explicit preview expands it to 1020×650pt; Clipboard scope adds 36pt for filters. Expansion keeps the search field's top edge anchored. All sizes fit inside the screen's visible frame with 40pt of horizontal and 60pt of vertical clearance. These are launcher-specific window constraints, not global breakpoints.
+The launcher uses a stable 740×612pt viewport for ordinary searches, including its first appearance before results arrive. Result counts and home section headings never resize the window. An explicit preview expands it to 1020×650pt; Clipboard scope adds 36pt for filters. Expansion keeps the search field's top edge anchored. All sizes fit inside the screen's visible frame with 40pt of horizontal and 60pt of vertical clearance. These are launcher-specific window constraints, not global breakpoints. The launcher and emoji picker hang from the same anchored top edge (`PanelPlacement.anchoredTop`), clamped to the screen holding the mouse, so the two centered summonable surfaces appear in the same place regardless of their own height.
 
 Result rows use the frontmatter geometry, a 28pt icon slot, a two-line title/metadata stack, and a trailing information area. The list has 8pt inset and 2pt gaps. Filenames stay on one line; breadcrumbs truncate in the middle so both location and nearby folder context survive.
 
@@ -194,11 +194,11 @@ The content occupies the main preview area; a divider separates its metadata bel
 
 ### Clipboard Cards
 
-The drawer preserves compact, equal-size cards with source-app headers, content previews, and metadata footers. Every card's footer leads with the relative copy time ("5 minutes ago"), then compact kind-specific metadata (char/line counts, image dimensions, file size, a link's host) when there is any; the absolute timestamp is a tooltip on the footer and part of the card's accessibility label rather than printed metadata. Card width and height scale with Dynamic Type, and the card strip and drawer panel heights are derived from the card rather than declared separately. Header tint comes from the source app's icon; image, link, code, color, file, and protected content keep their distinct presentations. Protected content carries the filled orange Secret badge in its header alongside its masked body. Selected cards have an accent outline and soft lift; hover reveals compact native actions. The drawer's centered action hints use caption-sized secondary text.
+The drawer preserves compact, equal-size cards with source-app headers, content previews, and metadata footers. Every card's footer leads with the relative copy time ("5 minutes ago"), then compact kind-specific metadata (char/line counts, image dimensions, file size, a link's host) when there is any; the absolute timestamp is a tooltip on the footer and part of the card's accessibility label rather than printed metadata. Card width and height scale with Dynamic Type, and the card strip and drawer panel heights are derived from the card rather than declared separately. Header tint comes from the source app's icon; image, link, code, color, file, and protected content keep their distinct presentations. Protected content carries the filled orange Secret badge in its header alongside its masked body. Selected cards have an accent outline and soft lift; hover reveals compact native actions.
 
 ### Action Palette
 
-The launcher and drawer share a compact palette with an opaque `NSColor.windowBackgroundColor` fill, a subtle border, and a shadow: a plain query field, divider, filtered action rows, and accent selection. Use the same chrome and focus behavior while preserving the actions appropriate to each host. Its launcher placement leaves the reserved footer exposed.
+The launcher and drawer share a compact palette with an opaque `NSColor.windowBackgroundColor` fill, a subtle border, and a shadow: a plain query field, divider, filtered action rows, and accent selection. Use the same chrome and focus behavior while preserving the actions appropriate to each host. Its launcher placement leaves the reserved footer exposed. Alongside its content actions, the drawer's palette also lists its keyboard commands (paste plain, preview, edit, stack, pin, delete, switch to snippets), each row carrying its real keycap as a trailing hint so a shortcut can be discovered without memorizing it.
 
 ### Settings
 

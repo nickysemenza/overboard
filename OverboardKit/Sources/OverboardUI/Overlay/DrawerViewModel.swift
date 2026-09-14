@@ -23,6 +23,10 @@ public final class DrawerViewModel {
     public private(set) var snippets: [Snippet] = []
     public private(set) var mode: DrawerMode = .history
     public var query: String = ""
+    /// The frontmost app's name when the drawer was summoned — the footer's
+    /// "Paste to …" label and paste destination. Set by `OverlayController`,
+    /// the same way `LauncherPanelController.show(…)` sets the launcher's.
+    public var targetAppName: String = .init(localized: "previous app", bundle: .module)
     public var selectedIndex: Int = 0
     /// Extra selected indices beyond the anchor (⇧arrows / ⌘-click). Empty
     /// means plain single selection. `internal(set)`: mutated from the

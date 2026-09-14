@@ -23,14 +23,11 @@ extension OverlayController {
         panel.setFrame(
             NSRect(x: visible.minX, y: visible.minY, width: visible.width, height: height),
             display: true,
-            animate: true
+            animate: !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         )
     }
 
     func screenWithMouse() -> NSScreen {
-        let mouse = NSEvent.mouseLocation
-        return NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) }
-            ?? NSScreen.main
-            ?? NSScreen.screens[0]
+        PanelPlacement.screenWithMouse()
     }
 }

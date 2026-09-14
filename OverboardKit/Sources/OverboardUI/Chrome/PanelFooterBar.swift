@@ -32,6 +32,9 @@ struct PanelFooterBar: View {
     /// The secondary affordance (⌘K actions, ⌘↩ copy).
     var secondary: Action?
 
+    /// The bar's fixed height, every summonable surface's own frame.
+    static let height: CGFloat = 20
+
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: "bolt.fill")
@@ -54,7 +57,7 @@ struct PanelFooterBar: View {
         }
         .foregroundStyle(.secondary)
         .padding(.horizontal, 8)
-        .frame(height: 20)
+        .frame(height: Self.height)
     }
 
     private func label(_ action: Action, emphasized: Bool) -> some View {
@@ -83,6 +86,19 @@ struct PanelFooterBar: View {
                 .font(.caption2)
                 .accessibilityHidden(true)
         }
+    }
+}
+
+extension PanelFooterBar.Action {
+    /// The "Actions ⌘K" affordance every host with a ⌘K palette offers, so its
+    /// strings exist in exactly one place.
+    static func actions(handler: @escaping () -> Void) -> Self {
+        .init(
+            label: String(localized: "Actions", bundle: .module),
+            keycap: "⌘K",
+            accessibilityLabel: String(localized: "Actions, Command K", bundle: .module),
+            handler: handler
+        )
     }
 }
 

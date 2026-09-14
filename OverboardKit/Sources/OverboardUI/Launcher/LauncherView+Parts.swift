@@ -87,11 +87,7 @@ struct LauncherFooterBar: View {
             primary: self.viewModel.primaryAction.map { action in
                 .init(label: self.viewModel.primaryActionLabel ?? action.label) { self.viewModel.commit() }
             },
-            secondary: .init(
-                label: String(localized: "Actions", bundle: .module),
-                keycap: "⌘K",
-                accessibilityLabel: String(localized: "Actions, Command K", bundle: .module)
-            ) { self.viewModel.togglePalette() }
+            secondary: .actions { self.viewModel.togglePalette() }
         )
         .padding(.horizontal, 12).padding(.vertical, 9)
     }

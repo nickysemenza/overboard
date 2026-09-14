@@ -37,7 +37,6 @@ struct PreviewPane: View {
             if !self.related.isEmpty {
                 self.relatedStrip
             }
-            self.hints
         }
         .task(id: self.item?.id) {
             await self.load()
@@ -157,15 +156,6 @@ struct PreviewPane: View {
         }
         .buttonStyle(.plain)
         .help(related.aiTitle ?? related.previewText ?? "Clip")
-    }
-
-    private var hints: some View {
-        Text(self.viewModel.previewState == .editing
-            ? "⌘↩ paste edited text   esc cancel"
-            : "↩ paste   ⌘E edit   ←/→ browse   space or esc close")
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity, alignment: .center)
     }
 
     private func subtitle(for item: ClipItem) -> String {
