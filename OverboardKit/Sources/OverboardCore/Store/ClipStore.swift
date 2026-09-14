@@ -65,10 +65,14 @@ public actor ClipStore {
     // MARK: - Shared query ordering
 
     /// Pins first, then a gentle frecency blend: recency plus a capped bonus for
-    /// reuse (`useCount`), so items you paste over and over stop scrolling away —
-    /// while a brand-new copy (useCount 1, just now) still lands on top. The
-    /// bonus is in julian days and saturates at useCount 8 (~7.7h of lift), so it
-    /// only ever reorders near-neighbors, never buries fresh clips. `min(a, b)`
+    /// reuse (`useCount`), so items you paste over and over stop scrolling away.
+    /// The bonus is in julian days and saturates at useCount 8 (~7.7h of lift):
+    /// an item reused 4+ times in the last few hours can legitimately outrank a
+    /// single fresher copy — that's the design, not a mis-sort — but the cap
+    /// bounds how far reuse alone can reach, so it never buries something
+    /// pasted moments ago under a stale-but-frequent item. `DrawerViewModel`'s
+    /// `StripEntry` flags this case for the card strip so a reorder like that
+    /// reads as intentional instead of looking like a stray pin. `min(a, b)`
     /// is core SQLite (no math extension needed).
     ///
     /// Shared by ClipStore+Search.swift (`recent`, `search`),

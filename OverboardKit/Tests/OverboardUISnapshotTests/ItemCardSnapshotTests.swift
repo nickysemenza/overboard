@@ -17,9 +17,14 @@ struct ItemCardSnapshotTests {
     }
 
     /// 190×180 card plus margin for the selected state's scale and shadow.
-    private func host(_ item: ClipItem, index: Int = 0, selected: Bool = false) -> NSImage {
+    private func host(_ item: ClipItem, index: Int = 0, selected: Bool = false,
+                      rankedAboveNewer: Bool = false) -> NSImage
+    {
         snapshotImage(
-            ItemCardView(item: item, index: index, isSelected: selected, store: self.store),
+            ItemCardView(
+                item: item, index: index, isSelected: selected, store: self.store,
+                rankedAboveNewer: rankedAboveNewer
+            ),
             width: 220,
             height: 210
         )
@@ -48,6 +53,18 @@ struct ItemCardSnapshotTests {
     @Test func secret() {
         let item = Fixtures.item(preview: "AWS access key", isSecret: true)
         assertSnapshot(of: self.host(item, index: 4), as: snapshotImageStrategy, record: snapshotRecordingMode)
+    }
+
+    /// A card the frecency blend lifted above a newer item (see
+    /// `ClipStore.frecencyOrderSQL` and `DrawerViewModel.stripEntries`):
+    /// the up arrow before ×N, and the use count itself, both need to render.
+    @Test func rankedAboveNewer() {
+        let item = Fixtures.item(preview: "Frequently reused snippet", useCount: 6)
+        assertSnapshot(
+            of: self.host(item, index: 2, rankedAboveNewer: true),
+            as: snapshotImageStrategy,
+            record: snapshotRecordingMode
+        )
     }
 
     /// Pins the accessibility-text layout: the card's own geometry scales with

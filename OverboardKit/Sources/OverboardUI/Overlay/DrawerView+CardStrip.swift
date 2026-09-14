@@ -36,7 +36,11 @@ extension DrawerView {
     }
 
     var historyCards: some View {
-        ForEach(Array(self.viewModel.items.enumerated()), id: \.element.id) { index, item in
+        // `entry.id` is the item id (see `StripEntry`), so selection tracking
+        // and scroll-to-selection below — both keyed on item id — are
+        // unaffected by carrying the ranking hint alongside each item.
+        ForEach(Array(self.viewModel.stripEntries.enumerated()), id: \.element.id) { index, entry in
+            let item = entry.item
             ItemCardView(
                 item: item,
                 index: index,
@@ -45,6 +49,7 @@ extension DrawerView {
                 applicableActions: self.viewModel.isIndexSelected(index)
                     ? self.viewModel.applicableActions
                     : ClipAction.applicable(to: [item]),
+                rankedAboveNewer: entry.rankedAboveNewer,
                 onRunAction: { action in
                     if !self.viewModel.isIndexSelected(index) {
                         self.viewModel.selectedIndex = index

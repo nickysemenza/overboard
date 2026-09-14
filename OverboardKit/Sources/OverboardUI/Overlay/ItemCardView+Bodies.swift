@@ -191,22 +191,38 @@ extension ItemCardView {
         ClipItem.linkHost(fromPreview: self.item.previewText)
     }
 
-    /// Every card's footer: the relative copy time, leading, then compact
-    /// metadata (char/line counts, file size, image dimensions…) trailing
-    /// when there is any. The absolute time is a tooltip and lives in the
-    /// accessibility label instead of cluttering this row.
+    /// Every card's footer: the relative copy time and use count, leading,
+    /// then compact metadata (char/line counts, file size, image
+    /// dimensions…) trailing when there is any. The absolute time is a
+    /// tooltip and lives in the accessibility label instead of cluttering
+    /// this row.
     var footer: some View {
         let now = self.referenceDate ?? .now
         let when = TimestampFormatter.relative(self.item.lastUsedAt, now: now, unitsStyle: .abbreviated)
         return VStack(spacing: 0) {
             Divider().opacity(0.25)
             HStack(spacing: 6) {
-                Text(when).fixedSize()
+                // Time + use count, as one unit: this is what the frecency
+                // order actually ranks on (ClipStore.frecencyOrderSQL), so
+                // unlike metadataFooter it never yields to ViewThatFits below.
+                HStack(spacing: 3) {
+                    Text(when)
+                    if self.rankedAboveNewer {
+                        Image(systemName: "arrow.up")
+                            .foregroundStyle(Color.accentColor)
+                    }
+                    // Always shown, not just when reused: a lone "×1" costs
+                    // nothing to read and makes the reused cards' "×4" legible
+                    // by contrast instead of only appearing once it matters.
+                    Text("×\(self.item.useCount)")
+                }
+                .fixedSize()
                 if let meta = self.item.metadataFooter {
                     Spacer(minLength: 0)
-                    // The time never yields; metadata degrades a segment at a
-                    // time ("1,240 characters · 32 lines" → "1,240 characters")
-                    // before it resorts to truncating mid-word.
+                    // The time+count segment never yields; metadata degrades a
+                    // segment at a time ("1,240 characters · 32 lines" →
+                    // "1,240 characters") before it resorts to truncating
+                    // mid-word.
                     ViewThatFits(in: .horizontal) {
                         Text(meta).fixedSize()
                         if let lead = meta.components(separatedBy: ClipItem.metadataSeparator).first,
@@ -222,8 +238,27 @@ extension ItemCardView {
             .contrastAwareForeground(.tertiary)
             .padding(.horizontal, 10)
             .padding(.vertical, 4)
-            .help(TimestampFormatter.absolute(self.item.lastUsedAt))
+            .help(self.footerHelpText)
         }
+    }
+
+    /// "Copied once" / "Copied 4 times" — the footer tooltip's count clause,
+    /// and (lowercased) the accessibility label's in `ItemCardView.swift`.
+    var copiedCountPhrase: String {
+        self.item.useCount == 1
+            ? String(localized: "Copied once", bundle: .module)
+            : String(localized: "Copied \(self.item.useCount) times", bundle: .module)
+    }
+
+    /// Absolute copy time, how many times it's been copied, and — when the
+    /// frecency order lifted it above a newer item — a note saying so, so
+    /// hovering a card that looks out of place explains itself.
+    private var footerHelpText: String {
+        var parts = [TimestampFormatter.absolute(self.item.lastUsedAt), self.copiedCountPhrase]
+        if self.rankedAboveNewer {
+            parts.append(String(localized: "ranked above newer items", bundle: .module))
+        }
+        return parts.joined(separator: ClipItem.metadataSeparator)
     }
 
     /// Raw text yields lines to the title and summary when they're present.

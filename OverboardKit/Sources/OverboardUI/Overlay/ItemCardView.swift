@@ -8,6 +8,11 @@ struct ItemCardView: View {
     let isSelected: Bool
     let store: ClipStore
     var applicableActions: [ClipAction] = []
+    /// True when the card strip's frecency order put this item above a
+    /// strictly newer neighbor (see `DrawerViewModel.StripEntry`). Defaults to
+    /// false so previews and snapshot tests that construct a card directly
+    /// don't all need to opt in.
+    var rankedAboveNewer: Bool = false
     var onRunAction: (ClipAction) -> Void = { _ in }
     var onPinToggle: () -> Void = {}
     var onDelete: () -> Void = {}
@@ -114,7 +119,10 @@ struct ItemCardView: View {
     /// so the card reads as one item instead of its individual subviews.
     private var accessibilityCardLabel: String {
         let app = self.item.sourceAppName ?? self.item.kind.displayName
-        let copied = ", copied \(TimestampFormatter.absolute(self.item.lastUsedAt))"
+        // Folds in the use count the same way the absolute time already
+        // rides along in this clause — "copied 4 times, <date>" — instead of
+        // being a separate footer-only detail VoiceOver users can't reach.
+        let copied = ", \(self.copiedCountPhrase.lowercased()), \(TimestampFormatter.absolute(self.item.lastUsedAt))"
         if self.item.isSecret {
             return "\(app), secret item\(copied)"
         }
