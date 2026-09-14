@@ -170,6 +170,7 @@ final class AppServices {
         self.installOverlayCallbacks()
         self.installLauncherCallbacks()
         self.installEmojiCallbacks()
+        self.installCloudflareAccessCallbacks()
         // Decode the emoji dataset off-main now so the first ⌃⌘Space is instant.
         self.emojiViewModel.warm()
     }

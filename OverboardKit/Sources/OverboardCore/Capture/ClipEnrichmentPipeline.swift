@@ -137,4 +137,20 @@ public struct ClipEnrichmentPipeline: Sendable {
             previewImagePNG: metadata?.previewImagePNG
         )
     }
+
+    /// Re-fetches metadata for every `.link` item under `origin`, called from
+    /// Settings right after a Cloudflare Access sign-in: those links were
+    /// healed (metadata cleared) while the host was still gated, and the
+    /// startup backfill already ran for this launch and won't run again until
+    /// next launch, so nothing would otherwise pick them back up.
+    public func refetchLinkMetadata(origin: String) async {
+        guard let healed = try? await self.store.resetLinkMetadata(forOrigin: origin) else { return }
+        for item in healed {
+            await self.fetchLinkMetadata(for: item)
+            // Same politeness pause as the startup backfill (`AppServices+Capture.swift`'s
+            // `linkBackfillJob`) — several links under one freshly-signed-in
+            // host shouldn't hit it in a burst.
+            try? await Task.sleep(for: .seconds(1))
+        }
+    }
 }

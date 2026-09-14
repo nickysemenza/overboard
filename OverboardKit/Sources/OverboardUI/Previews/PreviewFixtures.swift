@@ -166,6 +166,19 @@
             return store
         }
 
+        /// A `ClipEnrichmentPipeline` whose network/AI steps are all no-ops,
+        /// for previews (Settings) that need one to satisfy an initializer but
+        /// never actually trigger enrichment.
+        static func noOpEnrichmentPipeline(store: ClipStore) -> ClipEnrichmentPipeline {
+            ClipEnrichmentPipeline(
+                store: store,
+                settings: { .init(richLinkPreviews: true) },
+                recognizeText: { _ in nil },
+                fetchLink: { _ in nil },
+                enrichText: { _ in nil }
+            )
+        }
+
         static func textSnapshot(_ text: String) -> PasteboardSnapshot {
             PasteboardSnapshot(
                 reps: [.init(uti: WellKnownUTI.plainText, data: Data(text.utf8))],

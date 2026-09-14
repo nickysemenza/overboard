@@ -220,6 +220,40 @@ public extension ClipStore {
         }
     }
 
+    /// Clears previously-attached metadata on every `.link` row whose URL is
+    /// under `origin` (`"https://host"` or `"https://host:port"`, exactly as
+    /// `CloudflaredAccessTokens` records it) — the rows a newly-signed-in
+    /// Cloudflare Access host's links live on. Mirrors
+    /// `resetLinkMetadata(whereTitleContains:)`'s per-row healing; returns the
+    /// healed items so Settings can re-fetch them immediately after a sign-in
+    /// instead of waiting for the next launch's backfill pass.
+    ///
+    /// A link matches when its URL equals `origin` exactly or starts with
+    /// `origin + "/"` — Access gates on hostname, not path, so every path
+    /// under the host is affected, but `https://host.example` must not also
+    /// match a recorded `https://host.ex` (LIKE's own escaping quirks don't
+    /// matter here: `origin` is never user input, always a
+    /// `CloudflaredAccessTokens`-derived `scheme://host[:port]` string).
+    func resetLinkMetadata(forOrigin origin: String) async throws -> [ClipItem] {
+        try await self.dbWriter.write { db in
+            let rows = try Row.fetchAll(
+                db,
+                sql: """
+                SELECT rowid, id, searchText, linkTitle, linkDescription FROM item
+                WHERE kind = 'link' AND (previewText = ? OR previewText LIKE ? || '/%') AND deletedAt IS NULL
+                """,
+                arguments: [origin, origin]
+            )
+            var healedIDs: [String] = []
+            for row in rows {
+                try Self.healLinkMetadataRow(db, row: row)
+                healedIDs.append(row["id"])
+            }
+            guard !healedIDs.isEmpty else { return [] }
+            return try ClipItem.filter(keys: healedIDs).fetchAll(db)
+        }
+    }
+
     /// `attachLinkMetadata` builds `searchText` as `[oldSearchText] + [title,
     /// description]` joined by `"\n"` — this undoes exactly that append, so a
     /// link's own URL text (the pre-fetch `searchText` every `.link` item is

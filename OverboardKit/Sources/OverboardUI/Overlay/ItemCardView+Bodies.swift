@@ -1,4 +1,5 @@
 import OverboardCore
+import OverboardMac
 import SwiftUI
 
 // MARK: - Per-kind card content
@@ -136,7 +137,9 @@ extension ItemCardView {
                     .frame(height: 74)
                     .clipShape(RoundedRectangle(cornerRadius: 6))
             }
-            if let description = item.linkDescription, !description.isEmpty {
+            if self.gatedAccessHost != nil {
+                self.accessWarning
+            } else if let description = item.linkDescription, !description.isEmpty {
                 Text(description)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -189,6 +192,36 @@ extension ItemCardView {
 
     private var linkHost: String? {
         ClipItem.linkHost(fromPreview: self.item.previewText)
+    }
+
+    /// The Cloudflare Access host this link's fetch failed against, when
+    /// that's why it has no title: `linkTitle == ""` is the failed-fetch
+    /// sentinel (`ClipItem.swift`), and only then is the URL worth checking
+    /// against the recorded host list — a link that was never fetched
+    /// (`linkTitle == nil`) hasn't necessarily hit a challenge at all.
+    /// `internal`: read from `accessibilityCardLabel` in ItemCardView.swift.
+    var gatedAccessHost: CloudflareAccessHost? {
+        guard self.item.linkTitle == "",
+              let preview = item.previewText,
+              let url = URL(string: preview.trimmingCharacters(in: .whitespacesAndNewlines))
+        else { return nil }
+        return CloudflareAccessHost.gatedHost(for: url, in: self.cloudflareAccessHosts)
+    }
+
+    /// The caption shown in place of a description for a link still gated
+    /// behind Cloudflare Access — the one thing the card can say without
+    /// making the user go find Settings first.
+    private var accessWarning: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
+            Image(systemName: "lock.shield")
+            // Two lines: the card is 190pt wide and one line truncates
+            // "Cloudflare Access" to "Cloudflare A…".
+            Text("Sign in required · Cloudflare Access")
+                .lineLimit(2)
+        }
+        .font(.caption)
+        .foregroundStyle(.orange)
+        .help("Behind Cloudflare Access — sign in from ⌘K or Settings › General")
     }
 
     /// Every card's footer: the relative copy time and use count, leading,

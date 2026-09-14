@@ -1,3 +1,4 @@
+import Defaults
 import Foundation
 import os
 
@@ -9,6 +10,10 @@ import os
 /// fetching runs unattended on a background timer, on whichever of the
 /// user's two laptops happens to reach a given internal host, and must never
 /// pop a login window the user didn't ask for.
+///
+/// Signing in — the one operation that's allowed to open a browser — is
+/// `login(origin:)` below, meant to be called only from a user's own click on
+/// Settings' "Sign in" button.
 ///
 /// An actor because lookups race: the link backfill (`AppServices+Capture.swift`)
 /// can hand this 25 links from the same Access-gated host in one batch, and
@@ -35,6 +40,11 @@ public actor CloudflaredAccessTokens {
     /// at all (hung daemon, broken install). Past this, treat it as absent
     /// rather than block the caller indefinitely.
     private static let processTimeout: TimeInterval = 8
+    /// `cloudflared access login` blocks on the user finishing the browser
+    /// flow, so it's given far longer than a cache read — but still bounded,
+    /// so a login the user walked away from doesn't hang Settings' "Sign in"
+    /// button forever.
+    private static let loginTimeout: TimeInterval = 120
 
     private struct CacheEntry {
         let token: String?
@@ -45,6 +55,23 @@ public actor CloudflaredAccessTokens {
     /// In-flight lookups keyed by origin, so concurrent callers for the same
     /// origin await one process instead of each spawning their own.
     private var inFlight: [String: Task<String?, Never>] = [:]
+    /// Origins `onChallengeWithoutToken` has already fired for this launch —
+    /// see `token(for:)`.
+    private var hintedOrigins: Set<String> = []
+
+    /// Fired at most once per origin per launch, the first time `token(for:)`
+    /// finds no cached token for it — `AppServices` wires this to a one-line
+    /// HUD pointing at Settings, so a gated host isn't a silent dead end.
+    /// `@MainActor` because the app's only use for this is showing UI; typed
+    /// this way so the actor hops there itself rather than every call site
+    /// having to.
+    private var onChallengeWithoutToken: (@MainActor @Sendable (String) -> Void)?
+
+    /// Installs `onChallengeWithoutToken` (an actor-isolated property can't
+    /// be assigned from outside the actor, so the app wires it through this).
+    public func setChallengeHint(_ handler: @escaping @MainActor @Sendable (String) -> Void) {
+        self.onChallengeWithoutToken = handler
+    }
 
     public init() {}
 
@@ -55,37 +82,104 @@ public actor CloudflaredAccessTokens {
     /// timed out. Never throws and never blocks longer than
     /// `processTimeout` — every failure mode here is meant to be silent, per
     /// the fetcher's "a link works fine without a preview" philosophy.
+    ///
+    /// Only ever called after `LinkMetadataFetcher` sees an Access challenge.
+    /// A *miss* here — no cached token — is the case Settings' host list
+    /// exists for, so that's the only outcome recorded into `Defaults`; a hit
+    /// means this machine already answered the challenge, which isn't news.
     public func token(for url: URL) async -> String? {
         guard let origin = Self.origin(for: url) else { return nil }
 
         let now = Date()
+        let token: String?
         if let cached = self.cache[origin], cached.expiresAt > now {
-            return cached.token
+            token = cached.token
+        } else if let existing = self.inFlight[origin] {
+            token = await existing.value
+        } else {
+            // Detached so the actual process wait runs off this actor's executor —
+            // the actor stays free to serve cache hits for other origins (or to
+            // hand the *same* in-flight task to other callers below) while this
+            // one is parked on the child process.
+            let task = Task<String?, Never>.detached(priority: .utility) {
+                await Self.lookUpToken(origin: origin)
+            }
+            self.inFlight[origin] = task
+            let looked = await task.value
+            self.inFlight[origin] = nil
+            self.cache[origin] = CacheEntry(
+                token: looked, expiresAt: now.addingTimeInterval(looked != nil ? Self.positiveTTL : Self.negativeTTL)
+            )
+            token = looked
         }
 
-        if let existing = self.inFlight[origin] {
-            return await existing.value
-        }
-
-        // Detached so the actual process wait runs off this actor's executor —
-        // the actor stays free to serve cache hits for other origins (or to
-        // hand the *same* in-flight task to other callers below) while this
-        // one is parked on the child process.
-        let task = Task<String?, Never>.detached(priority: .utility) {
-            await Self.lookUpToken(origin: origin)
-        }
-        self.inFlight[origin] = task
-        let token = await task.value
-        self.inFlight[origin] = nil
-
-        self.cache[origin] = CacheEntry(
-            token: token,
-            expiresAt: now.addingTimeInterval(token != nil ? Self.positiveTTL : Self.negativeTTL)
-        )
         if token == nil {
+            Self.recordChallenge(origin: origin)
             Self.logger.debug("no token for \(origin, privacy: .public)")
+            if Self.shouldHint(origin: origin, alreadyHinted: self.hintedOrigins) {
+                self.hintedOrigins.insert(origin)
+                await self.onChallengeWithoutToken?(origin)
+            }
         }
         return token
+    }
+
+    /// Whether `origin`'s "behind Access, no cached token" state should fire
+    /// `onChallengeWithoutToken` — true only the first time in a given set of
+    /// already-hinted origins. Factored out of `token(for:)` so this
+    /// once-per-launch rule is testable without an actor instance or a real
+    /// `cloudflared`.
+    static func shouldHint(origin: String, alreadyHinted: Set<String>) -> Bool {
+        !alreadyHinted.contains(origin)
+    }
+
+    /// Upserts `origin` into the persisted Cloudflare Access host list — see
+    /// `CloudflareAccessHost.recordChallenge` for the pure logic.
+    private static func recordChallenge(origin: String) {
+        Defaults[.cloudflareAccessHosts] = CloudflareAccessHost.recordChallenge(
+            in: Defaults[.cloudflareAccessHosts], origin: origin, now: Date()
+        )
+    }
+
+    /// Probes `cloudflared` for `origin`'s current cached-token status,
+    /// bypassing the actor's own cache and refreshing it with the result —
+    /// Settings' host list wants a fresh answer every time it's shown, not
+    /// whatever a backfill batch queued minutes ago.
+    public func hasCachedToken(origin: String) async -> Bool {
+        let token = await Self.lookUpToken(origin: origin)
+        self.cache[origin] = CacheEntry(
+            token: token, expiresAt: Date().addingTimeInterval(token != nil ? Self.positiveTTL : Self.negativeTTL)
+        )
+        return token != nil
+    }
+
+    /// Drops any cached answer (positive or negative) for `origin`, so the
+    /// very next lookup asks `cloudflared` again instead of trusting a
+    /// negative result cached from before a sign-in completed.
+    public func invalidate(origin: String) {
+        self.cache[origin] = nil
+    }
+
+    /// Runs `cloudflared access login <origin>` — the one call in this file
+    /// that opens a browser, which is exactly the point: it only runs from
+    /// the user's own click on Settings' "Sign in" button. Success is exit
+    /// code 0 *and* a follow-up `hasCachedToken`, never login's own stdout:
+    /// its wording has moved across `cloudflared` versions (see
+    /// `lookUpToken`'s comment), so asking `cloudflared` itself for the token
+    /// afterwards is the only stable signal. On success, records the sign-in
+    /// into the persisted host list.
+    public func login(origin: String) async -> Bool {
+        guard let result = await Self.runProcess(arguments: ["access", "login", origin], timeout: Self.loginTimeout),
+              result.exitCode == 0
+        else { return false }
+
+        self.invalidate(origin: origin)
+        guard await self.hasCachedToken(origin: origin) else { return false }
+
+        Defaults[.cloudflareAccessHosts] = CloudflareAccessHost.recordSignIn(
+            in: Defaults[.cloudflareAccessHosts], origin: origin, now: Date()
+        )
+        return true
     }
 
     /// `scheme://host[:port]` — the granularity `cloudflared access token
@@ -142,12 +236,24 @@ public actor CloudflaredAccessTokens {
 
     // MARK: - Process execution
 
-    private static func lookUpToken(origin: String) async -> String? {
+    /// One subprocess's outcome — its exit code and whatever it printed to
+    /// stdout. `lookUpToken` reads `stdout`; `login` reads only `exitCode`
+    /// (see its comment on why login's stdout is never parsed).
+    private struct ProcessResult {
+        let exitCode: Int32
+        let stdout: String
+    }
+
+    /// Runs `cloudflared <arguments>` to completion (or `timeout`), draining
+    /// stderr so the child can't block on a full pipe. Shared by `lookUpToken`
+    /// and `login` so the pipe/timeout/continuation plumbing — the part
+    /// that's easy to get subtly wrong — exists exactly once for both.
+    private static func runProcess(arguments: [String], timeout: TimeInterval) async -> ProcessResult? {
         guard let executableURL = self.executableURL() else { return nil }
 
         let process = Process()
         process.executableURL = executableURL
-        process.arguments = ["access", "token", "--app", origin]
+        process.arguments = arguments
 
         var environment = ProcessInfo.processInfo.environment
         // LaunchServices-launched apps don't reliably inherit a login-shell
@@ -169,7 +275,7 @@ public actor CloudflaredAccessTokens {
 
         return await withCheckedContinuation { continuation in
             let state = OSAllocatedUnfairLock(initialState: false) // has-resumed guard
-            @Sendable func resume(_ value: String?) {
+            @Sendable func resume(_ value: ProcessResult?) {
                 let shouldResume = state.withLock { hasResumed in
                     guard !hasResumed else { return false }
                     hasResumed = true
@@ -180,17 +286,11 @@ public actor CloudflaredAccessTokens {
                 continuation.resume(returning: value)
             }
 
-            process.terminationHandler = { _ in
+            process.terminationHandler = { finished in
                 let data = stdout.fileHandleForReading.readDataToEndOfFile()
                 let output = String(data: data, encoding: .utf8)?
                     .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                // Only the JWT shape counts as success. `cloudflared`'s
-                // "failed to find Access application" / "Unable to find
-                // token" messages have moved between stdout and stderr and
-                // between exit codes across versions (2026.9.1: stderr,
-                // exit 1), so neither the exit code nor "stdout non-empty"
-                // is a reliable signal.
-                resume(self.isJWTShaped(output) ? output : nil)
+                resume(ProcessResult(exitCode: finished.terminationStatus, stdout: output))
             }
 
             do {
@@ -201,13 +301,26 @@ public actor CloudflaredAccessTokens {
             }
 
             Task.detached(priority: .utility) {
-                try? await Task.sleep(for: .seconds(Self.processTimeout))
+                try? await Task.sleep(for: .seconds(timeout))
                 if process.isRunning {
                     process.terminate()
                 }
                 resume(nil)
             }
         }
+    }
+
+    private static func lookUpToken(origin: String) async -> String? {
+        guard let result = await self.runProcess(
+            arguments: ["access", "token", "--app", origin], timeout: processTimeout
+        ) else { return nil }
+        // Only the JWT shape counts as success. `cloudflared`'s
+        // "failed to find Access application" / "Unable to find
+        // token" messages have moved between stdout and stderr and
+        // between exit codes across versions (2026.9.1: stderr,
+        // exit 1), so neither the exit code nor "stdout non-empty"
+        // is a reliable signal.
+        return self.isJWTShaped(result.stdout) ? result.stdout : nil
     }
 
     /// A cloudflared access token is a compact JWT: three base64url segments
