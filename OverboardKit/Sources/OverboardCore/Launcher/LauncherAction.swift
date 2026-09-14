@@ -190,7 +190,7 @@ public enum LauncherActions {
         }
     }
 
-    /// Static action lists for Stream A's system-action/audio-output/quicklink/
+    /// Static action lists for the system-action/audio-output/quicklink/
     /// shell-command kinds — split out purely to keep `staticActions`'s
     /// cyclomatic complexity under budget.
     private static func launcherExtraActions(for result: LauncherResult) -> [LauncherAction] {

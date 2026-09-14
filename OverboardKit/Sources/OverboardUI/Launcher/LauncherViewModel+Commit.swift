@@ -116,7 +116,7 @@ extension LauncherViewModel {
         }
     }
 
-    /// Stream A's new result kinds — split out of `performMiscAction` purely
+    /// The system/audio/quicklink/shell/calendar kinds — split out of `performMiscAction` purely
     /// to keep its cyclomatic complexity under budget.
     private func performLauncherExtraAction(_ action: LauncherAction, on result: LauncherResult) {
         switch result {

@@ -191,7 +191,7 @@ public final class LauncherPanelController {
     }
 
     /// See `configureFileActions`: the system-action/audio-output/shell/calendar
-    /// callbacks Stream A's new result kinds add.
+    /// callbacks for the system/audio/shell/calendar row kinds.
     private func configureLauncherExtrasActions() {
         self.viewModel.onRunSystemAction = { [weak self] action in
             guard let self else { return }

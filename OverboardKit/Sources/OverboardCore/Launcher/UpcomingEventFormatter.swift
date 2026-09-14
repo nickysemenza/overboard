@@ -1,7 +1,7 @@
 import Foundation
 
 /// Formats the calendar row's subtitle: a relative lead-time ("in 12m") and a
-/// clock time range ("10:30–11:00"). Every function takes an explicit `now`
+/// clock time range ("10:30 – 11:00"). Every function takes an explicit `now`
 /// (and, where it matters, `calendar`) so results are deterministic in tests
 /// — nothing here reads the system clock or the user's calendar itself.
 public enum UpcomingEventFormatter {
@@ -29,14 +29,20 @@ public enum UpcomingEventFormatter {
         return "tomorrow"
     }
 
-    /// "10:30–11:00" (en dash, always 24-hour so the row stays terse
-    /// regardless of the user's clock-format preference); prefixed
-    /// "Tomorrow " when `event.start` isn't the same day as `now`.
+    /// "10:30 – 11:00" in the calendar's locale (a 12-hour clock reads
+    /// "10:30 – 11:00 AM" — `DateIntervalFormatter` collapses the shared
+    /// AM/PM); prefixed "Tomorrow " when `event.start`
+    /// isn't the same day as `now`.
     public static func timeRange(for event: CalendarEvent, now: Date,
                                  calendar: Calendar = .autoupdatingCurrent) -> String
     {
-        let formatter = Self.timeFormatter(timeZone: calendar.timeZone)
-        let range = "\(formatter.string(from: event.start))–\(formatter.string(from: event.end))"
+        let formatter = DateIntervalFormatter()
+        formatter.calendar = calendar
+        formatter.locale = calendar.locale ?? .autoupdatingCurrent
+        formatter.timeZone = calendar.timeZone
+        formatter.dateStyle = .none
+        formatter.timeStyle = .short
+        let range = formatter.string(from: event.start, to: event.end)
         return calendar.isDate(event.start, inSameDayAs: now) ? range : "Tomorrow \(range)"
     }
 
@@ -45,15 +51,5 @@ public enum UpcomingEventFormatter {
                                 calendar: Calendar = .autoupdatingCurrent) -> String
     {
         "\(self.relative(to: event, now: now)) · \(self.timeRange(for: event, now: now, calendar: calendar))"
-    }
-
-    /// `en_US_POSIX` pins the "HH:mm" pattern to always mean 24-hour time —
-    /// some locales otherwise reinterpret literal pattern letters.
-    private static func timeFormatter(timeZone: TimeZone) -> DateFormatter {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = timeZone
-        formatter.dateFormat = "HH:mm"
-        return formatter
     }
 }

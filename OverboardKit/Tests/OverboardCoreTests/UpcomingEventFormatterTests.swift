@@ -6,7 +6,7 @@ struct UpcomingEventFormatterTests {
     private static var calendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "UTC")!
-        calendar.locale = Locale(identifier: "en_US_POSIX")
+        calendar.locale = Locale(identifier: "en_GB") // 24-hour clock keeps the expected strings terse
         return calendar
     }
 
@@ -64,7 +64,12 @@ struct UpcomingEventFormatterTests {
 
     @Test func timeRangeUsesEnDashOnSameDay() {
         let event = self.event(startOffset: 30 * 60, duration: 30 * 60)
-        #expect(UpcomingEventFormatter.timeRange(for: event, now: Self.now, calendar: Self.calendar) == "10:30–11:00")
+        let range = UpcomingEventFormatter.timeRange(for: event, now: Self.now, calendar: Self.calendar)
+        // The locale decides the whitespace around the dash (en_GB pads it
+        // with narrow no-break spaces), so match on the pieces.
+        #expect(range.hasPrefix("10:30"), "\(range)")
+        #expect(range.hasSuffix("11:00"), "\(range)")
+        #expect(range.contains("–"), "\(range)")
     }
 
     @Test func timeRangeAddsTomorrowPrefixOnADifferentDay() {
@@ -77,6 +82,8 @@ struct UpcomingEventFormatterTests {
     @Test func subtitleCombinesRelativeAndRangeWithMiddot() {
         let event = self.event(startOffset: 12 * 60, duration: 30 * 60)
         let subtitle = UpcomingEventFormatter.subtitle(for: event, now: Self.now, calendar: Self.calendar)
-        #expect(subtitle == "in 12m · 10:12–10:42")
+        let range = UpcomingEventFormatter.timeRange(for: event, now: Self.now, calendar: Self.calendar)
+        #expect(subtitle == "in 12m · \(range)")
+        #expect(range.hasPrefix("10:12") && range.hasSuffix("10:42"), "\(range)")
     }
 }

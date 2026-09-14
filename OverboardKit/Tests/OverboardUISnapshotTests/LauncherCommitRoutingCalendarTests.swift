@@ -4,7 +4,7 @@ import OverboardMac
 @testable import OverboardUI
 import Testing
 
-/// Pure logic, no snapshots — runs on CI too. Routing for Stream A's
+/// Pure logic, no snapshots — runs on CI too. Routing for the
 /// calendar-event actions (join, copy link, open in Calendar), split out of
 /// `LauncherCommitRoutingTests` by routed result kind, same shape as
 /// `LauncherCommitRoutingHistoryTests`.
