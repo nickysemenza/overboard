@@ -18,19 +18,30 @@ public struct DrawerView: View {
 
     public var body: some View {
         VStack(spacing: 10) {
-            if self.viewModel.previewState == .hidden {
-                self.searchBar
-                if self.viewModel.mode == .history, !self.savedSearches.isEmpty {
-                    self.savedSearchBar
+            // The outgoing view leaves the layout instantly (`.identity`
+            // removal) so the VStack never briefly holds both the strip and
+            // the pane — which would squeeze the incoming view and then jump
+            // once the outgoing one finally cleared. The incoming view fades
+            // in (`.opacity` insertion) while the VStack's height, and the
+            // glass shell drawn behind it, animate between the two states
+            // under the `.motion` below.
+            Group {
+                if self.viewModel.previewState == .hidden {
+                    self.searchBar
+                    if self.viewModel.mode == .history, !self.savedSearches.isEmpty {
+                        self.savedSearchBar
+                    }
+                    self.cardStrip
+                } else {
+                    PreviewPane(viewModel: self.viewModel)
                 }
-                self.cardStrip
-            } else {
-                PreviewPane(viewModel: self.viewModel)
             }
+            .transition(.asymmetric(insertion: .opacity, removal: .identity))
             Divider()
             self.footerBar
         }
         .motion(.spring(response: 0.22, dampingFraction: 0.85), value: self.viewModel.isPaletteOpen)
+        .motion(DrawerViewModel.previewMotion, value: self.viewModel.previewState)
         .padding(14)
         .glassPanel(cornerRadius: PanelRadius.drawer)
         .overlay {
