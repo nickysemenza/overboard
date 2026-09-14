@@ -64,6 +64,8 @@ extension AppServices {
     ) -> LauncherViewModel {
         let launcherViewModel = LauncherViewModel(
             instantProviders: [
+                QuicklinkProvider { Quicklink.parse(Defaults[.launcherQuicklinks]) },
+                ShellCommandProvider(isAvailable: { GhosttyLauncher.isInstalled() }),
                 AppSearchProvider(index: AppIndex(), limit: 60) {
                     AppMatcher.parseAliases(Defaults[.launcherAppAliases])
                 },

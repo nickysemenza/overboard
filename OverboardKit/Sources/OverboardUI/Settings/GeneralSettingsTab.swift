@@ -16,6 +16,7 @@ struct GeneralSettingsTab: View {
     @Default(.launcherSettingsResults) private var launcherSettingsResults
     @Default(.launcherNowPlaying) private var launcherNowPlaying
     @Default(.launcherAppAliases) private var launcherAppAliases
+    @Default(.launcherQuicklinks) private var launcherQuicklinks
     @Default(.updateCheckEnabled) private var updateCheckEnabled
     @Default(.richLinkPreviews) private var richLinkPreviews
 
@@ -50,13 +51,23 @@ struct GeneralSettingsTab: View {
                         .padding(4)
                         .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
                 }
+                LabeledContent("Quicklinks") {
+                    TextEditor(text: self.$launcherQuicklinks)
+                        .font(.body.monospaced())
+                        .frame(height: 60)
+                        .scrollContentBackground(.hidden)
+                        .padding(4)
+                        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
+                }
             } footer: {
                 Text(
                     """
                     All mixes apps, files, clipboard, snippets, calculator, system settings, AI, \
                     and now playing. Use ⌘1–4 to switch scopes. File search locations are managed \
                     in Files. Aliases are one “sm = Sublime Merge” per line; initials work \
-                    automatically.
+                    automatically. Quicklinks are one “gh = https://github.com/search?q={query}” \
+                    per line (optionally “gh = GitHub | URL”) — type the keyword, a space, then \
+                    your search.
                     """
                 )
             }

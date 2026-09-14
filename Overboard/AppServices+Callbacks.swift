@@ -63,6 +63,7 @@ extension AppServices {
         self.installLauncherClipCallbacks()
         self.installLauncherCommandCallbacks()
         self.installLauncherMiscCallbacks()
+        self.installLauncherShellCallbacks()
     }
 
     /// Summon-time refresh (Spotify snapshot, running-app dots) and the
@@ -244,6 +245,21 @@ extension AppServices {
         }
         self.launcher.onOpenClipLink = { url in
             NSWorkspace.shared.open(url)
+        }
+    }
+
+    /// The `>`-prefixed shell row: runs the command in Ghostty. Quicklinks
+    /// need no callback of their own — they route through the existing
+    /// `onOpenWebSearch(url)`.
+    private func installLauncherShellCallbacks() {
+        self.launcher.onRunShellCommand = { command in
+            Task {
+                do {
+                    try await GhosttyLauncher.run(command)
+                } catch {
+                    HUDController.shared.flash("Couldn't open Ghostty")
+                }
+            }
         }
     }
 
