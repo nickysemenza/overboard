@@ -33,23 +33,20 @@ public enum ClearHistoryPrompt {
 
 public struct SettingsView: View {
     private let store: ClipStore
-    private let checkForUpdates: () async -> Void
     @Bindable private var navigation: SettingsNavigation
 
     public init(
         store: ClipStore,
-        navigation: SettingsNavigation = SettingsNavigation(),
-        checkForUpdates: @escaping () async -> Void = {}
+        navigation: SettingsNavigation = SettingsNavigation()
     ) {
         self.store = store
         self.navigation = navigation
-        self.checkForUpdates = checkForUpdates
     }
 
     public var body: some View {
         TabView(selection: self.$navigation.selectedTab) {
             Tab("General", systemImage: "gearshape", value: SettingsTab.general) {
-                GeneralSettingsTab(checkForUpdates: self.checkForUpdates)
+                GeneralSettingsTab()
             }
             Tab("History", systemImage: "clock.arrow.circlepath", value: SettingsTab.history) {
                 HistorySettingsTab(store: self.store)

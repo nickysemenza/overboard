@@ -24,8 +24,6 @@ public nonisolated extension Defaults.Keys {
     static let secretTTLMinutes = Key<Int>("secretTTLMinutes", default: 10)
     /// Apple Intelligence features: auto-titles, categories, AI transforms.
     static let aiFeatures = Key<Bool>("aiFeatures", default: true)
-    /// Poll GitHub Releases for a newer version and surface it in the menu bar.
-    static let updateCheckEnabled = Key<Bool>("updateCheckEnabled", default: true)
     /// Fetch page title/description/favicon/preview for copied links over the
     /// network to render rich link cards. User-opt-in; on by default.
     static let richLinkPreviews = Key<Bool>("richLinkPreviews", default: true)

@@ -7,8 +7,6 @@ import ServiceManagement
 import SwiftUI
 
 struct GeneralSettingsTab: View {
-    let checkForUpdates: () async -> Void
-
     @Default(.restoreClipboard) private var restoreClipboard
     @Default(.launcherFileResults) private var launcherFileResults
     @Default(.launcherClipResults) private var launcherClipResults
@@ -18,7 +16,6 @@ struct GeneralSettingsTab: View {
     @Default(.launcherCalendarEvents) private var launcherCalendarEvents
     @Default(.launcherAppAliases) private var launcherAppAliases
     @Default(.launcherQuicklinks) private var launcherQuicklinks
-    @Default(.updateCheckEnabled) private var updateCheckEnabled
     @Default(.richLinkPreviews) private var richLinkPreviews
 
     var body: some View {
@@ -110,13 +107,6 @@ struct GeneralSettingsTab: View {
                         }
                     }
                 }
-                HStack {
-                    Toggle("Check for updates automatically", isOn: self.$updateCheckEnabled)
-                    Spacer()
-                    Button("Check Now") {
-                        Task { await self.checkForUpdates() }
-                    }
-                }
                 Button("Copy Version Info") {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(AppVersion.summary, forType: .string)
@@ -130,8 +120,7 @@ struct GeneralSettingsTab: View {
                     when a release is cut. “Source” is the exact git state it was built from — \
                     \(AppVersion.isDirtyOrAhead
                         ? "this build is ahead of, or dirty against, that tag."
-                        : "matching the tag means it’s a clean release build."). Update checks \
-                    look at GitHub Releases once a day; installing stays a manual download.
+                        : "matching the tag means it’s a clean release build.")
                     """
                 )
             }
@@ -168,7 +157,7 @@ struct LaunchAtLoginToggle: View {
 
 #if DEBUG
     #Preview("General") {
-        GeneralSettingsTab(checkForUpdates: {})
+        GeneralSettingsTab()
             .frame(width: 600, height: 500)
     }
 #endif

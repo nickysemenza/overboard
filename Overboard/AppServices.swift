@@ -54,7 +54,6 @@ final class AppServices {
 
     let signal = CaptureSignal()
     let captureState = CaptureState()
-    let updates = UpdateChecker()
 
     let store: ClipStore
     let monitor: ClipboardMonitor
@@ -157,7 +156,6 @@ final class AppServices {
             FileIndexService.shared.start()
             self.startCapturePipeline()
             self.registerHotkeys()
-            self.updates.start()
             self.startSpotifyMonitor()
             self.startCalendarSource()
         }
@@ -176,7 +174,6 @@ final class AppServices {
     func stop() {
         self.ingestTask?.cancel()
         self.maintenance.stop()
-        self.updates.stop()
         if !Self.isDemo {
             self.monitor.stop()
             FileIndexService.shared.stop()

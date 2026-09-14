@@ -11,9 +11,8 @@
 # CFBundleShortVersionString comes from the nearest git tag, not from a
 # checked-in MARKETING_VERSION. The checked-in value silently went stale
 # between v0.1.0 and v0.2.0, and every locally built app then called itself
-# 0.1.0 — which UpdateChecker compared against the latest GitHub release and
-# reported as a permanent, bogus "update available". Tags are the single
-# source of truth now; there is no number left to remember to bump.
+# 0.1.0 in About and bug reports. Tags are the single source of truth now;
+# there is no number left to remember to bump.
 #
 # The value is raised to the tag, never lowered to it, so an explicit
 # MARKETING_VERSION= on the xcodebuild line still wins whenever it is ahead of
@@ -60,17 +59,16 @@ tag=$(git describe --tags --abbrev=0 2>/dev/null || true)
 version=${tag#v}
 
 # Only a clean dotted-numeric core is usable. A non-release tag ("nightly") or
-# a malformed one must leave the project's value alone rather than write
-# something SemanticVersion parses to nil — that would silently disable the
-# update check instead of failing loudly.
+# a malformed one must leave the project's value alone rather than stamp
+# garbage into CFBundleShortVersionString.
 case "$version" in
     '' | *[!0-9.]* | *..* | .* | *.) exit 0 ;;
     *.*) ;;
     *) exit 0 ;; # bare integer — not a release tag
 esac
 
-# Raise to the tag, never lower. sort -V orders 0.10.0 above 0.9.0, matching
-# SemanticVersion's per-component numeric comparison.
+# Raise to the tag, never lower. sort -V compares per-component numerically,
+# so 0.10.0 orders above 0.9.0.
 current=$(get_key CFBundleShortVersionString)
 highest=$(printf '%s\n%s\n' "$current" "$version" | sort -V | tail -n 1)
 

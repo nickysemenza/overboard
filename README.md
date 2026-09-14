@@ -57,26 +57,23 @@ without it. The first time you copy from a browser, macOS also prompts for
 (capturing the page URL/title); declining just skips provenance for that
 browser. Settings → Permissions shows every one of these, plus any folders the
 file index couldn't read, and can ask for them again. No analytics, no
-account. Network is used only for two opt-outable features: fetching
+account. Network is used only for one opt-outable feature: fetching
 link-preview metadata (page title, favicon, description, og:image — toggle in
-Settings → General), and checking for app updates. All clipboard data stays on
-your machine.
+Settings → General). All clipboard data stays on your machine.
 
 ### Network activity
 
-Overboard makes exactly two kinds of outbound request, both on by default but
-individually toggleable, and neither sends any of your clipboard content:
+Overboard makes exactly one kind of outbound request, on by default but
+toggleable, and it never sends any of your clipboard content:
 
 - **Link-preview metadata** — fetches a copied page's title, favicon,
   description, and og:image. Toggle: Settings → General → "Fetch link titles
   and icons".
-- **App update check** — polls GitHub's releases API once a day to see if a
-  newer version exists. Toggle: Settings → General → "Check for updates
-  automatically".
 
-Both use an ephemeral `URLSession` with cookie storage and the URL cache
-disabled, so neither request can read or leave behind cookies, and nothing
-is cached to disk.
+It uses an ephemeral `URLSession` with cookie storage and the URL cache
+disabled, so the request can't read or leave behind cookies, and nothing is
+cached to disk. The app does not check for updates itself — `brew upgrade`
+is the update path.
 
 ## Features
 
