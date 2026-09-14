@@ -103,9 +103,11 @@ struct RenderSmokeTests {
                 accessibility: .granted,
                 automation: ["com.apple.Safari": .granted, "com.google.Chrome": .denied]
             ),
-            fileIssues: { ["/Users/overboard/Library/Mail: Permission denied.", "File index unavailable."] }
+            fileIssues: { ["/Users/overboard/Library/Mail: Permission denied.", "File index unavailable."] },
+            // Deterministic regardless of whether CI's runner has a model.
+            aiAvailability: { .available }
         )
-        #expect(self.rendersNonEmpty(snapshotHost(view, width: 560, height: 520)))
+        #expect(self.rendersNonEmpty(snapshotHost(view, width: 560, height: 620)))
     }
 
     @Test func historyTabRendersInBothAppearances() {

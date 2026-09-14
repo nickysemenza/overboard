@@ -103,10 +103,7 @@ final class AppServices {
         self.monitor = ClipboardMonitor()
         self.pasteback = PastebackService(store: self.store)
         self.enrichment = ClipEnrichmentPipeline(store: self.store) {
-            ClipEnrichmentPipeline.Settings(
-                richLinkPreviews: Defaults[.richLinkPreviews],
-                aiFeatures: Defaults[.aiFeatures]
-            )
+            ClipEnrichmentPipeline.Settings(richLinkPreviews: Defaults[.richLinkPreviews])
         }
         let stack = self.stack
         self.actions = ClipActionExecutor(

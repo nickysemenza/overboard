@@ -51,7 +51,7 @@ struct ClipEnrichmentPipelineTests {
     private func makePipeline(
         store: ClipStore,
         calls: SeamCalls,
-        settings: ClipEnrichmentPipeline.Settings = .init(richLinkPreviews: true, aiFeatures: true),
+        settings: ClipEnrichmentPipeline.Settings = .init(richLinkPreviews: true),
         recognized: String? = nil,
         metadata: LinkMetadata? = nil,
         enrichment: ClipEnricher.Enrichment? = nil
@@ -143,21 +143,18 @@ struct ClipEnrichmentPipelineTests {
         #expect(try await self.reload(item.id, from: store).aiTitle == nil)
     }
 
-    @Test func aiFeaturesOffSkipsLabeling() async throws {
+    @Test func unavailableModelLeavesClipUnlabeled() async throws {
         let store = try self.makeStore()
         let calls = SeamCalls()
         let snapshot = self.textSnapshot(self.longText(120))
         let item = try #require(try await store.ingest(snapshot))
 
-        let pipeline = self.makePipeline(
-            store: store,
-            calls: calls,
-            settings: .init(richLinkPreviews: true, aiFeatures: false),
-            enrichment: .init(title: "Nope", category: "other", summary: "Nope.")
-        )
+        // No `enrichment` passed → the enrichText stub returns nil, standing
+        // in for Apple Intelligence being unavailable on this Mac.
+        let pipeline = self.makePipeline(store: store, calls: calls, enrichment: nil)
         await pipeline.enrich(item: item, snapshot: snapshot)
 
-        #expect(await calls.labeled.isEmpty)
+        #expect(await calls.labeled.count == 1)
         #expect(try await self.reload(item.id, from: store).aiTitle == nil)
     }
 
@@ -255,7 +252,7 @@ struct ClipEnrichmentPipelineTests {
         let pipeline = self.makePipeline(
             store: store,
             calls: calls,
-            settings: .init(richLinkPreviews: false, aiFeatures: true),
+            settings: .init(richLinkPreviews: false),
             metadata: LinkMetadata(title: "Swift Blog")
         )
         await pipeline.enrich(item: item, snapshot: snapshot)

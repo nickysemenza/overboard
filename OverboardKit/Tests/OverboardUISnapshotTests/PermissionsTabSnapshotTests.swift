@@ -24,10 +24,11 @@ struct PermissionsTabSnapshotTests {
                 ),
                 fileIssues: {
                     ["/Users/overboard/Library/Mail: You don’t have permission to view this folder."]
-                }
+                },
+                aiAvailability: { .notEnabled }
             ),
             width: 560,
-            height: 520,
+            height: 620,
             dark: dark
         )
     }

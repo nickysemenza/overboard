@@ -98,12 +98,9 @@ extension AppServices {
                     return stats.subtitle
                 }
             ),
-            // "Ask AI" fallback row — only when the on-device model is ready and
-            // the user hasn't turned AI features off.
+            // "Ask AI" fallback row — only when the on-device model is ready.
             clipboardStore: store,
-            askAIProvider: AskAIProvider(
-                isAvailable: { AITransformer.isAvailable && Defaults[.aiFeatures] }
-            )
+            askAIProvider: AskAIProvider(isAvailable: { AITransformer.isAvailable })
         )
         // Pin the up-next calendar event and the Spotify now-playing row under
         // every result list, in that order, when each is enabled and has
