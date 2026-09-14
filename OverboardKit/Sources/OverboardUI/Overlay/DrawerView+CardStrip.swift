@@ -95,6 +95,7 @@ extension DrawerView {
                 isSelected: index == self.viewModel.selectedIndex
             )
             .cardEntrance(index: index)
+            .zIndex(index == self.viewModel.selectedIndex ? 1 : 0)
             .onTapGesture {
                 self.viewModel.select(at: index)
             }

@@ -26,6 +26,7 @@ struct LauncherRow: View {
     var onCommit: () -> Void = {}
     var onPerformAction: (LauncherAction) -> Void = { _ in }
     @State private var thumbnail: NSImage?
+    @Environment(\.referenceDate) private var referenceDate
 
     var body: some View {
         Button(action: self.onSelect) {
@@ -77,9 +78,9 @@ struct LauncherRow: View {
                 }
             }
             .padding(.horizontal, 8)
-            .frame(height: 40)
             .padding(.vertical, 2)
-            .contentShape(RoundedRectangle(cornerRadius: 8))
+            .frame(height: 44)
+            .contentShape(RoundedRectangle(cornerRadius: ControlRadius.inset))
         }
         .buttonStyle(LauncherRowButtonStyle(isSelected: self.isSelected))
         // Plain ↩-style commit on a double click; the single click above
@@ -212,7 +213,7 @@ struct LauncherRow: View {
             )
         case .app: "Application"
         case let .snippet(snippet): Self.firstLine(of: snippet.body) ?? "Snippet"
-        case let .clip(item): Self.clipSubtitle(for: item)
+        case let .clip(item): self.clipSubtitle(for: item)
         case let .file(_, url, _): FileBreadcrumb.label(url.deletingLastPathComponent())
         case .webSearch: "Open in browser"
         case .systemSetting: "System Settings"
@@ -274,8 +275,8 @@ struct LauncherRow: View {
             ?? item.kind.displayName
     }
 
-    private static func clipSubtitle(for item: ClipItem) -> String {
-        let when = item.lastUsedAt.formatted(.relative(presentation: .named))
+    private func clipSubtitle(for item: ClipItem) -> String {
+        let when = TimestampFormatter.relative(item.lastUsedAt, now: self.referenceDate ?? .now)
         guard let app = item.sourceAppName else { return when }
         return String(localized: "\(app) · \(when)", bundle: .module)
     }

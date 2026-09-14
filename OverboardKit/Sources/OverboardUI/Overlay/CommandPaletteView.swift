@@ -133,8 +133,8 @@ struct CommandPaletteView: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
         .background(
-            isHighlighted ? Color.accentColor.opacity(0.22) : .clear,
-            in: RoundedRectangle(cornerRadius: 7)
+            isHighlighted ? SelectionTint.compact : .clear,
+            in: RoundedRectangle(cornerRadius: ControlRadius.compact)
         )
         .contentShape(Rectangle())
     }

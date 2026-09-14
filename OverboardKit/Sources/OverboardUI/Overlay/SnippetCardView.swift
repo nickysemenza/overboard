@@ -6,8 +6,7 @@ struct SnippetCardView: View {
     let index: Int
     let isSelected: Bool
     /// Matches ItemCardView so the two card kinds stay the same size in a
-    /// strip that mixes them.
-    @ScaledMetric(relativeTo: .callout) private var cardWidth: CGFloat = CardMetrics.width
+    /// strip that mixes them. `cardShell` owns the matching width metric.
     @ScaledMetric(relativeTo: .callout) private var cardHeight: CGFloat = CardMetrics.height
 
     var body: some View {
@@ -20,16 +19,7 @@ struct SnippetCardView: View {
                 .padding(10)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .frame(width: self.cardWidth, height: self.cardHeight)
-        .background(.background.opacity(0.6))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-        .overlay {
-            RoundedRectangle(cornerRadius: 10)
-                .strokeBorder(
-                    self.isSelected ? Color.accentColor : Color.primary.opacity(0.1),
-                    lineWidth: self.isSelected ? 2.5 : 1
-                )
-        }
+        .cardShell(isSelected: self.isSelected)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(self.accessibilityCardLabel)
         .accessibilityAddTraits(self.isSelected ? .isSelected : [])

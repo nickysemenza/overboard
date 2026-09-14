@@ -67,28 +67,16 @@ extension ItemCardView {
                     }
                     .clipped()
                     .overlay(alignment: .bottom) {
-                        let dims = self.item.metadataFooter
-                        if self.item.aiTitle != nil || dims != nil {
-                            HStack(spacing: 6) {
-                                if let title = item.aiTitle {
-                                    Text(title)
-                                        .font(.caption2.weight(.medium))
-                                        .lineLimit(1)
-                                }
-                                if self.item.aiTitle != nil, dims != nil {
-                                    Spacer(minLength: 0)
-                                }
-                                if let dims {
-                                    Text(dims)
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
-                                        .lineLimit(1)
-                                }
-                            }
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .frame(maxWidth: .infinity)
-                            .background(.ultraThinMaterial)
+                        // Dimensions now live in the card footer alongside the
+                        // relative copy time; only the AI caption stays here.
+                        if let title = item.aiTitle {
+                            Text(title)
+                                .font(.caption2.weight(.medium))
+                                .lineLimit(1)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(.ultraThinMaterial)
                         }
                     }
             } else {
@@ -203,19 +191,38 @@ extension ItemCardView {
         ClipItem.linkHost(fromPreview: self.item.previewText)
     }
 
-    /// Metadata line under the card content (char/line counts, file size…).
-    /// Images carry their dimensions in the image overlay instead, so they get
-    /// no footer row here. Nil metadata renders nothing — no placeholder.
-    @ViewBuilder
+    /// Every card's footer: the relative copy time, leading, then compact
+    /// metadata (char/line counts, file size, image dimensions…) trailing
+    /// when there is any. The absolute time is a tooltip and lives in the
+    /// accessibility label instead of cluttering this row.
     var footer: some View {
-        if self.item.kind != .image, let text = item.metadataFooter {
+        let now = self.referenceDate ?? .now
+        let when = TimestampFormatter.relative(self.item.lastUsedAt, now: now, unitsStyle: .abbreviated)
+        return VStack(spacing: 0) {
             Divider().opacity(0.25)
-            Text(text)
-                .font(.caption2.monospacedDigit())
-                .contrastAwareForeground(.tertiary)
-                .lineLimit(1)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 4)
+            HStack(spacing: 6) {
+                Text(when).fixedSize()
+                if let meta = self.item.metadataFooter {
+                    Spacer(minLength: 0)
+                    // The time never yields; metadata degrades a segment at a
+                    // time ("1,240 characters · 32 lines" → "1,240 characters")
+                    // before it resorts to truncating mid-word.
+                    ViewThatFits(in: .horizontal) {
+                        Text(meta).fixedSize()
+                        if let lead = meta.components(separatedBy: ClipItem.metadataSeparator).first,
+                           lead != meta
+                        {
+                            Text(lead).fixedSize()
+                        }
+                        Text(meta).lineLimit(1).truncationMode(.tail)
+                    }
+                }
+            }
+            .font(.caption2.monospacedDigit())
+            .contrastAwareForeground(.tertiary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .help(TimestampFormatter.absolute(self.item.lastUsedAt))
         }
     }
 

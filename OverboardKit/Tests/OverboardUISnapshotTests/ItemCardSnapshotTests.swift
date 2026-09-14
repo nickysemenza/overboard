@@ -24,17 +24,17 @@ struct ItemCardSnapshotTests {
 
     @Test func plainText() {
         let item = Fixtures.item(preview: "Pick up the package before 6pm — front desk closes early on Fridays.")
-        assertSnapshot(of: self.host(item), as: snapshotImageStrategy)
+        assertSnapshot(of: self.host(item), as: snapshotImageStrategy, record: snapshotRecordingMode)
     }
 
     @Test func plainTextSelected() {
         let item = Fixtures.item(preview: "Pick up the package before 6pm — front desk closes early on Fridays.")
-        assertSnapshot(of: self.host(item, selected: true), as: snapshotImageStrategy)
+        assertSnapshot(of: self.host(item, selected: true), as: snapshotImageStrategy, record: snapshotRecordingMode)
     }
 
     @Test func plainTextDark() {
         let item = Fixtures.item(preview: "Pick up the package before 6pm — front desk closes early on Fridays.")
-        assertSnapshot(of: self.host(item, dark: true), as: snapshotImageStrategy)
+        assertSnapshot(of: self.host(item, dark: true), as: snapshotImageStrategy, record: snapshotRecordingMode)
     }
 
     @Test func aiEnriched() {
@@ -44,7 +44,7 @@ struct ItemCardSnapshotTests {
             category: "code",
             aiSummary: "Reduces clip items to their combined byte size."
         )
-        assertSnapshot(of: self.host(item, index: 1), as: snapshotImageStrategy)
+        assertSnapshot(of: self.host(item, index: 1), as: snapshotImageStrategy, record: snapshotRecordingMode)
     }
 
     @Test func link() {
@@ -52,7 +52,7 @@ struct ItemCardSnapshotTests {
             kind: .link,
             preview: "https://developer.apple.com/documentation/swiftui/imagerenderer"
         )
-        assertSnapshot(of: self.host(item, index: 2), as: snapshotImageStrategy)
+        assertSnapshot(of: self.host(item, index: 2), as: snapshotImageStrategy, record: snapshotRecordingMode)
     }
 
     @Test func richLink() {
@@ -64,7 +64,7 @@ struct ItemCardSnapshotTests {
             faviconData: Fixtures.solidPNG(width: 32, height: 32, red: 0.2, green: 0.5, blue: 0.9),
             previewImageData: Fixtures.solidPNG(width: 240, height: 120, red: 0.85, green: 0.9, blue: 0.95)
         )
-        assertSnapshot(of: self.host(item, index: 2), as: snapshotImageStrategy)
+        assertSnapshot(of: self.host(item, index: 2), as: snapshotImageStrategy, record: snapshotRecordingMode)
     }
 
     @Test func file() {
@@ -73,7 +73,7 @@ struct ItemCardSnapshotTests {
             preview: "overboard-icon.sketch, release-notes.md",
             appName: "Finder"
         )
-        assertSnapshot(of: self.host(item, index: 3), as: snapshotImageStrategy)
+        assertSnapshot(of: self.host(item, index: 3), as: snapshotImageStrategy, record: snapshotRecordingMode)
     }
 
     // MARK: - Metadata footers (v2)
@@ -84,7 +84,7 @@ struct ItemCardSnapshotTests {
             charCount: 1240,
             lineCount: 32
         )
-        assertSnapshot(of: self.host(item), as: snapshotImageStrategy)
+        assertSnapshot(of: self.host(item), as: snapshotImageStrategy, record: snapshotRecordingMode)
     }
 
     @Test func imageWithDimensions() {
@@ -95,7 +95,7 @@ struct ItemCardSnapshotTests {
             pixelWidth: 1920,
             pixelHeight: 1080
         )
-        assertSnapshot(of: self.host(item, index: 5), as: snapshotImageStrategy)
+        assertSnapshot(of: self.host(item, index: 5), as: snapshotImageStrategy, record: snapshotRecordingMode)
     }
 
     @Test func fileWithFooter() {
@@ -106,12 +106,12 @@ struct ItemCardSnapshotTests {
             fileCount: 2
         )
         item.byteSize = 2_100_000
-        assertSnapshot(of: self.host(item, index: 3), as: snapshotImageStrategy)
+        assertSnapshot(of: self.host(item, index: 3), as: snapshotImageStrategy, record: snapshotRecordingMode)
     }
 
     @Test func secret() {
         let item = Fixtures.item(preview: "AWS access key", isSecret: true)
-        assertSnapshot(of: self.host(item, index: 4), as: snapshotImageStrategy)
+        assertSnapshot(of: self.host(item, index: 4), as: snapshotImageStrategy, record: snapshotRecordingMode)
     }
 
     @Test func pinned() {
@@ -119,7 +119,7 @@ struct ItemCardSnapshotTests {
             preview: "Overboard ⛵️ — everything you copy goes overboard.",
             isPinned: true
         )
-        assertSnapshot(of: self.host(item), as: snapshotImageStrategy)
+        assertSnapshot(of: self.host(item), as: snapshotImageStrategy, record: snapshotRecordingMode)
     }
 
     /// Pins the accessibility-text layout: the card's own geometry scales with
@@ -133,6 +133,10 @@ struct ItemCardSnapshotTests {
         )
         let view = ItemCardView(item: item, index: 0, isSelected: false, store: self.store)
             .environment(\.dynamicTypeSize, .xxxLarge)
-        assertSnapshot(of: snapshotImage(view, width: 300, height: 300), as: snapshotImageStrategy)
+        assertSnapshot(
+            of: snapshotImage(view, width: 300, height: 300),
+            as: snapshotImageStrategy,
+            record: snapshotRecordingMode
+        )
     }
 }

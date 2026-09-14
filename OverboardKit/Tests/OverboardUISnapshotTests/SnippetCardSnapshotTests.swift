@@ -22,7 +22,11 @@ struct SnippetCardSnapshotTests {
             index: 0,
             isSelected: false
         )
-        assertSnapshot(of: snapshotImage(view, width: 220, height: 210), as: snapshotImageStrategy)
+        assertSnapshot(
+            of: snapshotImage(view, width: 220, height: 210),
+            as: snapshotImageStrategy,
+            record: snapshotRecordingMode
+        )
     }
 
     @Test func selectedWithPlaceholders() {
@@ -34,7 +38,11 @@ struct SnippetCardSnapshotTests {
             index: 1,
             isSelected: true
         )
-        assertSnapshot(of: snapshotImage(view, width: 220, height: 210), as: snapshotImageStrategy)
+        assertSnapshot(
+            of: snapshotImage(view, width: 220, height: 210),
+            as: snapshotImageStrategy,
+            record: snapshotRecordingMode
+        )
     }
 
     /// Same Dynamic Type pin as `ItemCardSnapshotTests.largestDynamicType`: the
@@ -46,6 +54,10 @@ struct SnippetCardSnapshotTests {
             isSelected: false
         )
         .environment(\.dynamicTypeSize, .xxxLarge)
-        assertSnapshot(of: snapshotImage(view, width: 300, height: 300), as: snapshotImageStrategy)
+        assertSnapshot(
+            of: snapshotImage(view, width: 300, height: 300),
+            as: snapshotImageStrategy,
+            record: snapshotRecordingMode
+        )
     }
 }

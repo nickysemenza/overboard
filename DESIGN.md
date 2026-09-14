@@ -194,7 +194,7 @@ The content occupies the main preview area; a divider separates its metadata bel
 
 ### Clipboard Cards
 
-The drawer preserves compact, equal-size cards with source-app headers, content previews, and metadata footers. Card width and height scale with Dynamic Type, and the card strip and drawer panel heights are derived from the card rather than declared separately. Header tint comes from the source app's icon; image, link, code, color, file, and protected content keep their distinct presentations. Protected content carries the filled orange Secret badge in its header alongside its masked body. Selected cards have an accent outline and soft lift; hover reveals compact native actions. The drawer's centered action hints use caption-sized secondary text.
+The drawer preserves compact, equal-size cards with source-app headers, content previews, and metadata footers. Every card's footer leads with the relative copy time ("5 minutes ago"), then compact kind-specific metadata (char/line counts, image dimensions, file size, a link's host) when there is any; the absolute timestamp is a tooltip on the footer and part of the card's accessibility label rather than printed metadata. Card width and height scale with Dynamic Type, and the card strip and drawer panel heights are derived from the card rather than declared separately. Header tint comes from the source app's icon; image, link, code, color, file, and protected content keep their distinct presentations. Protected content carries the filled orange Secret badge in its header alongside its masked body. Selected cards have an accent outline and soft lift; hover reveals compact native actions. The drawer's centered action hints use caption-sized secondary text.
 
 ### Action Palette
 

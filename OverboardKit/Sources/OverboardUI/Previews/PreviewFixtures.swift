@@ -13,6 +13,10 @@
     /// build.
     enum Fixtures {
         static let date = Date(timeIntervalSince1970: 1_700_000_000)
+        /// A fixed instant a few minutes after `date`, so relative-timestamp
+        /// previews and snapshots read "5 minutes ago" instead of drifting
+        /// with the wall clock.
+        static let referenceDate = date.addingTimeInterval(5 * 60)
 
         static func item(
             kind: ItemKind = .text,

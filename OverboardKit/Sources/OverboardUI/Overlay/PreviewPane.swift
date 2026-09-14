@@ -72,9 +72,7 @@ struct PreviewPane: View {
                 }
                 Spacer()
                 if item.isSecret {
-                    Label("Secret", systemImage: "lock.fill")
-                        .font(.caption)
-                        .foregroundStyle(.yellow)
+                    SecretBadge()
                 }
                 if self.markdownSource != nil {
                     Button {
@@ -175,7 +173,7 @@ struct PreviewPane: View {
         if let app = item.sourceAppName {
             parts.append(app)
         }
-        parts.append(item.lastUsedAt.formatted(date: .abbreviated, time: .shortened))
+        parts.append(TimestampFormatter.absolute(item.lastUsedAt))
         return parts.joined(separator: " · ")
     }
 }

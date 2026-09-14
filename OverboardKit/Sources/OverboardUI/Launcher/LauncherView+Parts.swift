@@ -63,8 +63,8 @@ struct LauncherScopeBar: View {
                     }
                     .padding(.horizontal, 11).padding(.vertical, 6)
                     .background(
-                        self.viewModel.scope == scope ? Color.primary.opacity(0.10) : .clear,
-                        in: RoundedRectangle(cornerRadius: 7)
+                        self.viewModel.scope == scope ? SelectionTint.neutral : .clear,
+                        in: RoundedRectangle(cornerRadius: ControlRadius.compact)
                     )
                 }
                 .buttonStyle(.plain)

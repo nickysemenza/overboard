@@ -152,7 +152,7 @@ struct LauncherPreview: View {
             Divider()
             VStack(alignment: .leading, spacing: 9) {
                 LabeledContent("Source", value: item.sourceAppName ?? "Unknown app")
-                LabeledContent("Copied", value: item.lastUsedAt.formatted(date: .abbreviated, time: .shortened))
+                LabeledContent("Copied", value: TimestampFormatter.absolute(item.lastUsedAt))
                 LabeledContent("Type", value: item.kind.displayName)
                 if let source = item.sourceURL, let url = URL(string: source) {
                     Link(destination: url) {

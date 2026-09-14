@@ -21,7 +21,9 @@ func snapshotHost(
     height: CGFloat,
     dark: Bool = false
 ) -> NSView {
-    let host = NSHostingView(rootView: view.environment(\.flattensGlassPanels, true))
+    let host = NSHostingView(rootView: view
+        .environment(\.flattensGlassPanels, true)
+        .environment(\.referenceDate, Fixtures.referenceDate))
     host.frame = CGRect(x: 0, y: 0, width: width, height: height)
     host.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
     host.layoutSubtreeIfNeeded()
