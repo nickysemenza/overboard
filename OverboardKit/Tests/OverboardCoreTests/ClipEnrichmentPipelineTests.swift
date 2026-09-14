@@ -47,7 +47,9 @@ struct ClipEnrichmentPipelineTests {
         )
     }
 
-    /// A pipeline whose three outside-world steps are stubs recorded in `calls`.
+    /// A pipeline whose outside-world steps are stubs recorded in `calls`.
+    /// `enrichImage` defaults to nil, matching a pre-macOS-27 run — see
+    /// `ClipEnrichmentPipelineImageTests` for the image-enrichment path.
     private func makePipeline(
         store: ClipStore,
         calls: SeamCalls,
@@ -330,5 +332,23 @@ struct ClipEnrichmentPipelineTests {
 
         #expect(await calls.recognized.count == 1)
         #expect(await calls.labeled.isEmpty)
+    }
+
+    /// Without `enrichImage` installed (pre-macOS-27, or the model
+    /// unavailable), image clips fall all the way through to the
+    /// OCR-text-only path — see `ClipEnrichmentPipelineImageTests` for the
+    /// image-enrichment path this replaces on macOS 27.
+    @Test func imageClipWithoutImageEnricherUsesExistingTextPath() async throws {
+        let store = try self.makeStore()
+        let calls = SeamCalls()
+        let snapshot = self.pngSnapshot(Data(repeating: 0x42, count: 64))
+        let item = try #require(try await store.ingest(snapshot))
+
+        // OCR text short of the labeling minimum still gets no title at all.
+        let pipeline = self.makePipeline(store: store, calls: calls, recognized: "short")
+        await pipeline.enrich(item: item, snapshot: snapshot)
+
+        #expect(await calls.labeled.isEmpty)
+        #expect(try await self.reload(item.id, from: store).aiTitle == nil)
     }
 }

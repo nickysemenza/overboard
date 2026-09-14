@@ -59,7 +59,15 @@ public extension ClipStore {
                 parts.joined(separator: "\n").prefix(CaptureClassifier.searchTextLimit)
             )
 
-            if let oldSearchText {
+            // `item_fts` is an external-content table: a row only exists in it
+            // when the prior UPDATE that set `searchText` also inserted one,
+            // which only happens for a non-empty value (see the `!capped
+            // .isEmpty` guard in `attachRecognizedText`, and the ingest path
+            // it mirrors). An image with no OCR text leaves `searchText ==
+            // ""` — present but never indexed — so issuing the 'delete'
+            // command for it targets a row that was never inserted and SQLite
+            // reports that as "database disk image is malformed".
+            if let oldSearchText, !oldSearchText.isEmpty {
                 try db.execute(
                     sql: "INSERT INTO item_fts (item_fts, rowid, searchText) VALUES ('delete', ?, ?)",
                     arguments: [rowid, oldSearchText]

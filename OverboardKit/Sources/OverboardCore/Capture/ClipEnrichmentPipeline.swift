@@ -29,6 +29,10 @@ public struct ClipEnrichmentPipeline: Sendable {
     public typealias LinkFetcher = @Sendable (URL) async -> LinkMetadata?
     /// LLM labeling; nil when unavailable or the request failed.
     public typealias TextEnricher = @Sendable (String) async -> ClipEnricher.Enrichment?
+    /// LLM image labeling (macOS 27+); PNG bytes in, plus the OCR text
+    /// already recognized for this item (nil when OCR found nothing). Nil
+    /// when unavailable or the request failed.
+    public typealias ImageEnricher = @Sendable (Data, String?) async -> ClipEnricher.Enrichment?
 
     /// Below this many characters, an LLM title says nothing the preview
     /// doesn't already show, so labeling isn't attempted.
@@ -50,6 +54,7 @@ public struct ClipEnrichmentPipeline: Sendable {
     private let recognizeText: TextRecognizer
     private let fetchLink: LinkFetcher
     private let enrichText: TextEnricher
+    private let enrichImage: ImageEnricher?
 
     public init(
         store: ClipStore,
@@ -59,13 +64,15 @@ public struct ClipEnrichmentPipeline: Sendable {
         enrichText: @escaping TextEnricher = { text in
             guard ClipEnricher.isAvailable else { return nil }
             return try? await ClipEnricher.enrich(text: text)
-        }
+        },
+        enrichImage: ImageEnricher? = nil
     ) {
         self.store = store
         self.settings = settings
         self.recognizeText = recognizeText
         self.fetchLink = fetchLink
         self.enrichText = enrichText
+        self.enrichImage = enrichImage
     }
 
     /// Enriches one just-ingested item in place.
@@ -86,6 +93,24 @@ public struct ClipEnrichmentPipeline: Sendable {
             // OCR-attempted (searchText '' vs NULL).
             let recognized = await self.recognizeText(png) ?? ""
             try? await self.store.attachRecognizedText(itemID: item.id, text: recognized)
+
+            if let enrichImage = self.enrichImage {
+                // macOS 27: the vision-capable model labels the image
+                // directly, with any OCR text passed along as a hint. Unlike
+                // the text-only path below, this runs even when OCR found
+                // nothing — pixels alone are enough for a title.
+                guard let enrichment = await enrichImage(png, recognized.isEmpty ? nil : recognized)
+                else { return }
+                let summary = recognized.count >= ClipEnricher.summaryWorthwhileLength ? enrichment.summary : nil
+                try? await self.store.attachEnrichment(
+                    itemID: item.id,
+                    title: enrichment.title,
+                    category: enrichment.category,
+                    summary: summary
+                )
+                return
+            }
+
             textForLabeling = recognized.isEmpty ? nil : recognized
         } else if item.kind == .text {
             textForLabeling = snapshot.reps

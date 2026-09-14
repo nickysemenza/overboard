@@ -110,10 +110,21 @@ final class AppServices {
         self.monitor = ClipboardMonitor()
         self.pasteback = PastebackService(store: self.store)
         let linkFetcher = self.linkFetcher
+        // macOS 27: the vision-capable on-device model can title an image
+        // clip straight from its pixels. Nil on earlier systems, where the
+        // pipeline falls back to its OCR-text-only labeling path.
+        var enrichImage: ClipEnrichmentPipeline.ImageEnricher?
+        if #available(macOS 27, *) {
+            enrichImage = { data, hint in
+                guard ClipEnricher.isAvailable else { return nil }
+                return try? await ClipEnricher.enrich(image: data, recognizedText: hint)
+            }
+        }
         self.enrichment = ClipEnrichmentPipeline(
             store: self.store,
             settings: { ClipEnrichmentPipeline.Settings(richLinkPreviews: Defaults[.richLinkPreviews]) },
-            fetchLink: { await linkFetcher.fetch($0) }
+            fetchLink: { await linkFetcher.fetch($0) },
+            enrichImage: enrichImage
         )
         let stack = self.stack
         self.actions = ClipActionExecutor(

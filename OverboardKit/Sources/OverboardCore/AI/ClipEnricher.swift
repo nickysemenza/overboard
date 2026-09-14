@@ -62,7 +62,7 @@ public enum ClipEnricher {
 
 #if canImport(FoundationModels)
     @Generable
-    private struct GeneratedLabel {
+    struct GeneratedLabel {
         @Guide(description: "A short descriptive title, 2-5 words")
         var title: String
 
