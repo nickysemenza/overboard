@@ -71,6 +71,17 @@ public final class LauncherViewModel {
         self.onLayoutChanged()
     }
 
+    /// Tab / ⇧Tab: steps `LauncherScope.allCases` by `delta` (usually ±1),
+    /// wrapping past either end, so repeated presses cycle the scope bar
+    /// indefinitely instead of stopping at "All" or "Apps".
+    public func cycleScope(_ delta: Int) {
+        let cases = LauncherScope.allCases
+        guard let index = cases.firstIndex(of: self.scope) else { return }
+        let count = cases.count
+        let next = ((index + delta) % count + count) % count
+        self.setScope(cases[next])
+    }
+
     public func togglePreview() {
         guard self.selectedResult != nil else { return }
         self.userSelected = true

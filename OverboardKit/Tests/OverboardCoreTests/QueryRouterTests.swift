@@ -88,6 +88,20 @@ struct QueryRouterTests {
         #expect(await disabled.results(for: "a").isEmpty)
     }
 
+    @Test func calculatorProviderFallsBackToUnitConversion() async {
+        // "5 mi in km" isn't math (CalculatorEngine's gate rejects the unit
+        // words), so CalculatorProvider must fall back to UnitConversionEngine
+        // and still produce exactly one calculation row.
+        let results = await CalculatorProvider().results(for: "5 mi in km")
+        #expect(results.count == 1)
+        guard case let .calculation(input, display) = results.first else {
+            Issue.record("expected a calculation row from the unit conversion fallback, got \(results)")
+            return
+        }
+        #expect(input == "5 mi in km")
+        #expect(display == "8.05 km")
+    }
+
     @Test func webSearchURLEncodesPlusAndUnicode() {
         let url = WebSearchProvider.searchURL(for: "c++ tutorial")
         #expect(url?.absoluteString == "https://www.google.com/search?q=c%2B%2B%20tutorial")

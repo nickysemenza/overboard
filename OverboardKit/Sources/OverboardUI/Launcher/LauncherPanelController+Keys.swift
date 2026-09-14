@@ -83,6 +83,8 @@ extension LauncherPanelController {
         case .downArrow:
             self.viewModel.movePaletteSelection(1)
             return nil
+        case .tab: // never hands focus away from the palette
+            return nil
         default: // typing filters
             return event
         }
@@ -107,6 +109,9 @@ extension LauncherPanelController {
             return self.viewModel.deleteSelectedRecent() ? nil : event
         case .returnKey, .keypadEnter:
             self.viewModel.commit(modifier: self.commitModifier(for: event))
+            return nil
+        case .tab: // cycles the scope bar instead of moving focus
+            self.viewModel.cycleScope(event.modifierFlags.contains(.shift) ? -1 : 1)
             return nil
         default:
             return event

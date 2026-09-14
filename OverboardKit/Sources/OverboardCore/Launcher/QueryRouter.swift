@@ -60,7 +60,11 @@ public struct CalculatorProvider: LauncherProvider {
     public init() {}
 
     public func results(for query: String) async -> [LauncherResult] {
-        guard let evaluation = CalculatorEngine.evaluate(query) else { return [] }
+        // Unit conversions (`5 mi in km`) use the same words `CalculatorEngine`'s
+        // math gate rejects, so they're tried as a fallback rather than a
+        // separate row: only one of the two ever produces an `Evaluation`.
+        guard let evaluation = CalculatorEngine.evaluate(query) ?? UnitConversionEngine.convert(query)
+        else { return [] }
         return [.calculation(input: query, display: evaluation.display)]
     }
 }
