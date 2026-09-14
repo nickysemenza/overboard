@@ -317,12 +317,12 @@ extension AppServices {
     /// launch, the first time a link fetch hits a challenge with nothing
     /// cached for it, so a gated host isn't a silent dead end — Settings ›
     /// General is where the user can actually do something about it.
-    /// Setting an actor-isolated property needs an async hop, hence the
-    /// `Task`; the callback itself only fires later, once a real fetch hits a
-    /// challenge, so there's no race with wiring it a beat after `start()`.
+    /// Installing it is an actor hop, hence the `Task`; the callback itself
+    /// only fires later, once a real fetch hits a challenge, so there's no
+    /// race with wiring it a beat after `start()`.
     func installCloudflareAccessCallbacks() {
         Task {
-            await CloudflaredAccessTokens.shared.onChallengeWithoutToken = { origin in
+            await CloudflaredAccessTokens.shared.setChallengeHint { origin in
                 HUDController.shared.flash(
                     "\(CloudflareAccessHost.host(fromOrigin: origin)) is behind Cloudflare Access — " +
                         "sign in from Settings",

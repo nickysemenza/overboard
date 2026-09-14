@@ -65,7 +65,13 @@ public actor CloudflaredAccessTokens {
     /// `@MainActor` because the app's only use for this is showing UI; typed
     /// this way so the actor hops there itself rather than every call site
     /// having to.
-    public var onChallengeWithoutToken: (@MainActor @Sendable (String) -> Void)?
+    private var onChallengeWithoutToken: (@MainActor @Sendable (String) -> Void)?
+
+    /// Installs `onChallengeWithoutToken` (an actor-isolated property can't
+    /// be assigned from outside the actor, so the app wires it through this).
+    public func setChallengeHint(_ handler: @escaping @MainActor @Sendable (String) -> Void) {
+        self.onChallengeWithoutToken = handler
+    }
 
     public init() {}
 
