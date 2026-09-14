@@ -28,6 +28,11 @@ struct CommandPaletteView: View {
     let emptyMessage: String
     let onRun: (Int) -> Void
     @FocusState private var queryFocused: Bool
+    /// The query row's height is pinned rather than left to the text field:
+    /// a plain `TextField` reports a slightly different height before and
+    /// after it takes focus, which moved the whole palette by a few points
+    /// between two otherwise identical renders.
+    @ScaledMetric(relativeTo: .title3) private var queryHeight: CGFloat = 24
 
     var body: some View {
         VStack(spacing: 0) {
@@ -40,6 +45,7 @@ struct CommandPaletteView: View {
                     .font(.title3)
                     .focused(self.$queryFocused)
             }
+            .frame(height: self.queryHeight)
             .padding(12)
 
             Divider()
