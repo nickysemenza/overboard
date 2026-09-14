@@ -72,8 +72,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 queue: .main
             ) { notification in
                 let command = notification.object as? String
-                obTrace("debug command received: \(command ?? "nil")")
                 MainActor.assumeIsolated {
+                    obTrace("debug command received: \(command ?? "nil")")
                     Self.handleDebugCommand(command)
                 }
             }
