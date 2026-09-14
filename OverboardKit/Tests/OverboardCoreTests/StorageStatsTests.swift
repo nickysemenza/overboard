@@ -18,37 +18,41 @@ struct StorageStatsTests {
         )
     }
 
-    @Test func largestItemsAreOrderedBySizeDescending() async throws {
+    @Test func bytesByKindIsOrderedDescending() async throws {
         let store = try makeStore()
         try await store.ingest(self.textSnapshot("small"))
         try await store.ingest(self.textSnapshot(String(repeating: "big ", count: 500)))
         try await store.ingest(self.textSnapshot(String(repeating: "medium ", count: 50)))
 
-        let stats = try await store.libraryStats(topLargest: 5)
-        #expect(stats.total == 3)
-        #expect(stats.largest.count == 3)
-        // Strictly descending by byte size.
-        let sizes = stats.largest.map(\.byteSize)
-        #expect(sizes == sizes.sorted(by: >))
-        #expect(stats.largest.first?.byteSize == sizes.max())
+        let stats = try await store.libraryStats()
+        // Only one kind (.text) is present, so this also exercises the
+        // single-entry case of "largest first".
+        let bytes = stats.bytesByKind.map(\.bytes)
+        #expect(bytes == bytes.sorted(by: >))
     }
 
-    @Test func largestRespectsLimit() async throws {
+    @Test func bytesByKindSumsRepresentationBytes() async throws {
         let store = try makeStore()
-        for index in 0 ..< 6 {
-            try await store.ingest(self.textSnapshot("item \(index) \(String(repeating: "x", count: index * 10))"))
-        }
-        let stats = try await store.libraryStats(topLargest: 3)
-        #expect(stats.largest.count == 3)
+        let first = "hello"
+        let second = "a longer clip of text"
+        try await store.ingest(self.textSnapshot(first))
+        try await store.ingest(self.textSnapshot(second))
+
+        let stats = try await store.libraryStats()
+        let expected = first.utf8.count + second.utf8.count
+        let textEntry = stats.bytesByKind.first { $0.kind == .text }
+        #expect(textEntry?.bytes == expected)
     }
 
-    @Test func deletedItemsExcludedFromLargest() async throws {
+    @Test func deletedItemsExcludedFromBytesByKind() async throws {
         let store = try makeStore()
         let big = try await store.ingest(self.textSnapshot(String(repeating: "huge ", count: 800)))
         try await store.ingest(self.textSnapshot("tiny"))
         try await store.delete(id: #require(big).id)
 
         let stats = try await store.libraryStats()
-        #expect(!stats.largest.contains { $0.id == big?.id })
+        let textEntry = stats.bytesByKind.first { $0.kind == .text }
+        // Only "tiny" (4 bytes) should remain after the huge item is deleted.
+        #expect(textEntry?.bytes == "tiny".utf8.count)
     }
 }

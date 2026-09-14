@@ -29,13 +29,18 @@ public struct LibraryStats: Sendable {
         }
     }
 
-    /// One of the heaviest live items, for the storage breakdown.
-    public struct LargeItem: Sendable, Identifiable {
-        public let id: String
+    /// Live-item byte total for one content kind, for the storage breakdown bar.
+    public struct KindBytes: Sendable, Identifiable {
         public let kind: ItemKind
-        /// Short human label — AI title, preview snippet, or the kind name.
-        public let label: String
-        public let byteSize: Int
+        public let bytes: Int
+        public var id: ItemKind {
+            self.kind
+        }
+
+        public init(kind: ItemKind, bytes: Int) {
+            self.kind = kind
+            self.bytes = bytes
+        }
     }
 
     public let total: Int
@@ -43,8 +48,12 @@ public struct LibraryStats: Sendable {
     public let byKind: [KindCount]
     /// Top source apps by item count, most-frequent first.
     public let bySource: [SourceCount]
-    /// The heaviest items by stored byte size, largest first.
-    public let largest: [LargeItem]
+    /// Live-item byte totals per content kind, largest first, for the storage
+    /// breakdown bar. `item.byteSize` is the capture-time sum of an item's
+    /// representations; blobs are content-addressed and shared across items,
+    /// and SQLite/FTS/embeddings add overhead, so this sum isn't "On disk" —
+    /// the bar shows proportions of stored content, not an on-disk total.
+    public let bytesByKind: [KindBytes]
 
     /// One-line library summary for the `:stats` launcher row, e.g.
     /// "1,234 items · 812 text · 96 links · 12 images". Shows the top kinds from
@@ -71,9 +80,9 @@ public extension ClipStore {
         }
     }
 
-    /// Counts of live items grouped by kind and by source app, plus the
-    /// heaviest items, for the History settings tab.
-    func libraryStats(topSources: Int = 5, topLargest: Int = 5) async throws -> LibraryStats {
+    /// Counts of live items grouped by kind and by source app, plus byte
+    /// totals per kind, for the History settings tab.
+    func libraryStats(topSources: Int = 5) async throws -> LibraryStats {
         try await self.dbWriter.read { db in
             let total = try Int.fetchOne(
                 db, sql: "SELECT COUNT(*) FROM item WHERE deletedAt IS NULL"
@@ -102,30 +111,19 @@ public extension ClipStore {
                 LibraryStats.SourceCount(app: row["app"], count: row["c"])
             }
 
-            let largest = try Row.fetchAll(
+            let bytesByKind = try Row.fetchAll(
                 db,
                 sql: """
-                SELECT id, kind, previewText, aiTitle, byteSize FROM item
-                WHERE deletedAt IS NULL ORDER BY byteSize DESC LIMIT ?
-                """,
-                arguments: [topLargest]
-            ).compactMap { row -> LibraryStats.LargeItem? in
+                SELECT kind, SUM(byteSize) AS b FROM item
+                WHERE deletedAt IS NULL GROUP BY kind ORDER BY b DESC
+                """
+            ).compactMap { row -> LibraryStats.KindBytes? in
                 guard let raw: String = row["kind"], let kind = ItemKind(rawValue: raw)
                 else { return nil }
-                let title: String? = row["aiTitle"]
-                let preview: String? = row["previewText"]
-                let label = [title, preview].compactMap(\.self)
-                    .first { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                return LibraryStats.LargeItem(
-                    id: row["id"],
-                    kind: kind,
-                    label: label.map { String($0.prefix(60)) } ?? kind.rawValue.capitalized,
-                    byteSize: row["byteSize"]
-                )
+                return LibraryStats.KindBytes(kind: kind, bytes: row["b"])
             }
 
-            return LibraryStats(total: total, byKind: byKind, bySource: bySource, largest: largest)
+            return LibraryStats(total: total, byKind: byKind, bySource: bySource, bytesByKind: bytesByKind)
         }
     }
 

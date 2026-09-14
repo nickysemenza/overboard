@@ -31,11 +31,11 @@ struct LibraryChartsSnapshotTests {
     }
 
     @Test func kindBreakdown() {
-        assertSnapshot(of: self.kindHost(), as: snapshotImageStrategy)
+        assertSnapshot(of: self.kindHost(), as: snapshotImageStrategy, record: snapshotRecordingMode)
     }
 
     @Test func kindBreakdownDark() {
-        assertSnapshot(of: self.kindHost(dark: true), as: snapshotImageStrategy)
+        assertSnapshot(of: self.kindHost(dark: true), as: snapshotImageStrategy, record: snapshotRecordingMode)
     }
 
     // MARK: - Source breakdown
@@ -56,11 +56,11 @@ struct LibraryChartsSnapshotTests {
     }
 
     @Test func sourceBreakdown() {
-        assertSnapshot(of: self.sourceHost(), as: snapshotImageStrategy)
+        assertSnapshot(of: self.sourceHost(), as: snapshotImageStrategy, record: snapshotRecordingMode)
     }
 
     @Test func sourceBreakdownDark() {
-        assertSnapshot(of: self.sourceHost(dark: true), as: snapshotImageStrategy)
+        assertSnapshot(of: self.sourceHost(dark: true), as: snapshotImageStrategy, record: snapshotRecordingMode)
     }
 
     // MARK: - Activity timeline
@@ -116,11 +116,36 @@ struct LibraryChartsSnapshotTests {
     }
 
     @Test func activityTimeline() {
-        assertSnapshot(of: self.timelineHost(), as: snapshotImageStrategy)
+        assertSnapshot(of: self.timelineHost(), as: snapshotImageStrategy, record: snapshotRecordingMode)
     }
 
     @Test func activityTimelineDark() {
-        assertSnapshot(of: self.timelineHost(dark: true), as: snapshotImageStrategy)
+        assertSnapshot(of: self.timelineHost(dark: true), as: snapshotImageStrategy, record: snapshotRecordingMode)
+    }
+
+    // MARK: - Activity timeline — selected day
+
+    /// Six days before the fixture's pinned "now": offset 23 in `activity`,
+    /// which is not a multiple of 4, so the selected day has clips to call out.
+    private static var selectedDate: Date {
+        chartCalendar.date(byAdding: .day, value: -6, to: chartCalendar.startOfDay(for: fixedNow))
+            ?? fixedNow
+    }
+
+    private func timelineSelectedHost(dark: Bool = false) -> NSImage {
+        snapshotImage(
+            self.pinned(
+                ActivityTimelineChart(activity: Self.activity, selectedDate: Self.selectedDate)
+                    .padding(8).background(.background)
+            ),
+            width: 480,
+            height: 140 + 16,
+            dark: dark
+        )
+    }
+
+    @Test func activityTimelineSelected() {
+        assertSnapshot(of: self.timelineSelectedHost(), as: snapshotImageStrategy, record: snapshotRecordingMode)
     }
 
     // MARK: - Activity timeline — empty
@@ -145,6 +170,37 @@ struct LibraryChartsSnapshotTests {
     }
 
     @Test func activityTimelineEmpty() {
-        assertSnapshot(of: self.emptyTimelineHost(), as: snapshotImageStrategy)
+        assertSnapshot(of: self.emptyTimelineHost(), as: snapshotImageStrategy, record: snapshotRecordingMode)
+    }
+
+    // MARK: - Storage breakdown
+
+    private static let bytesByKindEntries: [LibraryStats.KindBytes] = [
+        .init(kind: .image, bytes: 48_000_000),
+        .init(kind: .text, bytes: 1_200_000),
+        .init(kind: .link, bytes: 300_000),
+        .init(kind: .file, bytes: 120_000),
+        .init(kind: .color, bytes: 2000),
+    ]
+
+    private func storageBreakdownHost(dark: Bool = false) -> NSImage {
+        snapshotImage(
+            StorageBreakdownBar(bytesByKind: Self.bytesByKindEntries).padding(8).background(.background),
+            width: 480,
+            height: 60,
+            dark: dark
+        )
+    }
+
+    @Test func storageBreakdown() {
+        assertSnapshot(of: self.storageBreakdownHost(), as: snapshotImageStrategy, record: snapshotRecordingMode)
+    }
+
+    @Test func storageBreakdownDark() {
+        assertSnapshot(
+            of: self.storageBreakdownHost(dark: true),
+            as: snapshotImageStrategy,
+            record: snapshotRecordingMode
+        )
     }
 }

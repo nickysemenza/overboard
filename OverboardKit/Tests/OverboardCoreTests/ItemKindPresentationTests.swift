@@ -52,7 +52,7 @@ struct LibraryStatsSubtitleTests {
             total: total,
             byKind: kinds.map { LibraryStats.KindCount(kind: $0.0, count: $0.1) },
             bySource: [],
-            largest: []
+            bytesByKind: []
         )
     }
 
