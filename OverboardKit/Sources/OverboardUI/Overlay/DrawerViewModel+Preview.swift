@@ -44,6 +44,9 @@ public extension DrawerViewModel {
         withAnimation(self.motion) {
             self.previewState = .hidden
         } completion: {
+            // Space twice within the spring reopens the pane before this
+            // fires; shrinking then would clip the pane that's now showing.
+            guard self.previewState == .hidden else { return }
             self.onPreviewVisibilityChanged(false)
         }
     }
