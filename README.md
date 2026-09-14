@@ -275,10 +275,15 @@ swiftformat --lint . && swiftlint --strict   # what CI runs; `swiftformat .` rew
 git config core.hooksPath scripts/hooks      # optional: lint before every commit
 ```
 
-`dogfood.sh` builds only the current Mac's architecture into `build/dogfood`,
-signs with the stable Apple Development identity so the Accessibility grant
-survives the rebuild (see the signing note above), swaps the build into
-`/Applications`, re-registers the Quick Look extension, and relaunches.
+`dogfood.sh` builds only the current Mac's architecture in Xcode's default
+DerivedData (shared with the Xcode GUI, so the build stays incremental), signs
+with the stable Apple Development identity so the Accessibility grant survives
+the rebuild (see the signing note above), swaps the build into `/Applications`,
+re-registers the Quick Look extension, and relaunches. It is the only way a
+Debug build should be run on a daily-driver Mac — a copy launched straight from
+DerivedData isn't the login item, has no registered Quick Look extension, and
+crashes if rebuilt underneath. CI and release builds keep an in-workspace
+`-derivedDataPath build` for a predictable artifact path.
 
 Lint is strict and nothing is disabled: `.swiftlint.yml` only holds the
 options that make SwiftLint accept SwiftFormat's output. CI uses the

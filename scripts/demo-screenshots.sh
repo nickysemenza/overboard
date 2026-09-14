@@ -25,9 +25,10 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 OUT=docs/screenshots
-DERIVED=build/demo
-APP="$DERIVED/Build/Products/Debug/Overboard.app"
 NOTE=com.nickysemenza.overboard.demo
+# Same build (and DerivedData) as dogfood.sh; only the launch differs.
+XCODEBUILD=(xcodebuild -project Overboard.xcodeproj -scheme Overboard -configuration Debug
+  -destination "platform=macOS,arch=$(uname -m)" ONLY_ACTIVE_ARCH=YES)
 mkdir -p "$OUT"
 
 if pgrep -xq Overboard; then
@@ -36,8 +37,9 @@ if pgrep -xq Overboard; then
 fi
 
 echo "Building (Debug)…"
-xcodebuild -project Overboard.xcodeproj -scheme Overboard \
-  -configuration Debug -derivedDataPath "$DERIVED" build | tail -2
+"${XCODEBUILD[@]}" -quiet build
+APP="$("${XCODEBUILD[@]}" -showBuildSettings 2>/dev/null \
+  | awk -F' = ' '/^ *BUILT_PRODUCTS_DIR /{print $2}')/Overboard.app"
 
 OVERBOARD_DEMO=1 "$APP/Contents/MacOS/Overboard" &
 APP_PID=$!
