@@ -12,12 +12,125 @@ struct LauncherRankingTests {
         #expect(LauncherRanking.sorted([app, file], query: "hello").first == file)
     }
 
-    @Test func learningCannotOutrankBetterMatchTier() {
-        let weak = LauncherResult.app(name: "Hello Helper", url: URL(fileURLWithPath: "/Applications/Hello Helper.app"))
+    @Test func sameQueryLearningOutranksTier() {
+        // A same-query pick is promoted above its natural tier: Sublime
+        // Merge only matches "sm" via a full acronym (`.prefix` after
+        // change #1), which naturally loses to a file whose stem literally
+        // is "sm" (`.exact`) — but a recorded selection reverses that.
+        let app = LauncherResult.app(
+            name: "Sublime Merge",
+            url: URL(fileURLWithPath: "/Applications/Sublime Merge.app")
+        )
+        let file = LauncherResult.file(name: "sm.png", url: URL(fileURLWithPath: "/tmp/sm.png"))
+        #expect(LauncherRanking.sorted([file, app], query: "sm", usage: [app.id: 1]).first == app)
+
+        // Still below the fixed, always-first kinds.
+        let shell = LauncherResult.shellCommand("echo sm")
+        #expect(LauncherRanking.sorted([shell, app], query: "sm", usage: [app.id: 100]).first == shell)
+
+        // Two rows promoted into the same slot with equal usage fall back to
+        // natural tier: "sm.png" is `.exact`, "smart" only `.prefix`.
+        let smart = LauncherResult.file(name: "smart", url: URL(fileURLWithPath: "/tmp/smart"))
+        #expect(
+            LauncherRanking.sorted([smart, file], query: "sm", usage: [smart.id: 1, file.id: 1]).first == file
+        )
+
+        // Within-tier usage tiebreak (both stems equal "hello", so both
+        // `.exact`) still holds.
         let exact = LauncherResult.file(name: "hello.txt", url: URL(fileURLWithPath: "/tmp/hello.txt"))
-        #expect(LauncherRanking.sorted([weak, exact], query: "hello", usage: [weak.id: 100]).first == exact)
         let peer = LauncherResult.file(name: "hello.md", url: URL(fileURLWithPath: "/tmp/hello.md"))
         #expect(LauncherRanking.sorted([exact, peer], query: "hello", usage: [peer.id: 2]).first == peer)
+    }
+
+    @Test func acronymBeatsPrefixFilesRegardlessOfOrder() {
+        let app = LauncherResult.app(
+            name: "Sublime Merge",
+            url: URL(fileURLWithPath: "/Applications/Sublime Merge.app")
+        )
+        let smart = LauncherResult.file(name: "smart", url: URL(fileURLWithPath: "/tmp/smart"))
+        let smime = LauncherResult.file(name: "smime", url: URL(fileURLWithPath: "/tmp/smime"))
+        #expect(LauncherRanking.sorted([smart, smime, app], query: "sm").first == app)
+        #expect(LauncherRanking.sorted([app, smart, smime], query: "sm").first == app)
+    }
+
+    @Test func directoryWordFilesRankBelowAcronymApp() {
+        let app = LauncherResult.app(
+            name: "Sublime Merge",
+            url: URL(fileURLWithPath: "/Applications/Sublime Merge.app")
+        )
+        let file = LauncherResult.file(name: "notes.txt", url: URL(fileURLWithPath: "/x/smoke/notes.txt"))
+        #expect(LauncherRanking.sorted([file, app], query: "sm").first == app)
+    }
+
+    @Test func exactStemFileStillBeatsUnlearnedAcronym() {
+        // Documents the trade-off: without a recorded selection, a file
+        // whose stem literally is the query still beats an acronym match.
+        let app = LauncherResult.app(
+            name: "Sublime Merge",
+            url: URL(fileURLWithPath: "/Applications/Sublime Merge.app")
+        )
+        let file = LauncherResult.file(name: "sm.png", url: URL(fileURLWithPath: "/tmp/sm.png"))
+        #expect(LauncherRanking.sorted([app, file], query: "sm").first == file)
+    }
+
+    @Test func aliasBeatsExactFile() {
+        let app = LauncherResult.app(
+            name: "Sublime Merge",
+            url: URL(fileURLWithPath: "/Applications/Sublime Merge.app")
+        )
+        let file = LauncherResult.file(name: "sm.png", url: URL(fileURLWithPath: "/tmp/sm.png"))
+        // Both land at `.exact` (alias vs. stem match) — the app-before-file
+        // kind tiebreak (change #2) decides it.
+        #expect(LauncherRanking.sorted([file, app], query: "sm", aliases: ["sm": "Sublime Merge"]).first == app)
+    }
+
+    @Test func partialInitialsStayWordsTier() {
+        let app = LauncherResult.app(
+            name: "Visual Studio Code", url: URL(fileURLWithPath: "/Applications/Visual Studio Code.app")
+        )
+        #expect(LauncherRanking.match(for: app, query: "vs").tier == .words)
+        // A single letter is never treated as an acronym (see
+        // `singleWordNamesDoNotInitialMatch`), so it can't reach `.prefix`.
+        #expect(AppMatcher.score(query: "s", name: "Visual Studio Code") != .initials)
+    }
+
+    @Test func acronymTiesWithNamePrefixApps() {
+        let stickies = LauncherResult.app(name: "Stickies", url: URL(fileURLWithPath: "/Applications/Stickies.app"))
+        let sublimeText = LauncherResult.app(
+            name: "Sublime Text", url: URL(fileURLWithPath: "/Applications/Sublime Text.app")
+        )
+        // Both are `.prefix` for "st" (name-prefix vs. full acronym); with no
+        // usage or frecency difference, provider order (name-prefix apps
+        // first) decides — asserted here via the input order.
+        #expect(LauncherRanking.sorted([stickies, sublimeText], query: "st").first == stickies)
+    }
+
+    @Test func frecencyBreaksTiesWithinTier() {
+        let stickies = LauncherResult.app(name: "Stickies", url: URL(fileURLWithPath: "/Applications/Stickies.app"))
+        let sublimeText = LauncherResult.app(
+            name: "Sublime Text", url: URL(fileURLWithPath: "/Applications/Sublime Text.app")
+        )
+        #expect(
+            LauncherRanking.sorted([stickies, sublimeText], query: "st", frecency: [sublimeText.id: 5]).first
+                == sublimeText
+        )
+
+        // Frecency cannot lift a `.words` row over a `.prefix` row: partial
+        // initials only ("stt" for "Simple Task Tracker") stays `.words`.
+        let wordsApp = LauncherResult.app(
+            name: "Simple Task Tracker", url: URL(fileURLWithPath: "/Applications/Simple Task Tracker.app")
+        )
+        #expect(
+            LauncherRanking.sorted([wordsApp, stickies], query: "st", frecency: [wordsApp.id: 100]).first == stickies
+        )
+    }
+
+    @Test func systemSettingAcronymIsPrefixTier() throws {
+        let setting = try LauncherResult.systemSetting(
+            name: "Keyboard Shortcuts",
+            url: #require(URL(string: "x-apple.systempreferences:com.apple.Keyboard-Settings.extension"))
+        )
+        #expect(LauncherRanking.match(for: setting, query: "ks").tier == .prefix)
     }
 
     @Test func pathWordsAndTyposMatch() {

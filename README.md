@@ -93,7 +93,8 @@ is cached to disk.
   ⌘P pin, ⌘⌫ delete, esc to dismiss. Drag cards out to other apps.
 - **Launcher** (⌥Space): **All · Files · Clipboard · Apps**, with ⌘1–4 to
   switch scopes. Exact names and aliases rank above path/word matches and fuzzy
-  matches; successful selections improve ordering within a match tier. The empty
+  matches; choosing a result for a query makes it the top match for that query
+  again, and use counts otherwise only reorder within a match tier. The empty
   launcher suggests apps using successful-launch frequency and recency, with
   running apps as an initial fallback and recent searches beneath. Enter
   always activates the selected row, even when results arrive in the background.

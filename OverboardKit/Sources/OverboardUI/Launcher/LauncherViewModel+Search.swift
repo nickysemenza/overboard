@@ -308,6 +308,30 @@ public extension LauncherViewModel {
         )
     }
 
+    /// General use-count/recency (independent of the current query), keyed
+    /// by row id for `LauncherRanking.sorted`'s within-tier frecency
+    /// tiebreak — the same formula the empty-launcher suggestions use via
+    /// `sortByFrecency`, just scored per row instead of used to sort directly.
+    /// `rows` (providers' results plus pinned rows) can repeat an id before
+    /// `setResults` dedupes below, so duplicates must not crash the
+    /// dictionary build — the score is identical either way.
+    private func frecencyScores(for rows: [LauncherResult]) -> [String: Double] {
+        let counts = Defaults[.launcherItemUseCounts]
+        let lastUsed = Defaults[.launcherItemLastUsed]
+        return Dictionary(rows.map {
+            ($0.id, LauncherFrecency.score(id: $0.id, counts: counts, lastUsed: lastUsed))
+        }, uniquingKeysWith: { first, _ in first })
+    }
+
+    /// The non-empty-query, non-clipboard branch of `setResults`'s `combined`
+    /// switch, split out only so it can compute `candidates` once instead of
+    /// duplicating the pinned-results concat across an `if`-expression branch.
+    private func rankedResults(_ candidates: [LauncherResult], usage: [String: Int]) -> [LauncherResult] {
+        LauncherRanking.sorted(candidates, query: self.query,
+                               aliases: AppMatcher.parseAliases(Defaults[.launcherAppAliases]), usage: usage,
+                               frecency: self.frecencyScores(for: candidates))
+    }
+
     internal func setResults(_ newResults: [LauncherResult], preserveSelection: Bool = false) {
         // Only a manual selection is re-anchored by id. An automatic
         // selection deliberately snaps back to row 0 when a later provider
@@ -316,6 +340,10 @@ public extension LauncherViewModel {
         // must be what ↩ opens. The 120 ms secondary-pass debounce is what
         // keeps that re-sort from racing a keypress.
         let anchor = preserveSelection && self.userSelected ? self.selectedResult?.id : nil
+        // Per-query usage (recorded on successful selection, see
+        // `recordSuccessfulSelection`) promotes a row above its natural match
+        // tier; general frecency below only breaks ties within a tier — see
+        // `LauncherRanking.sorted`.
         let prefix = AppMatcher.fold(self.query.trimmingCharacters(in: .whitespacesAndNewlines)) + "\u{1F}"
         let usage = Dictionary(uniqueKeysWithValues: Defaults[.launcherSelectionUsage].compactMap { key, value in
             key.hasPrefix(prefix) ? (String(key.dropFirst(prefix.count)), value) : nil
@@ -328,8 +356,7 @@ public extension LauncherViewModel {
         } else if self.query.isEmpty {
             newResults + (self.scope == .all ? self.pinnedResults() : [])
         } else {
-            LauncherRanking.sorted(newResults + (self.scope == .all ? self.pinnedResults() : []), query: self.query,
-                                   aliases: AppMatcher.parseAliases(Defaults[.launcherAppAliases]), usage: usage)
+            self.rankedResults(newResults + (self.scope == .all ? self.pinnedResults() : []), usage: usage)
         }
         var seen = Set<String>()
         self.results = combined.filter { seen.insert($0.id).inserted }

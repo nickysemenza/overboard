@@ -41,6 +41,13 @@ struct AppMatcherTests {
         #expect(AppMatcher.score(query: "im", name: "Intel-MacTool") == .initials)
     }
 
+    @Test func initialsOfSplitsOnAnyNonAlphanumeric() {
+        #expect(AppMatcher.initials(of: "T3 Code (Alpha)") == "tca")
+        #expect(AppMatcher.initials(of: "1Password for Safari") == "1fs")
+        #expect(AppMatcher.initials(of: "Intel-MacTool") == "im")
+        #expect(AppMatcher.initials(of: "Safari") == "s")
+    }
+
     // MARK: - Ranking
 
     @Test func smRanksSublimeAppsFirst() {

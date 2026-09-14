@@ -29,9 +29,7 @@ public enum AppMatcher {
         if foldedName.hasPrefix(foldedQuery) {
             return .namePrefix
         }
-        let initials = String(
-            foldedName.split(whereSeparator: { $0 == " " || $0 == "-" }).compactMap(\.first)
-        )
+        let initials = self.initials(of: name)
         if initials.hasPrefix(foldedQuery), initials.count > 1 {
             return .initials
         }
@@ -39,6 +37,15 @@ public enum AppMatcher {
             return .substring
         }
         return nil
+    }
+
+    /// One initial per run of letters/digits, folded like `fold`. Splits on
+    /// any non-alphanumeric character (not just space and hyphen), so
+    /// "T3 Code (Alpha)" → "tca" and "1Password for Safari" → "1fs" — the
+    /// same word boundaries `SearchMatcher.tokens` uses, so acronym detection
+    /// here and word matching there agree on what a "word" is.
+    public static func initials(of name: String) -> String {
+        String(self.fold(name).split { !$0.isLetter && !$0.isNumber }.compactMap(\.first))
     }
 
     /// Indices into `names`, best match first, ties broken by shorter then

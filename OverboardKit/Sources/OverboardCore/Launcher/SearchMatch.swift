@@ -15,7 +15,9 @@ public enum LauncherScope: String, CaseIterable, Sendable, Identifiable {
     }
 }
 
-/// Comparable across providers. Learning is applied only within a tier.
+/// Comparable across providers. A row previously picked for this exact query
+/// is promoted above its natural tier (see `LauncherRanking.sorted`);
+/// otherwise learning (and frecency) only break ties within a tier.
 public struct SearchMatch: Sendable, Equatable {
     public enum Tier: Int, Comparable, Sendable {
         case exact, prefix, words, substring, fuzzy, related
@@ -156,66 +158,123 @@ public enum LauncherRanking {
     {
         switch result {
         case let .app(name, _):
-            if let target = aliases[AppMatcher.fold(query)], AppMatcher.fold(name).hasPrefix(AppMatcher.fold(target)) {
-                return SearchMatch(tier: .exact)
-            }
-            if AppMatcher.score(query: query, name: name) == .initials {
-                return SearchMatch(tier: .words)
-            }
-            return SearchMatcher.match(query: query, title: name) ?? SearchMatch(tier: .related)
+            self.matchApp(name: name, query: query, aliases: aliases)
         case let .file(name, url, _):
-            return SearchMatcher.match(query: query, title: name, context: url.deletingLastPathComponent().path)
+            SearchMatcher.match(query: query, title: name, context: url.deletingLastPathComponent().path)
                 ?? SearchMatch(tier: .related)
         case let .clip(item):
-            return SearchMatcher.match(
+            SearchMatcher.match(
                 query: ParsedQuery.parse(query).text,
                 title: item.previewText ?? "",
                 context: [item.aiTitle, item.linkTitle, item.sourceTitle].compactMap(\.self).joined(separator: " ")
             )
                 ?? SearchMatch(tier: .related)
         case let .snippet(item):
-            return SearchMatcher
+            SearchMatcher
                 .match(query: query, title: item.title, context: item.body) ?? SearchMatch(tier: .related)
         case let .systemSetting(name, _):
-            return SearchMatcher.match(query: query, title: name) ?? SearchMatch(tier: .related)
+            self.matchNameOrAcronym(name: name, query: query)
         case let .systemAction(action):
-            return SearchMatcher.match(query: query, title: action.title, context: action.keywords)
+            SearchMatcher.match(query: query, title: action.title, context: action.keywords)
                 ?? SearchMatch(tier: .related)
         case let .audioOutput(device):
-            return SearchMatcher.match(query: query, title: device.name, context: "audio output speaker sound")
+            SearchMatcher.match(query: query, title: device.name, context: "audio output speaker sound")
                 ?? SearchMatch(tier: .related)
-        default: return SearchMatch(tier: .related)
+        default: SearchMatch(tier: .related)
         }
     }
 
+    /// An app's alias (exact, configured in Settings) wins outright; short of
+    /// that it's a name/acronym match like `.systemSetting`.
+    private static func matchApp(name: String, query: String, aliases: [String: String]) -> SearchMatch {
+        if let target = aliases[AppMatcher.fold(query)], AppMatcher.fold(name).hasPrefix(AppMatcher.fold(target)) {
+            return SearchMatch(tier: .exact)
+        }
+        return self.matchNameOrAcronym(name: name, query: query)
+    }
+
+    /// Shared by `.app` and `.systemSetting` (the two kinds `AppMatcher.score`
+    /// understands): a full acronym — every initial typed, e.g. "sm" for
+    /// "Sublime Merge" — ranks with prefix matches rather than the weaker
+    /// `.words` tier partial-initials and word matches share. Never `.exact`:
+    /// that would reorder the Apps list itself (e.g. "st" → Sublime Text over
+    /// Stickies) and let an acronym beat a file whose name literally is the
+    /// query — see `exactStemFileStillBeatsUnlearnedAcronym`.
+    private static func matchNameOrAcronym(name: String, query: String) -> SearchMatch {
+        if AppMatcher.score(query: query, name: name) == .initials {
+            let tier: SearchMatch.Tier = AppMatcher.initials(of: name) == AppMatcher.fold(query) ? .prefix : .words
+            return SearchMatch(tier: tier)
+        }
+        return SearchMatcher.match(query: query, title: name) ?? SearchMatch(tier: .related)
+    }
+
+    /// Ordering, most to least significant: fixed `priority` (-1 kinds, then
+    /// promoted-by-usage/natural-tier rows, then the fixed low-priority
+    /// kinds) → per-query `usage` desc → natural tier (only distinguishes
+    /// rows inside the promoted group, since `priority` already separates
+    /// tiers otherwise) → `frecency` desc → kind rank (app, then file, then
+    /// everything else) → original index, so a stable provider order is the
+    /// last resort rather than the first.
     public static func sorted(
         _ results: [LauncherResult],
         query: String,
         aliases: [String: String] = [:],
-        usage: [String: Int] = [:]
+        usage: [String: Int] = [:],
+        frecency: [String: Double] = [:]
     ) -> [LauncherResult] {
         results.enumerated().map { index, result in
-            (index: index, result: result, priority: self.priority(result, query: query, aliases: aliases))
+            (index: index, result: result, tier: self.match(for: result, query: query, aliases: aliases).tier)
         }.sorted { left, right in
-            if left.priority != right.priority {
-                return left.priority < right.priority
+            let leftPriority = self.priority(left.result, tier: left.tier, usage: usage)
+            let rightPriority = self.priority(right.result, tier: right.tier, usage: usage)
+            if leftPriority != rightPriority {
+                return leftPriority < rightPriority
             }
             let leftUse = usage[left.result.id, default: 0], rightUse = usage[right.result.id, default: 0]
             if leftUse != rightUse {
                 return leftUse > rightUse
             }
+            if left.tier != right.tier {
+                return left.tier < right.tier
+            }
+            let leftFrecency = frecency[left.result.id, default: 0]
+            let rightFrecency = frecency[right.result.id, default: 0]
+            if leftFrecency != rightFrecency {
+                return leftFrecency > rightFrecency
+            }
+            let leftKind = self.kindRank(left.result), rightKind = self.kindRank(right.result)
+            if leftKind != rightKind {
+                return leftKind < rightKind
+            }
             return left.index < right.index
         }.map(\.result)
     }
 
-    private static func priority(_ result: LauncherResult, query: String, aliases: [String: String]) -> Int {
+    /// -1 kinds always lead, regardless of query match. Otherwise, a row
+    /// chosen for this exact query before (`usage[id] > 0`) is promoted into
+    /// the `.exact` slot (0) — still below those fixed kinds — so one
+    /// accidental pick can't sit above a stronger match forever; `sorted`'s
+    /// natural-tier tiebreak sorts out ties within that promoted group.
+    private static func priority(_ result: LauncherResult, tier: SearchMatch.Tier, usage: [String: Int]) -> Int {
         switch result {
         case .command, .calculation, .quicklink, .shellCommand: -1
         case .webSearch: 10
         case .askAI: 11
         case .calendarEvent: 12
         case .nowPlaying: 13
-        default: self.match(for: result, query: query, aliases: aliases).tier.rawValue
+        default: usage[result.id, default: 0] > 0 ? 0 : tier.rawValue
+        }
+    }
+
+    /// Apps first, then files, then everything else. States as a rule what
+    /// used to be an accident of `instant + buckets` provider ordering (apps
+    /// land in `instant`, files in a later secondary bucket), for rows that
+    /// still tie after tier, usage and frecency.
+    private static func kindRank(_ result: LauncherResult) -> Int {
+        switch result {
+        case .app: 0
+        case .file: 1
+        default: 2
         }
     }
 }
