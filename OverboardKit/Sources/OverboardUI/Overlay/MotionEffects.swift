@@ -41,6 +41,18 @@ enum PanelRadius {
     static let emoji: CGFloat = 16
 }
 
+/// The one Liquid Glass recipe every summonable surface draws with: regular
+/// glass tinted toward the window background so whatever sits behind the
+/// panel (a busy terminal, a photo) never competes with its text. Untinted
+/// `.regular` glass on macOS 26 lets that backdrop bleed straight through.
+/// `tintOpacity` is the knob the main session will tune by screenshot.
+enum PanelGlass {
+    static let tintOpacity: Double = 0.55
+    static var shell: Glass {
+        .regular.tint(Color(nsColor: .windowBackgroundColor).opacity(tintOpacity))
+    }
+}
+
 /// DESIGN.md § Colors, "Selection Accent" and "Subtle Control Fill".
 enum SelectionTint {
     /// Launcher result rows.
@@ -269,9 +281,9 @@ private struct AccessibleGlassPanel<S: Shape>: ViewModifier {
             if self.reduceTransparency || self.flattensGlassPanels {
                 content.background(Color(nsColor: .windowBackgroundColor), in: self.shape)
             } else if let id, let namespace {
-                content.glassEffect(.regular, in: self.shape).glassEffectID(id, in: namespace)
+                content.glassEffect(PanelGlass.shell, in: self.shape).glassEffectID(id, in: namespace)
             } else {
-                content.glassEffect(.regular, in: self.shape)
+                content.glassEffect(PanelGlass.shell, in: self.shape)
             }
         }
         .transaction {
