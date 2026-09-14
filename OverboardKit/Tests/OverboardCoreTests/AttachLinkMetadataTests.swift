@@ -110,6 +110,52 @@ struct AttachLinkMetadataTests {
         #expect(needing.first?.kind == .link)
     }
 
+    @Test func resetLinkMetadataHealsOnlyMatchingRows() async throws {
+        let store = try makeStore()
+        let brokenLink = try #require(
+            try await store.ingest(self.linkSnapshot("https://internal.example.com/wiki"))
+        )
+        let goodLink = try #require(
+            try await store.ingest(self.linkSnapshot("https://example.com/real"))
+        )
+
+        try await store.attachLinkMetadata(
+            itemID: brokenLink.id,
+            title: "Sign in ・ Cloudflare Access",
+            description: nil,
+            faviconPNG: nil,
+            previewImagePNG: nil
+        )
+        try await store.attachLinkMetadata(
+            itemID: goodLink.id,
+            title: "Real page",
+            description: "A genuinely fetched page.",
+            faviconPNG: nil,
+            previewImagePNG: nil
+        )
+        // Both are attempted, so neither needs a fetch right now.
+        #expect(try await store.linksNeedingMetadata(limit: 10).isEmpty)
+
+        let healed = try await store.resetLinkMetadata(whereTitleContains: "Cloudflare Access")
+        #expect(healed == 1)
+
+        // The broken link is back in the backfill queue…
+        #expect(try await store.linksNeedingMetadata(limit: 10).map(\.id) == [brokenLink.id])
+        let reset = try #require(try await store.recent(limit: 10).first { $0.id == brokenLink.id })
+        #expect(reset.linkTitle == nil)
+        #expect(reset.linkDescription == nil)
+        #expect(reset.faviconData == nil)
+        #expect(reset.previewImageData == nil)
+        // …and its own URL is still searchable even though its bad title was
+        // cleared out of the index.
+        #expect(try await store.search("internal.example.com").count == 1)
+
+        // The good link is untouched.
+        let untouched = try #require(try await store.recent(limit: 10).first { $0.id == goodLink.id })
+        #expect(untouched.linkTitle == "Real page")
+        #expect(try await store.search("Real page").count == 1)
+    }
+
     @Test func backfillDrainsInNewestFirstOrder() async throws {
         let store = try makeStore()
         let older = try #require(try await store.ingest(self.linkSnapshot("https://example.com/older")))

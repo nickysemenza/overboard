@@ -58,6 +58,13 @@ final class AppServices {
     let store: ClipStore
     let monitor: ClipboardMonitor
     let pasteback: PastebackService
+    /// One long-lived fetcher (see `ClipEnrichmentPipeline.linkFetcher`'s
+    /// comment on why per-fetch instances leak) wired to the app's
+    /// `cloudflared`-backed Access token lookup, so a link behind Cloudflare
+    /// Access gets its real title instead of the login page's.
+    let linkFetcher = LinkMetadataFetcher(accessToken: { url in
+        await CloudflaredAccessTokens.shared.token(for: url)
+    })
     /// Post-ingest OCR / link / LLM enrichment, shared by the ingest loop and
     /// the link-backfill job.
     let enrichment: ClipEnrichmentPipeline
@@ -102,9 +109,12 @@ final class AppServices {
         self.store = Self.openStore(logger: self.logger)
         self.monitor = ClipboardMonitor()
         self.pasteback = PastebackService(store: self.store)
-        self.enrichment = ClipEnrichmentPipeline(store: self.store) {
-            ClipEnrichmentPipeline.Settings(richLinkPreviews: Defaults[.richLinkPreviews])
-        }
+        let linkFetcher = self.linkFetcher
+        self.enrichment = ClipEnrichmentPipeline(
+            store: self.store,
+            settings: { ClipEnrichmentPipeline.Settings(richLinkPreviews: Defaults[.richLinkPreviews]) },
+            fetchLink: { await linkFetcher.fetch($0) }
+        )
         let stack = self.stack
         self.actions = ClipActionExecutor(
             store: self.store,

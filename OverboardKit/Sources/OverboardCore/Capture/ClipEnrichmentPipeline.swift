@@ -39,6 +39,10 @@ public struct ClipEnrichmentPipeline: Sendable {
     /// itself (and its `RedirectGuard`) until invalidated — which a value type
     /// can't do in `deinit` — so constructing one per link leaked a session each
     /// time. Sharing one session (safe for concurrent tasks) removes the leak.
+    /// This default has no `accessToken` provider (`OverboardCore` doesn't
+    /// know about `cloudflared`); the app injects its own, equally long-lived
+    /// `LinkMetadataFetcher` — with the Access token provider wired to
+    /// `CloudflaredAccessTokens` — via `fetchLink` in `AppServices`.
     public static let linkFetcher = LinkMetadataFetcher()
 
     private let store: ClipStore

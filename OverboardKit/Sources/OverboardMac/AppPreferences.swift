@@ -76,6 +76,12 @@ public nonisolated extension Defaults.Keys {
     /// Accessibility permission. Past `PermissionService`'s limit the HUD
     /// shrinks back to the short reminder.
     static let accessibilityHintsShown = Key<Int>("accessibilityHintsShown", default: 0)
+    /// One-time flag: whether the startup backfill has already run the
+    /// Cloudflare Access login-page title cleanup (`ClipStore.resetLinkMetadata`).
+    /// A bug once let the fetcher store a Cloudflare Access login page's title
+    /// ("Sign in ・ Cloudflare Access") as a link's title; this heals every
+    /// existing user's history exactly once rather than on every launch.
+    static let didResetAccessLoginPreviews = Key<Bool>("didResetAccessLoginPreviews", default: false)
 }
 
 /// Parsed views over the newline-list preference keys.

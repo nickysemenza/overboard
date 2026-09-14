@@ -26,6 +26,26 @@ struct GeneralSettingsTab: View {
             : "matching the tag means it’s a clean release build."
     }
 
+    /// The base footer, plus — only when `cloudflared` is actually installed,
+    /// since the sentence is meaningless otherwise — a note that a link
+    /// behind Cloudflare Access silently reuses the login `cloudflared`
+    /// already has cached rather than ever prompting the user. No toggle for
+    /// this: it's automatic, and silent when `cloudflared` is missing or has
+    /// no cached token for the host.
+    private static var linkPreviewsFooter: String {
+        let base = """
+        Connects to the URLs you copy to fetch each page’s title, description, \
+        favicon, and preview image, rendered on link cards. Requests come only from \
+        your Mac; nothing is sent anywhere else. Turn this off to keep Overboard fully \
+        offline.
+        """
+        guard CloudflaredAccessTokens.isInstalled() else { return base }
+        return base + """
+         Links behind Cloudflare Access reuse the login already cached by cloudflared; \
+        Overboard never opens a browser to sign you in.
+        """
+    }
+
     var body: some View {
         Form {
             Section {
@@ -107,14 +127,7 @@ struct GeneralSettingsTab: View {
             } header: {
                 Text("Link previews")
             } footer: {
-                Text(
-                    """
-                    Connects to the URLs you copy to fetch each page’s title, description, \
-                    favicon, and preview image, rendered on link cards. Requests come only from \
-                    your Mac; nothing is sent anywhere else. Turn this off to keep Overboard fully \
-                    offline.
-                    """
-                )
+                Text(Self.linkPreviewsFooter)
             }
 
             Section {
