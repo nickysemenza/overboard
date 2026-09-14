@@ -92,10 +92,15 @@ public struct SettingsView: View {
             }
             .listStyle(.sidebar)
             .navigationSplitViewColumnWidth(180)
+            // System Settings has no collapse button; the modifier only takes
+            // effect from inside the sidebar column, not on the split view.
+            .toolbar(removing: .sidebarToggle)
         } detail: {
             self.detail(for: self.navigation.selectedTab)
+                // Grouped forms inset their content ~40pt under a toolbar;
+                // System Settings starts its first group just below it.
+                .contentMargins(.top, 8, for: .scrollContent)
         }
-        .toolbar(removing: .sidebarToggle)
         // System Settings' own window doesn't let you resize its width
         // either — a fixed width keeps the sidebar from fighting the detail
         // pane for space.
