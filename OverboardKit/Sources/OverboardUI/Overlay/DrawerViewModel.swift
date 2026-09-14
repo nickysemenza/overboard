@@ -15,11 +15,35 @@ public enum PreviewState: Sendable {
     case editing
 }
 
+/// One strip card: the item plus the ranking hint the card shows. Derived
+/// once per refresh and carried *in* the element — never looked up by
+/// ForEach position, which SwiftUI may re-evaluate against a stale array.
+/// `nonisolated`: plain data, so `StripEntryTests` can build and compare it
+/// from a synchronous, non-`@MainActor` test function.
+public nonisolated struct StripEntry: Identifiable, Equatable {
+    public let item: ClipItem
+    public let rankedAboveNewer: Bool
+    public var id: String {
+        self.item.id
+    }
+}
+
 @Observable
 public final class DrawerViewModel {
     /// `internal(set)`: mutated from `deleteSelected()` in the actions
     /// extension in another file, in addition to `refresh` in this file.
-    public internal(set) var items: [ClipItem] = []
+    /// `didSet` keeps `stripEntries` in sync with every assignment (full
+    /// replacement in `refresh`, the optimistic removal in `deleteSelected`)
+    /// instead of relying on each call site to remember the second property.
+    public internal(set) var items: [ClipItem] = [] {
+        didSet { self.stripEntries = Self.stripEntries(for: self.items) }
+    }
+
+    /// The card strip's actual iteration target — `items` plus the "ranked
+    /// above a newer item" hint each card renders. Kept as a real stored
+    /// property (not computed on read) so it's the same array `ForEach`
+    /// diffs and identity-tracks across refreshes.
+    public private(set) var stripEntries: [StripEntry] = []
     public private(set) var snippets: [Snippet] = []
     public private(set) var mode: DrawerMode = .history
     public var query: String = ""
@@ -95,6 +119,25 @@ public final class DrawerViewModel {
 
     public var entryCount: Int {
         self.mode == .history ? self.items.count : self.snippets.count
+    }
+
+    /// Flags every unpinned item that sits above a strictly newer one in
+    /// `items` — the frecency blend's designed-in reordering (see
+    /// `ClipStore.frecencyOrderSQL`), made visible instead of read as a
+    /// mis-sort. A single backward pass tracks the newest `lastUsedAt` seen
+    /// among later entries (a suffix max); an entry is flagged the moment
+    /// that running max exceeds its own timestamp. `static`, `nonisolated`,
+    /// and pure so it's testable without a `ClipStore` or the main actor.
+    nonisolated static func stripEntries(for items: [ClipItem]) -> [StripEntry] {
+        var entries: [StripEntry] = []
+        entries.reserveCapacity(items.count)
+        var newestAmongLater: Date?
+        for item in items.reversed() {
+            let rankedAboveNewer = !item.isPinned && (newestAmongLater.map { $0 > item.lastUsedAt } ?? false)
+            entries.append(StripEntry(item: item, rankedAboveNewer: rankedAboveNewer))
+            newestAmongLater = max(newestAmongLater ?? item.lastUsedAt, item.lastUsedAt)
+        }
+        return Array(entries.reversed())
     }
 
     /// Bumped on every summon so the card strip re-runs entrance animations.
