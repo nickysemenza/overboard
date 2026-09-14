@@ -15,16 +15,19 @@ concurrency:
 jobs:
   lint:
     name: Lint
-    runs-on: macos-26
+    runs-on: xcode-27
     steps:
       - uses: actions/checkout@v7
 
-      # SwiftFormat ships on the macos-26 image; SwiftLint is a bottled brew
-      # install. Locally both come from Homebrew. A point-release drift
-      # between the two just means fixing whatever new rule fires — nothing
-      # is disabled or pinned.
-      - name: Install SwiftLint
-        run: brew install swiftlint
+      # We can't verify what the xcode-27 preview image ships with Homebrew
+      # from here, so treat both tools as possibly-missing and install
+      # whichever isn't already present. Locally both come from Homebrew. A
+      # point-release drift between the two just means fixing whatever new
+      # rule fires — nothing is disabled or pinned.
+      - name: Install SwiftFormat and SwiftLint
+        run: |
+          command -v swiftformat >/dev/null || brew install swiftformat
+          command -v swiftlint >/dev/null || brew install swiftlint
 
       - name: Tool versions
         run: |
@@ -39,15 +42,16 @@ jobs:
 
   test:
     name: OverboardKit tests
-    runs-on: macos-26
+    runs-on: xcode-27
     steps:
       - uses: actions/checkout@v7
 
-      # The macos-26 image's default Xcode is its newest one.
+      # The xcode-27 image's default Xcode is its newest one — this is what
+      # gives us Swift 6.4 / macOS 27 SDK symbols to compile against.
       - run: xcodebuild -version
 
       # The cache key includes the selected toolchain: .swiftmodules from one
-      # Swift version don't load in the next, and the macos-26 image swaps
+      # Swift version don't load in the next, and the xcode-27 image swaps
       # Xcode point releases underneath us without any change in this repo.
       - name: Toolchain fingerprint
         id: toolchain
@@ -108,7 +112,7 @@ jobs:
 
   build:
     name: Build app artifact
-    runs-on: macos-26
+    runs-on: xcode-27
     steps:
       # Full history + tags: shared with release.yml — the signed path below
       # goes through the same "Embed git version" build phase, which needs

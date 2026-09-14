@@ -32,7 +32,13 @@ permissions:
 jobs:
   release:
     name: Build and publish release
-    runs-on: macos-26
+    # xcode-27 is GitHub's public-preview image (macOS 27 / Xcode 27); one
+    # major Xcode ships per image, and we need 27 to compile macOS 27-only
+    # symbols (see AI/ClipEnricher+Image.swift). If the preview image is
+    # pulled or misbehaves, revert to `macos-26` — but only after removing
+    # or gating out every macOS 27-only feature, since that image tops out
+    # at Xcode 26.6.
+    runs-on: xcode-27
     steps:
       # Full history + tags: the "Embed git version" build phase runs
       # `git describe` to stamp GitDescribe/GitSHA, and the default shallow
