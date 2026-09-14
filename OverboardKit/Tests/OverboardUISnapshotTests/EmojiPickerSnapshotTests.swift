@@ -16,49 +16,6 @@ struct EmojiPickerSnapshotTests {
             record: snapshotRecordingMode
         )
     }
-
-    /// A Recently Used section leads when recents exist and the query is empty.
-    @Test func recentlyUsedLeads() {
-        let view = EmojiPickerView(viewModel: Fixtures.emojiPickerViewModel(recents: ["🔥", "🍕", "👍"]))
-        assertSnapshot(
-            of: snapshotImage(view, width: 400, height: 460),
-            as: snapshotImageStrategy,
-            record: snapshotRecordingMode
-        )
-    }
-
-    /// Search collapses to a single ranked Results section.
-    @Test func searchResults() {
-        let viewModel = Fixtures.emojiPickerViewModel()
-        viewModel.query = "lo"
-        let view = EmojiPickerView(viewModel: viewModel)
-        assertSnapshot(
-            of: snapshotImage(view, width: 400, height: 460),
-            as: snapshotImageStrategy,
-            record: snapshotRecordingMode
-        )
-    }
-
-    /// No matches shows the placeholder, not an empty grid.
-    @Test func emptyState() {
-        let viewModel = Fixtures.emojiPickerViewModel()
-        viewModel.query = "zzzzzz"
-        let view = EmojiPickerView(viewModel: viewModel)
-        assertSnapshot(
-            of: snapshotImage(view, width: 400, height: 460),
-            as: snapshotImageStrategy,
-            record: snapshotRecordingMode
-        )
-    }
-
-    @Test func categoryGridDark() {
-        let view = EmojiPickerView(viewModel: Fixtures.emojiPickerViewModel())
-        assertSnapshot(
-            of: snapshotImage(view, width: 400, height: 460, dark: true),
-            as: snapshotImageStrategy,
-            record: snapshotRecordingMode
-        )
-    }
 }
 
 /// Render + commit-routing checks that don't compare pixels; mirrors

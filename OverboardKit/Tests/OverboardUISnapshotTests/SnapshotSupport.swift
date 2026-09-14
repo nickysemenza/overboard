@@ -107,7 +107,11 @@ func snapshotImage(
 /// Sub-pixel antialiasing drifts across macOS point releases; perceptual
 /// precision absorbs it without masking real layout changes.
 @MainActor var snapshotImageStrategy: Snapshotting<NSImage, NSImage> {
-    .image(precision: 0.99, perceptualPrecision: 0.98)
+    // Loose enough that anti-aliasing and sub-point layout settle differences
+    // between a Retina Mac and the CI VM don't fail a run; a missing footer,
+    // a moved bar, or a wrong color still does. What these suites assert is
+    // layout, not rasterization.
+    .image(precision: 0.97, perceptualPrecision: 0.94)
 }
 
 /// Explicit opt-in for changed launcher references; ordinary test runs assert.

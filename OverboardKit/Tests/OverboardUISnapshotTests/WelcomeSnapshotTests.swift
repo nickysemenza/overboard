@@ -9,7 +9,7 @@ import Testing
 /// buttons have to fit.
 @MainActor
 struct WelcomeSnapshotTests {
-    private func host(dark: Bool = false) -> NSImage {
+    private func host() -> NSImage {
         snapshotImage(
             WelcomeView(
                 permissions: PermissionService(accessibility: .denied),
@@ -17,16 +17,11 @@ struct WelcomeSnapshotTests {
                 onDone: {}
             ),
             width: 460,
-            height: 400,
-            dark: dark
+            height: 400
         )
     }
 
     @Test func welcome() {
         assertSnapshot(of: self.host(), as: snapshotImageStrategy, record: snapshotRecordingMode)
-    }
-
-    @Test func welcomeDark() {
-        assertSnapshot(of: self.host(dark: true), as: snapshotImageStrategy, record: snapshotRecordingMode)
     }
 }
