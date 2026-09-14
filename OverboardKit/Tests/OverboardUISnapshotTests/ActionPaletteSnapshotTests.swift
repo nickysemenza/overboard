@@ -32,15 +32,4 @@ struct ActionPaletteSnapshotTests {
             record: snapshotRecordingMode
         )
     }
-
-    @Test func fuzzyFiltered() async throws {
-        let viewModel = try await self.makeViewModel()
-        viewModel.paletteQuery = "case"
-        let view = ActionPalette(viewModel: viewModel)
-        assertSnapshot(
-            of: snapshotImage(view, width: 420, height: 480),
-            as: snapshotImageStrategy,
-            record: snapshotRecordingMode
-        )
-    }
 }

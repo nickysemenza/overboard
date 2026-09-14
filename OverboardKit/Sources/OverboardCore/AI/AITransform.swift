@@ -48,16 +48,42 @@ public enum AITransform: String, Sendable, CaseIterable, Identifiable {
     }
 }
 
+/// What the on-device model reports, in the terms Settings can act on.
+public enum AIAvailability: Sendable, Equatable {
+    case available
+    /// Apple Intelligence is off in System Settings — the user can fix this.
+    case notEnabled
+    /// Model assets are still downloading; transient.
+    case modelNotReady
+    /// Not an eligible Mac, or a reason this build doesn't know.
+    case unsupported
+}
+
 public enum AITransformer {
+    /// What the on-device model reports right now. `isAvailable` is the
+    /// yes/no most call sites want; Settings shows the finer detail so the
+    /// user knows whether to open System Settings or just wait.
+    public static var availability: AIAvailability {
+        #if canImport(FoundationModels)
+            switch SystemLanguageModel.default.availability {
+            case .available:
+                return .available
+            case .unavailable(.appleIntelligenceNotEnabled):
+                return .notEnabled
+            case .unavailable(.modelNotReady):
+                return .modelNotReady
+            case .unavailable:
+                return .unsupported
+            }
+        #else
+            return .unsupported
+        #endif
+    }
+
     /// True when the on-device model is ready (Apple Silicon with Apple
     /// Intelligence enabled).
     public static var isAvailable: Bool {
-        #if canImport(FoundationModels)
-            if case .available = SystemLanguageModel.default.availability {
-                return true
-            }
-        #endif
-        return false
+        self.availability == .available
     }
 
     public static func apply(_ transform: AITransform, to text: String) async throws -> String {

@@ -63,8 +63,8 @@ struct LauncherScopeBar: View {
                     }
                     .padding(.horizontal, 11).padding(.vertical, 6)
                     .background(
-                        self.viewModel.scope == scope ? Color.primary.opacity(0.10) : .clear,
-                        in: RoundedRectangle(cornerRadius: 7)
+                        self.viewModel.scope == scope ? SelectionTint.neutral : .clear,
+                        in: RoundedRectangle(cornerRadius: ControlRadius.compact)
                     )
                 }
                 .buttonStyle(.plain)
@@ -87,11 +87,7 @@ struct LauncherFooterBar: View {
             primary: self.viewModel.primaryAction.map { action in
                 .init(label: self.viewModel.primaryActionLabel ?? action.label) { self.viewModel.commit() }
             },
-            secondary: .init(
-                label: String(localized: "Actions", bundle: .module),
-                keycap: "⌘K",
-                accessibilityLabel: String(localized: "Actions, Command K", bundle: .module)
-            ) { self.viewModel.togglePalette() }
+            secondary: .actions { self.viewModel.togglePalette() }
         )
         .padding(.horizontal, 12).padding(.vertical, 9)
     }

@@ -23,9 +23,6 @@ public final class EmojiPanelController {
     private enum Metrics {
         static let panelWidth: CGFloat = 400
         static let panelHeight: CGFloat = 460
-        /// Fraction of the screen's visible height where the panel's top sits —
-        /// matches the launcher so the two surfaces appear in the same place.
-        static let topFraction: CGFloat = 0.72
     }
 
     public init(viewModel: EmojiPickerViewModel) {
@@ -105,20 +102,16 @@ public final class EmojiPanelController {
 
     private func frame(on screen: NSScreen) -> NSRect {
         let visible = screen.visibleFrame
-        let top = visible.minY + visible.height * Metrics.topFraction
         return NSRect(
             x: visible.midX - Metrics.panelWidth / 2,
-            y: top - Metrics.panelHeight,
+            y: PanelPlacement.anchoredTop(on: visible) - Metrics.panelHeight,
             width: Metrics.panelWidth,
             height: Metrics.panelHeight
         )
     }
 
     private func screenWithMouse() -> NSScreen {
-        let mouse = NSEvent.mouseLocation
-        return NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) }
-            ?? NSScreen.main
-            ?? NSScreen.screens[0]
+        PanelPlacement.screenWithMouse()
     }
 
     // MARK: - Event monitors

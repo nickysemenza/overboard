@@ -151,6 +151,14 @@ public final class PermissionService {
         Self.open("x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars")
     }
 
+    // MARK: - Apple Intelligence
+
+    /// Opens the Apple Intelligence & Siri settings pane — the only fix when
+    /// it's off, since there's no in-app prompt for it.
+    public func openAppleIntelligenceSettings() {
+        Self.open("x-apple.systempreferences:com.apple.Siri-Settings.extension")
+    }
+
     private static func open(_ string: String) {
         guard let url = URL(string: string) else { return }
         NSWorkspace.shared.open(url)

@@ -21,20 +21,31 @@ struct FileSearchSettingsTab: View {
     var body: some View {
         Form {
             Section {
-                LabeledContent("Status", value: self.service.status)
-                if self.service.isIndexing {
-                    ProgressView().controlSize(.small)
+                LabeledContent("Status") {
+                    HStack(spacing: 8) {
+                        if self.service.isIndexing {
+                            ProgressView().controlSize(.small)
+                        }
+                        Text(self.service.status)
+                    }
                 }
-            } header: { Text("Index") } footer: {
+            } header: {
+                Text("Index")
+            } footer: {
                 Text("Permission problems are listed under Permissions.")
             }
             Section {
-                TextEditor(text: self.$roots).font(.body.monospaced()).frame(height: 120)
-                    .accessibilityLabel("Included folders, one path per line")
+                SettingsTextListEditor(
+                    text: self.$roots,
+                    height: 120,
+                    accessibilityLabel: "Included folders, one path per line"
+                )
                 Button("Use Default Locations") {
                     self.roots = FileIndexService.defaultRoots.map(\.path).joined(separator: "\n")
                 }
-            } header: { Text("Included folders") } footer: {
+            } header: {
+                Text("Included folders")
+            } footer: {
                 Text(
                     """
                     One folder path per line. Defaults include your home folder, iCloud Drive and \
@@ -44,9 +55,14 @@ struct FileSearchSettingsTab: View {
                 )
             }
             Section {
-                TextEditor(text: self.$exclusions).font(.body.monospaced()).frame(height: 110)
-                    .accessibilityLabel("Excluded folder names or absolute paths, one per line")
-            } header: { Text("Excluded folders") } footer: {
+                SettingsTextListEditor(
+                    text: self.$exclusions,
+                    height: 110,
+                    accessibilityLabel: "Excluded folder names or absolute paths, one per line"
+                )
+            } header: {
+                Text("Excluded folders")
+            } footer: {
                 Text(
                     """
                     One folder name or absolute path per line. Hidden internals and app-package \
@@ -55,14 +71,16 @@ struct FileSearchSettingsTab: View {
                     """
                 )
             }
-            HStack(spacing: 10) {
-                Button("Apply & Rebuild Index") {
-                    self.apply()
-                }
-                if self.isDirty {
-                    Text("Unsaved changes")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+            Section {
+                HStack(spacing: 10) {
+                    Button("Apply & Rebuild Index") {
+                        self.apply()
+                    }
+                    if self.isDirty {
+                        Text("Unsaved changes")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
         }

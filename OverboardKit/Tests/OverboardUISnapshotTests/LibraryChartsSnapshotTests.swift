@@ -4,11 +4,11 @@ import SnapshotTesting
 import SwiftUI
 import Testing
 
-/// The three History tab charts, light and dark, fed literal `LibraryStats`
-/// and `DailyActivity` values rather than a live store so the bars and
-/// colors are fully deterministic. Each host paints `.background` under the
-/// chart: in the app the Form's section row does that, and without it the
-/// dark-appearance axis ink lands on the bitmap's white and vanishes.
+/// One image per History chart shape — the horizontal bar (kind breakdown,
+/// which the source breakdown shares), the selected-day activity timeline,
+/// and the storage bar — fed literal `LibraryStats`/`DailyActivity` values
+/// rather than a live store so bars and colors are deterministic. Each host
+/// paints `.background` under the chart the way the Form's section row does.
 @MainActor
 struct LibraryChartsSnapshotTests {
     // MARK: - Kind breakdown
@@ -21,49 +21,19 @@ struct LibraryChartsSnapshotTests {
         .init(kind: .color, count: 3),
     ]
 
-    private func kindHost(dark: Bool = false) -> NSImage {
+    private func kindHost() -> NSImage {
         snapshotImage(
             KindBreakdownChart(byKind: Self.kindEntries).padding(8).background(.background),
             width: 480,
-            height: CGFloat(Self.kindEntries.count) * 22 + 16,
-            dark: dark
+            height: CGFloat(Self.kindEntries.count) * 22 + 16
         )
     }
 
     @Test func kindBreakdown() {
-        assertSnapshot(of: self.kindHost(), as: snapshotImageStrategy)
+        assertSnapshot(of: self.kindHost(), as: snapshotImageStrategy, record: snapshotRecordingMode)
     }
 
-    @Test func kindBreakdownDark() {
-        assertSnapshot(of: self.kindHost(dark: true), as: snapshotImageStrategy)
-    }
-
-    // MARK: - Source breakdown
-
-    private static let sourceEntries: [LibraryStats.SourceCount] = [
-        .init(app: "Safari", count: 64),
-        .init(app: "Xcode", count: 31),
-        .init(app: "Messages", count: 12),
-    ]
-
-    private func sourceHost(dark: Bool = false) -> NSImage {
-        snapshotImage(
-            SourceBreakdownChart(bySource: Self.sourceEntries).padding(8).background(.background),
-            width: 480,
-            height: CGFloat(Self.sourceEntries.count) * 22 + 16,
-            dark: dark
-        )
-    }
-
-    @Test func sourceBreakdown() {
-        assertSnapshot(of: self.sourceHost(), as: snapshotImageStrategy)
-    }
-
-    @Test func sourceBreakdownDark() {
-        assertSnapshot(of: self.sourceHost(dark: true), as: snapshotImageStrategy)
-    }
-
-    // MARK: - Activity timeline
+    // MARK: - Activity timeline (selected day)
 
     /// A fixed instant (not `Date()`) so the x-axis month/day labels never
     /// drift between a recording run and a later assertion run. It's *noon*
@@ -106,45 +76,47 @@ struct LibraryChartsSnapshotTests {
         return DailyActivity(days: days, total: days.reduce(0) { $0 + $1.total })
     }()
 
-    private func timelineHost(dark: Bool = false) -> NSImage {
+    /// Six days before the fixture's pinned "now": offset 23 in `activity`,
+    /// which is not a multiple of 4, so the selected day has clips to call out.
+    private static var selectedDate: Date {
+        chartCalendar.date(byAdding: .day, value: -6, to: chartCalendar.startOfDay(for: fixedNow))
+            ?? fixedNow
+    }
+
+    private func timelineSelectedHost() -> NSImage {
         snapshotImage(
-            self.pinned(ActivityTimelineChart(activity: Self.activity).padding(8).background(.background)),
+            self.pinned(
+                ActivityTimelineChart(activity: Self.activity, selectedDate: Self.selectedDate)
+                    .padding(8).background(.background)
+            ),
             width: 480,
-            height: 140 + 16,
-            dark: dark
+            height: 140 + 16
         )
     }
 
-    @Test func activityTimeline() {
-        assertSnapshot(of: self.timelineHost(), as: snapshotImageStrategy)
+    @Test func activityTimelineSelected() {
+        assertSnapshot(of: self.timelineSelectedHost(), as: snapshotImageStrategy, record: snapshotRecordingMode)
     }
 
-    @Test func activityTimelineDark() {
-        assertSnapshot(of: self.timelineHost(dark: true), as: snapshotImageStrategy)
-    }
+    // MARK: - Storage breakdown
 
-    // MARK: - Activity timeline — empty
+    private static let bytesByKindEntries: [LibraryStats.KindBytes] = [
+        .init(kind: .image, bytes: 48_000_000),
+        .init(kind: .text, bytes: 1_200_000),
+        .init(kind: .link, bytes: 300_000),
+        .init(kind: .file, bytes: 120_000),
+        .init(kind: .color, bytes: 2000),
+    ]
 
-    private func emptyTimelineHost(dark: Bool = false) -> NSImage {
-        let calendar = Self.chartCalendar
-        let todayStart = calendar.startOfDay(for: Self.fixedNow)
-        let days: [DailyActivity.Day] = (0 ..< 30).map { offset in
-            let date = calendar.date(byAdding: .day, value: -(29 - offset), to: todayStart) ?? todayStart
-            return DailyActivity.Day(date: date, counts: [:])
-        }
-        let activity = DailyActivity(days: days, total: 0)
-        return snapshotImage(
-            self.pinned(ActivityTimelineChart(activity: activity).padding(8).background(.background)),
+    private func storageBreakdownHost() -> NSImage {
+        snapshotImage(
+            StorageBreakdownBar(bytesByKind: Self.bytesByKindEntries).padding(8).background(.background),
             width: 480,
-            // The empty placeholder's default label style wants more room
-            // than the chart's own 140pt — see the `minHeight` comment on
-            // `ActivityTimelineChart`.
-            height: 220,
-            dark: dark
+            height: 60
         )
     }
 
-    @Test func activityTimelineEmpty() {
-        assertSnapshot(of: self.emptyTimelineHost(), as: snapshotImageStrategy)
+    @Test func storageBreakdown() {
+        assertSnapshot(of: self.storageBreakdownHost(), as: snapshotImageStrategy, record: snapshotRecordingMode)
     }
 }

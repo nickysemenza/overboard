@@ -10,13 +10,14 @@ struct CardEntrance: ViewModifier {
     let index: Int
     @State private var shown = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.skipsEntranceMotion) private var skipsEntranceMotion
 
     func body(content: Content) -> some View {
         content
             .opacity(self.shown ? 1 : 0)
             .offset(y: self.shown ? 0 : 26)
             .onAppear {
-                if self.reduceMotion {
+                if self.reduceMotion || self.skipsEntranceMotion {
                     self.shown = true; return
                 }
                 withAnimation(
@@ -35,6 +36,28 @@ enum PanelRadius {
     static let launcher: CGFloat = 18
     static let drawer: CGFloat = 16
     static let palette: CGFloat = 12
+    /// Same value as the drawer, named so the picker doesn't silently follow
+    /// a drawer change.
+    static let emoji: CGFloat = 16
+}
+
+/// DESIGN.md § Colors, "Selection Accent" and "Subtle Control Fill".
+enum SelectionTint {
+    /// Launcher result rows.
+    static let row = Color.accentColor.opacity(0.20)
+    static let rowPressed = Color.accentColor.opacity(0.28)
+    /// Palette rows and emoji cells.
+    static let compact = Color.accentColor.opacity(0.22)
+    /// Pointer hover on any selectable row or cell.
+    static let hover = Color.primary.opacity(0.06)
+    /// The neutral fill: active scope, pressed unselected row.
+    static let neutral = Color.primary.opacity(0.10)
+}
+
+/// DESIGN.md frontmatter `rounded.*` for controls inside a panel.
+enum ControlRadius {
+    static let compact: CGFloat = 7 // scope buttons, palette rows
+    static let inset: CGFloat = 8 // result rows, emoji cells
 }
 
 /// Clipboard/snippet card geometry, and the drawer panel heights derived from
@@ -44,13 +67,17 @@ enum CardMetrics {
     /// DESIGN.md frontmatter `components.clipboard-card`.
     static let width: CGFloat = 190
     static let height: CGFloat = 180
+    /// DESIGN.md frontmatter `rounded.clipboard-card`.
+    static let cornerRadius: CGFloat = 10
 
     /// The card strip's 2pt vertical breathing room on each side.
     private static let stripPadding: CGFloat = 2
 
     /// Everything in the collapsed drawer that isn't the card strip: the panel
-    /// padding, the search bar, the footer hints, and the stack spacing.
-    private static let drawerChrome: CGFloat = 98
+    /// padding, the search bar, the stack spacing, the divider above the
+    /// footer, and the shared `PanelFooterBar` itself (replacing what used to
+    /// be a plain ~13pt caption hint line).
+    private static let drawerChrome: CGFloat = 98 - 13 + PanelFooterBar.height + 1
 
     /// Height of the horizontal card strip for a (possibly scaled) card.
     static func stripHeight(cardHeight: CGFloat = height) -> CGFloat {
@@ -68,7 +95,43 @@ enum CardMetrics {
     static let expandedPanelHeight: CGFloat = 540
 }
 
+/// The tile chrome ItemCardView and SnippetCardView share: scaled fixed
+/// frame, quiet surface, card radius clip, hairline/accent selection stroke,
+/// and the selected lift + shadow (DESIGN.md § Elevation, § Clipboard Cards).
+struct CardShell: ViewModifier {
+    let isSelected: Bool
+    @ScaledMetric(relativeTo: .callout) private var width: CGFloat = CardMetrics.width
+    @ScaledMetric(relativeTo: .callout) private var height: CGFloat = CardMetrics.height
+
+    func body(content: Content) -> some View {
+        content
+            .frame(width: self.width, height: self.height)
+            .background(.background.opacity(0.6))
+            .clipShape(RoundedRectangle(cornerRadius: CardMetrics.cornerRadius))
+            .overlay {
+                RoundedRectangle(cornerRadius: CardMetrics.cornerRadius)
+                    .strokeBorder(
+                        self.isSelected ? Color.accentColor : Color.primary.opacity(0.1),
+                        lineWidth: self.isSelected ? 2.5 : 1
+                    )
+            }
+            .scaleEffect(self.isSelected ? 1.04 : 1)
+            .shadow(
+                color: .black.opacity(self.isSelected ? 0.28 : 0),
+                radius: self.isSelected ? 9 : 0,
+                y: 4
+            )
+            .motion(.spring(response: 0.25, dampingFraction: 0.7), value: self.isSelected)
+    }
+}
+
 extension View {
+    /// The tile chrome shared by `ItemCardView` and `SnippetCardView`. See
+    /// `CardShell`.
+    func cardShell(isSelected: Bool) -> some View {
+        modifier(CardShell(isSelected: isSelected))
+    }
+
     func cardEntrance(index: Int) -> some View {
         modifier(CardEntrance(index: index))
     }
@@ -151,20 +214,20 @@ struct LauncherRowButtonStyle: ButtonStyle {
 
         var body: some View {
             self.configuration.label
-                .background(self.fill, in: RoundedRectangle(cornerRadius: 8))
+                .background(self.fill, in: RoundedRectangle(cornerRadius: ControlRadius.inset))
                 .onHover { self.isHovering = $0 }
                 .motion(.snappy(duration: 0.12), value: self.isSelected)
         }
 
         private var fill: Color {
             if self.isSelected {
-                return self.configuration.isPressed ? Color.accentColor.opacity(0.28) : Color.accentColor.opacity(0.20)
+                return self.configuration.isPressed ? SelectionTint.rowPressed : SelectionTint.row
             }
             if self.configuration.isPressed {
-                return Color.primary.opacity(0.10)
+                return SelectionTint.neutral
             }
             if self.isHovering {
-                return Color.primary.opacity(0.06)
+                return SelectionTint.hover
             }
             return .clear
         }
@@ -178,6 +241,19 @@ extension EnvironmentValues {
     /// on a CI VM, whereas the flat chrome renders identically everywhere.
     /// (`accessibilityReduceTransparency` itself is get-only.)
     @Entry var flattensGlassPanels = false
+
+    /// The instant relative timestamps are computed against. `nil` means the
+    /// wall clock; snapshot tests pin it so "5 minutes ago" is stable forever.
+    @Entry var referenceDate: Date?
+
+    /// Skips `cardEntrance`'s spring so cards appear settled on first layout.
+    /// `accessibilityReduceMotion` is get-only, and the entrance is an explicit
+    /// `withAnimation`, which an ambient `disablesAnimations` transaction
+    /// doesn't reach. A hosting view that never joins a window gets no
+    /// display-link ticks, so without this the snapshot host captured the
+    /// cards parked at opacity 0 — and hosting it in a real window instead
+    /// rasterized text at the CI VM's 1× scale.
+    @Entry var skipsEntranceMotion = false
 }
 
 private struct AccessibleGlassPanel<S: Shape>: ViewModifier {

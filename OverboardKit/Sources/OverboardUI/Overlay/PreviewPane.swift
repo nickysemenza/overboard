@@ -37,7 +37,6 @@ struct PreviewPane: View {
             if !self.related.isEmpty {
                 self.relatedStrip
             }
-            self.hints
         }
         .task(id: self.item?.id) {
             await self.load()
@@ -72,9 +71,7 @@ struct PreviewPane: View {
                 }
                 Spacer()
                 if item.isSecret {
-                    Label("Secret", systemImage: "lock.fill")
-                        .font(.caption)
-                        .foregroundStyle(.yellow)
+                    SecretBadge()
                 }
                 if self.markdownSource != nil {
                     Button {
@@ -161,21 +158,12 @@ struct PreviewPane: View {
         .help(related.aiTitle ?? related.previewText ?? "Clip")
     }
 
-    private var hints: some View {
-        Text(self.viewModel.previewState == .editing
-            ? "⌘↩ paste edited text   esc cancel"
-            : "↩ paste   ⌘E edit   ←/→ browse   space or esc close")
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity, alignment: .center)
-    }
-
     private func subtitle(for item: ClipItem) -> String {
         var parts: [String] = []
         if let app = item.sourceAppName {
             parts.append(app)
         }
-        parts.append(item.lastUsedAt.formatted(date: .abbreviated, time: .shortened))
+        parts.append(TimestampFormatter.absolute(item.lastUsedAt))
         return parts.joined(separator: " · ")
     }
 }

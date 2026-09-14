@@ -6,22 +6,19 @@ import Foundation
 /// best-effort and failures are swallowed — a clip is perfectly usable
 /// unenriched.
 ///
-/// The three outside-world steps (OCR, link fetch, LLM labeling) and the two
-/// user settings that gate them are injected, so the ordering and the guards —
-/// which is what actually goes wrong here — can be tested without a network,
-/// Apple Intelligence, or the Vision framework.
+/// The three outside-world steps (OCR, link fetch, LLM labeling) and the one
+/// user setting (rich link previews) that gates the fetch are injected, so the
+/// ordering and the guards — which is what actually goes wrong here — can be
+/// tested without a network, Apple Intelligence, or the Vision framework.
 public struct ClipEnrichmentPipeline: Sendable {
     /// User settings this pipeline consults. Read fresh on every run through
-    /// `settings`, so toggling either in Settings takes effect immediately.
+    /// `settings`, so toggling it in Settings takes effect immediately.
     public struct Settings: Sendable {
         /// Fetch page title/description/favicon/preview for copied links.
         public var richLinkPreviews: Bool
-        /// Apple Intelligence titles, categories, and summaries.
-        public var aiFeatures: Bool
 
-        public init(richLinkPreviews: Bool, aiFeatures: Bool) {
+        public init(richLinkPreviews: Bool) {
             self.richLinkPreviews = richLinkPreviews
-            self.aiFeatures = aiFeatures
         }
     }
 
@@ -94,8 +91,7 @@ public struct ClipEnrichmentPipeline: Sendable {
             await self.fetchLinkMetadata(for: item)
         }
 
-        guard self.settings().aiFeatures,
-              let text = textForLabeling,
+        guard let text = textForLabeling,
               text.count >= Self.labelingMinimumLength,
               let enrichment = await self.enrichText(text)
         else { return }

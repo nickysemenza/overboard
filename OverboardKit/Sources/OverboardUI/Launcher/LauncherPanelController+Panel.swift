@@ -33,8 +33,7 @@ extension LauncherPanelController {
             height += Metrics.clipboardFilterHeight
         }
         height = min(height, visible.height - 60)
-        let compactHeight = min(Metrics.panelHeight, visible.height - 60)
-        let top = min(visible.maxY - 30, visible.midY + compactHeight / 2 + 60)
+        let top = PanelPlacement.anchoredTop(on: visible)
         return NSRect(
             x: visible.midX - width / 2,
             y: max(visible.minY + 30, top - height),
@@ -56,9 +55,6 @@ extension LauncherPanelController {
     }
 
     func screenWithMouse() -> NSScreen {
-        let mouse = NSEvent.mouseLocation
-        return NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) }
-            ?? NSScreen.main
-            ?? NSScreen.screens[0]
+        PanelPlacement.screenWithMouse()
     }
 }

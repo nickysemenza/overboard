@@ -37,3 +37,23 @@ public final class OverlayPanel: NSPanel {
         false
     }
 }
+
+/// Shared geometry for the summonable panels that float over the mouse's
+/// screen instead of anchoring to the drawer's bottom edge.
+enum PanelPlacement {
+    /// The launcher's anchored top edge: centered-high, clamped to the visible
+    /// frame. Every centered summonable surface hangs from this line.
+    static func anchoredTop(on visible: NSRect) -> CGFloat {
+        let compactHeight = min(LauncherPanelController.Metrics.panelHeight, visible.height - 60)
+        return min(visible.maxY - 30, visible.midY + compactHeight / 2 + 60)
+    }
+
+    /// The screen holding the mouse pointer, falling back to the main screen
+    /// and then the first available one.
+    static func screenWithMouse() -> NSScreen {
+        let mouse = NSEvent.mouseLocation
+        return NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) }
+            ?? NSScreen.main
+            ?? NSScreen.screens[0]
+    }
+}

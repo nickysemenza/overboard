@@ -1,12 +1,16 @@
 import AppKit
+import OverboardCore
 import OverboardMac
 import SwiftUI
 
-/// One permission's current state, as a compact status line. Green means the
-/// feature it unlocks works; orange means it silently falls back. The symbol
-/// repeats the word, so it's hidden from VoiceOver.
-struct PermissionStatusPill: View {
-    let state: PermissionState
+/// A compact status line: a symbol repeating the word (hidden from
+/// VoiceOver), then the word itself, tinted to say whether the feature it
+/// names works right now. Shared by every state pill in this tab so each one
+/// only has to name its title, symbol, and tint.
+struct StatusPill: View {
+    let title: String
+    let symbolName: String
+    let tint: Color
 
     var body: some View {
         HStack(spacing: 4) {
@@ -16,6 +20,16 @@ struct PermissionStatusPill: View {
         }
         .font(.callout)
         .foregroundStyle(self.tint)
+    }
+}
+
+/// One permission's current state, as a compact status line. Green means the
+/// feature it unlocks works; orange means it silently falls back.
+struct PermissionStatusPill: View {
+    let state: PermissionState
+
+    var body: some View {
+        StatusPill(title: self.title, symbolName: self.symbolName, tint: self.tint)
     }
 
     private var title: String {
@@ -39,6 +53,43 @@ struct PermissionStatusPill: View {
         case .granted: .green
         case .denied: .orange
         case .unknown: .secondary
+        }
+    }
+}
+
+/// Apple Intelligence's on-device model state, as the same compact status
+/// line. Unlike a permission, there's nothing to grant from here except
+/// enabling Apple Intelligence itself.
+struct AIAvailabilityPill: View {
+    let availability: AIAvailability
+
+    var body: some View {
+        StatusPill(title: self.title, symbolName: self.symbolName, tint: self.tint)
+    }
+
+    private var title: String {
+        switch self.availability {
+        case .available: "Available"
+        case .notEnabled: "Not Enabled"
+        case .modelNotReady: "Preparing"
+        case .unsupported: "Not Supported on This Mac"
+        }
+    }
+
+    private var symbolName: String {
+        switch self.availability {
+        case .available: "checkmark.circle.fill"
+        case .notEnabled: "exclamationmark.circle.fill"
+        case .modelNotReady: "arrow.down.circle"
+        case .unsupported: "minus.circle"
+        }
+    }
+
+    private var tint: Color {
+        switch self.availability {
+        case .available: .green
+        case .notEnabled: .orange
+        case .modelNotReady, .unsupported: .secondary
         }
     }
 }
@@ -94,21 +145,27 @@ struct CalendarPermissionRow: View {
     }
 }
 
-/// Every permission Overboard can ask for, what each one buys, and the state
-/// macOS reports right now — in one place, instead of a prompt that only
-/// appears after a paste has already fallen back.
+/// Every permission Overboard can ask for, plus the system capabilities it
+/// depends on — Apple Intelligence included — in one place, instead of a
+/// prompt that only appears after a paste (or an AI feature) has already
+/// fallen back.
 struct PermissionsSettingsTab: View {
     private let permissions: PermissionService
     /// A closure, not the service, so a snapshot can seed issues without a
     /// live index. Read inside `body`, so observation tracking still works.
     private let fileIssues: () -> [String]
+    /// A closure, like `fileIssues`, so a snapshot can fix the reported state
+    /// without a real on-device model. Read inside `body`.
+    private let aiAvailability: () -> AIAvailability
 
     init(
         permissions: PermissionService = .shared,
-        fileIssues: @escaping () -> [String] = { FileIndexService.shared.issues }
+        fileIssues: @escaping () -> [String] = { FileIndexService.shared.issues },
+        aiAvailability: @escaping () -> AIAvailability = { AITransformer.availability }
     ) {
         self.permissions = permissions
         self.fileIssues = fileIssues
+        self.aiAvailability = aiAvailability
     }
 
     private var issues: [FileIndexIssue] {
@@ -175,6 +232,29 @@ struct PermissionsSettingsTab: View {
                     """
                     Remembers the page or track you copied from. Only installed apps are listed, \
                     and each one is asked for separately.
+                    """
+                )
+            }
+
+            Section {
+                LabeledContent("Status") {
+                    HStack(spacing: 10) {
+                        AIAvailabilityPill(availability: self.aiAvailability())
+                        if self.aiAvailability() == .notEnabled {
+                            Button("Open System Settings…") {
+                                self.permissions.openAppleIntelligenceSettings()
+                            }
+                        }
+                    }
+                }
+            } header: {
+                Text("Apple Intelligence")
+            } footer: {
+                Text(
+                    """
+                    Titles, category badges, summaries, Paste with AI, and Ask AI run on-device \
+                    whenever Apple Intelligence is on. Copied images are text-recognized on-device \
+                    either way. Nothing leaves this Mac.
                     """
                 )
             }
@@ -255,6 +335,6 @@ private struct FileIndexIssueRow: View {
             ),
             fileIssues: { ["/Users/you/Library/Mail: You don’t have permission to view this folder."] }
         )
-        .frame(width: 600, height: 500)
+        .frame(width: 520, height: 580)
     }
 #endif

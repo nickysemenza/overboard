@@ -124,6 +124,7 @@ struct OverboardApp: App {
                 navigation: AppServices.shared.settingsNavigation
             )
         }
+        .windowResizability(.contentSize)
     }
 }
 

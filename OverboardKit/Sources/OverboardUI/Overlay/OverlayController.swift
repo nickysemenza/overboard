@@ -140,6 +140,8 @@ public final class OverlayController {
     public func show() {
         guard !self.isVisible else { return }
         self.targetApp = NSWorkspace.shared.frontmostApplication
+        self.viewModel.targetAppName = self.targetApp?.localizedName
+            ?? String(localized: "previous app", bundle: .module)
 
         let panel = self.panel ?? self.makePanel()
         self.panel = panel

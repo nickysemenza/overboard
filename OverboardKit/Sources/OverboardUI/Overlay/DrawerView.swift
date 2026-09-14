@@ -24,12 +24,13 @@ public struct DrawerView: View {
                     self.savedSearchBar
                 }
                 self.cardStrip
-                self.footerHints
             } else {
                 PreviewPane(viewModel: self.viewModel)
             }
+            Divider()
+            self.footerBar
         }
-        .animation(.spring(response: 0.22, dampingFraction: 0.85), value: self.viewModel.isPaletteOpen)
+        .motion(.spring(response: 0.22, dampingFraction: 0.85), value: self.viewModel.isPaletteOpen)
         .padding(14)
         .glassPanel(cornerRadius: PanelRadius.drawer)
         .overlay {
@@ -149,13 +150,66 @@ public struct DrawerView: View {
         self.savedSearches.removeAll { $0 == query }
     }
 
-    private var footerHints: some View {
-        Text(self.viewModel.mode == .history
-            ? "↩ paste   ⇧↩ plain   space preview   ⌘K actions   ⌘E edit   ⌘↩ stack   ⌘P pin   ⌘/ snippets"
-            : "↩ paste snippet   ⌘/ history   esc dismiss")
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity, alignment: .center)
+    // MARK: - Footer
+
+    private var footerBar: some View {
+        PanelFooterBar(primary: self.footerPrimaryAction, secondary: self.footerSecondaryAction)
+    }
+
+    /// "Paste to <app>" — the committing action shared by the card strip and
+    /// the (non-editing) preview pane. `nil` when there's nothing to paste.
+    private var pasteAction: PanelFooterBar.Action? {
+        switch self.viewModel.mode {
+        case .history:
+            guard self.viewModel.selectedItem != nil else { return nil }
+        case .snippets:
+            guard !self.viewModel.snippets.isEmpty else { return nil }
+        }
+        return .init(
+            label: String(localized: "Paste to \(self.viewModel.targetAppName)", bundle: .module)
+        ) {
+            self.viewModel.selectCurrent()
+        }
+    }
+
+    private var footerPrimaryAction: PanelFooterBar.Action? {
+        if self.viewModel.previewState == .editing {
+            return .init(
+                label: String(localized: "Paste edited text", bundle: .module),
+                keycap: "⌘↩",
+                handler: self.viewModel.commitEdit
+            )
+        }
+        return self.pasteAction
+    }
+
+    private var footerSecondaryAction: PanelFooterBar.Action? {
+        switch self.viewModel.previewState {
+        case .editing:
+            return .init(
+                label: String(localized: "Cancel", bundle: .module),
+                keycap: "esc",
+                handler: self.viewModel.closePreview
+            )
+        case .viewing:
+            guard let item = self.viewModel.selectedItem, item.kind == .text || item.kind == .link else { return nil }
+            return .init(
+                label: String(localized: "Edit", bundle: .module),
+                keycap: "⌘E",
+                handler: self.viewModel.beginEdit
+            )
+        case .hidden:
+            switch self.viewModel.mode {
+            case .history:
+                return .actions { self.viewModel.togglePalette() }
+            case .snippets:
+                return .init(
+                    label: String(localized: "History", bundle: .module),
+                    keycap: "⌘/",
+                    handler: self.viewModel.toggleMode
+                )
+            }
+        }
     }
 }
 

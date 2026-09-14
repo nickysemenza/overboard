@@ -42,6 +42,8 @@ struct HistorySettingsTab: View {
                     Text("30 minutes").tag(30)
                     Text("Never").tag(0)
                 }
+            } header: {
+                Text("Retention")
             }
 
             Section {
@@ -50,6 +52,9 @@ struct HistorySettingsTab: View {
                         .monospacedDigit()
                 }
                 LabeledContent("On disk", value: self.diskUsage ?? "—")
+                if let stats = self.stats, !stats.bytesByKind.isEmpty {
+                    StorageBreakdownBar(bytesByKind: stats.bytesByKind)
+                }
                 Button("Clear History…", role: .destructive) {
                     self.confirmingClear = true
                 }
@@ -85,7 +90,7 @@ struct HistorySettingsTab: View {
                 } header: {
                     Text("Activity")
                 } footer: {
-                    Text("Clips captured per day over the last 30 days.")
+                    Text("\(activity.total.formatted()) clips in the last \(activity.days.count) days.")
                 }
             }
 
@@ -98,25 +103,6 @@ struct HistorySettingsTab: View {
             if let stats = self.stats, !stats.bySource.isEmpty {
                 Section("Top sources") {
                     SourceBreakdownChart(bySource: stats.bySource)
-                }
-            }
-
-            if let stats = self.stats, !stats.largest.isEmpty {
-                Section {
-                    ForEach(stats.largest) { item in
-                        LabeledContent {
-                            Text(ByteCountFormatter.string(fromByteCount: Int64(item.byteSize), countStyle: .file))
-                                .monospacedDigit()
-                        } label: {
-                            Label(item.label, systemImage: item.kind.symbolName)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                        }
-                    }
-                } header: {
-                    Text("Largest items")
-                } footer: {
-                    Text("The heaviest clips in your history — usually images. Delete these first if storage grows.")
                 }
             }
         }

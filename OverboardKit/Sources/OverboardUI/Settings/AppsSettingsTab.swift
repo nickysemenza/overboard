@@ -35,12 +35,11 @@ struct AppsSettingsTab: View {
             }
 
             Section {
-                TextEditor(text: self.$autoTransformRules)
-                    .font(.body.monospaced())
-                    .frame(height: 72)
-                    .scrollContentBackground(.hidden)
-                    .padding(4)
-                    .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
+                SettingsTextListEditor(
+                    text: self.$autoTransformRules,
+                    height: 72,
+                    accessibilityLabel: "Transform rules, one bundle ID equals transform per line"
+                )
             } header: {
                 Text("Clean up copies from")
             } footer: {
@@ -61,6 +60,6 @@ struct AppsSettingsTab: View {
 #if DEBUG
     #Preview("Apps") {
         AppsSettingsTab()
-            .frame(width: 600, height: 500)
+            .frame(width: 520, height: 580)
     }
 #endif

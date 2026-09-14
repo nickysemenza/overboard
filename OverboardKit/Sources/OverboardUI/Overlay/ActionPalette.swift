@@ -8,9 +8,15 @@ struct ActionPalette: View {
     @Bindable var viewModel: DrawerViewModel
 
     var body: some View {
+        let isPinned = self.viewModel.selectedItem?.isPinned ?? false
         CommandPaletteView(
-            items: self.viewModel.filteredPaletteActions.map {
-                CommandPaletteItem(id: $0.id, label: $0.label, systemImage: $0.systemImage)
+            items: self.viewModel.filteredPaletteActions.map { entry in
+                CommandPaletteItem(
+                    id: entry.id,
+                    label: entry.label(isPinned: isPinned),
+                    systemImage: entry.systemImage,
+                    hint: entry.hint
+                )
             },
             query: self.$viewModel.paletteQuery,
             index: self.$viewModel.paletteIndex,

@@ -18,6 +18,14 @@ struct GeneralSettingsTab: View {
     @Default(.launcherQuicklinks) private var launcherQuicklinks
     @Default(.richLinkPreviews) private var richLinkPreviews
 
+    /// Second half of the "Source" row's tooltip — split out so the ternary
+    /// doesn't nest quoted strings inside a string interpolation.
+    private static var gitSourceHelpSuffix: String {
+        AppVersion.isDirtyOrAhead
+            ? "ahead of, or dirty against, that tag."
+            : "matching the tag means it’s a clean release build."
+    }
+
     var body: some View {
         Form {
             Section {
@@ -25,6 +33,8 @@ struct GeneralSettingsTab: View {
                 KeyboardShortcuts.Recorder("Paste next from stack", name: .pasteNextFromStack)
                 KeyboardShortcuts.Recorder("Show Launcher", name: .toggleLauncher)
                 KeyboardShortcuts.Recorder("Show Emoji Picker", name: .toggleEmojiPicker)
+            } header: {
+                Text("Shortcuts")
             } footer: {
                 Text(
                     """
@@ -45,29 +55,39 @@ struct GeneralSettingsTab: View {
                 )
                 Toggle("Show Spotify now playing in launcher", isOn: self.$launcherNowPlaying)
                 Toggle("Show calendar events in launcher", isOn: self.$launcherCalendarEvents)
-                LabeledContent("App aliases") {
-                    TextEditor(text: self.$launcherAppAliases)
-                        .font(.body.monospaced())
-                        .frame(height: 60)
-                        .scrollContentBackground(.hidden)
-                        .padding(4)
-                        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
-                }
-                LabeledContent("Quicklinks") {
-                    TextEditor(text: self.$launcherQuicklinks)
-                        .font(.body.monospaced())
-                        .frame(height: 60)
-                        .scrollContentBackground(.hidden)
-                        .padding(4)
-                        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
-                }
+            } header: {
+                Text("Launcher")
             } footer: {
                 Text(
                     """
                     All mixes apps, files, clipboard, snippets, calculator, system settings, AI, \
                     now playing, and calendar events. System settings, actions, and audio outputs \
                     also add Lock Screen, Sleep, Restart, and switching your Mac’s audio output \
-                    device. Use ⌘1–4 to switch scopes. File search locations are managed in Files. \
+                    device. Use ⌘1–4 to switch scopes. File search locations are managed in Files.
+                    """
+                )
+            }
+
+            Section {
+                LabeledContent("App aliases") {
+                    SettingsTextListEditor(
+                        text: self.$launcherAppAliases,
+                        height: 60,
+                        accessibilityLabel: "App aliases, one alias per line"
+                    )
+                }
+                LabeledContent("Quicklinks") {
+                    SettingsTextListEditor(
+                        text: self.$launcherQuicklinks,
+                        height: 60,
+                        accessibilityLabel: "Quicklinks, one keyword per line"
+                    )
+                }
+            } header: {
+                Text("Aliases and quicklinks")
+            } footer: {
+                Text(
+                    """
                     Aliases are one “sm = Sublime Merge” per line; initials work automatically. \
                     Quicklinks are one “gh = https://github.com/search?q={query}” per line \
                     (optionally “gh = GitHub | URL”) — type the keyword, a space, then your search.
@@ -78,10 +98,14 @@ struct GeneralSettingsTab: View {
             Section {
                 LaunchAtLoginToggle()
                 Toggle("Restore previous clipboard after paste", isOn: self.$restoreClipboard)
+            } header: {
+                Text("Clipboard")
             }
 
             Section {
                 Toggle("Fetch link titles and icons", isOn: self.$richLinkPreviews)
+            } header: {
+                Text("Link previews")
             } footer: {
                 Text(
                     """
@@ -95,6 +119,7 @@ struct GeneralSettingsTab: View {
 
             Section {
                 LabeledContent("Version", value: AppVersion.marketing)
+                    .help("The tagged release this build descends from; it only changes when a release is cut.")
                 LabeledContent("Build", value: AppVersion.build)
                 if let git = AppVersion.gitDescribe {
                     LabeledContent("Source") {
@@ -106,6 +131,7 @@ struct GeneralSettingsTab: View {
                             Text(git).font(.body.monospaced())
                         }
                     }
+                    .help("The exact git state this build was built from — \(Self.gitSourceHelpSuffix)")
                 }
                 Button("Copy Version Info") {
                     NSPasteboard.general.clearContents()
@@ -113,16 +139,6 @@ struct GeneralSettingsTab: View {
                 }
             } header: {
                 Text("About")
-            } footer: {
-                Text(
-                    """
-                    “Version” is the tagged release this build descends from; it only changes \
-                    when a release is cut. “Source” is the exact git state it was built from — \
-                    \(AppVersion.isDirtyOrAhead
-                        ? "this build is ahead of, or dirty against, that tag."
-                        : "matching the tag means it’s a clean release build.")
-                    """
-                )
             }
         }
         .formStyle(.grouped)
@@ -158,6 +174,6 @@ struct LaunchAtLoginToggle: View {
 #if DEBUG
     #Preview("General") {
         GeneralSettingsTab()
-            .frame(width: 600, height: 500)
+            .frame(width: 520, height: 580)
     }
 #endif

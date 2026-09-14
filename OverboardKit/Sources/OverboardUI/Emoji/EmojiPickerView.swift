@@ -32,7 +32,7 @@ public struct EmojiPickerView: View {
             )
         }
         .padding(14)
-        .glassPanel(cornerRadius: PanelRadius.drawer)
+        .glassPanel(cornerRadius: PanelRadius.emoji)
         .padding(12)
         .onAppear {
             self.fieldFocused = true
@@ -130,8 +130,8 @@ struct EmojiCell: View {
             .font(.system(size: self.glyphSize))
             .frame(maxWidth: .infinity)
             .frame(height: self.cellHeight)
-            .background(self.fill, in: RoundedRectangle(cornerRadius: 8))
-            .contentShape(RoundedRectangle(cornerRadius: 8))
+            .background(self.fill, in: RoundedRectangle(cornerRadius: ControlRadius.inset))
+            .contentShape(RoundedRectangle(cornerRadius: ControlRadius.inset))
             .help(self.emoji.name)
             .accessibilityLabel(self.emoji.name)
             .accessibilityAddTraits(self.isSelected ? .isSelected : [])
@@ -139,10 +139,10 @@ struct EmojiCell: View {
 
     private var fill: Color {
         if self.isSelected {
-            return Color.accentColor.opacity(0.22)
+            return SelectionTint.compact
         }
         if self.isHovered {
-            return Color.primary.opacity(0.06)
+            return SelectionTint.hover
         }
         return .clear
     }

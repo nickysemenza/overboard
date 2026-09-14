@@ -113,6 +113,10 @@ extension ClipItem: FetchableRecord, PersistableRecord {
 // MARK: - Card metadata footer
 
 public extension ClipItem {
+    /// Joins the segments of `metadataFooter`, ordered most- to least-useful
+    /// so a narrow host can drop the tail segment instead of truncating.
+    static let metadataSeparator = " · "
+
     /// One-line footer summarizing the clip's shape, shown under the card
     /// content. Pure and unit-testable; nil means "render no footer".
     var metadataFooter: String? {
@@ -122,7 +126,7 @@ public extension ClipItem {
             guard let chars = charCount else { return nil }
             let charsPart = CountPhrase.string(chars, of: String(localized: "character"))
             guard let lines = lineCount, lines > 1 else { return charsPart }
-            return "\(charsPart) · \(CountPhrase.string(lines, of: String(localized: "line")))"
+            return charsPart + Self.metadataSeparator + CountPhrase.string(lines, of: String(localized: "line"))
         case .link:
             // The link's host, parsed from the URL preview text.
             return Self.linkHost(fromPreview: self.previewText)
@@ -137,7 +141,7 @@ public extension ClipItem {
         case .file:
             guard let count = fileCount else { return nil }
             let filesPart = CountPhrase.string(count, of: String(localized: "file"))
-            return "\(filesPart) · \(Self.byteCount(self.byteSize))"
+            return filesPart + Self.metadataSeparator + Self.byteCount(self.byteSize)
         case .color:
             return nil
         }

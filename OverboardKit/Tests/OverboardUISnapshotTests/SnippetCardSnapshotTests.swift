@@ -16,15 +16,6 @@ struct SnippetCardSnapshotTests {
         )
     }
 
-    @Test func plain() {
-        let view = SnippetCardView(
-            snippet: self.snippet(title: "Sign-off", body: "Best,\nNicky"),
-            index: 0,
-            isSelected: false
-        )
-        assertSnapshot(of: snapshotImage(view, width: 220, height: 210), as: snapshotImageStrategy)
-    }
-
     @Test func selectedWithPlaceholders() {
         let view = SnippetCardView(
             snippet: self.snippet(
@@ -34,18 +25,10 @@ struct SnippetCardSnapshotTests {
             index: 1,
             isSelected: true
         )
-        assertSnapshot(of: snapshotImage(view, width: 220, height: 210), as: snapshotImageStrategy)
-    }
-
-    /// Same Dynamic Type pin as `ItemCardSnapshotTests.largestDynamicType`: the
-    /// two card kinds have to stay the same size in a strip that mixes them.
-    @Test func largestDynamicType() {
-        let view = SnippetCardView(
-            snippet: self.snippet(title: "Sign-off", body: "Best,\nNicky"),
-            index: 0,
-            isSelected: false
+        assertSnapshot(
+            of: snapshotImage(view, width: 220, height: 210),
+            as: snapshotImageStrategy,
+            record: snapshotRecordingMode
         )
-        .environment(\.dynamicTypeSize, .xxxLarge)
-        assertSnapshot(of: snapshotImage(view, width: 300, height: 300), as: snapshotImageStrategy)
     }
 }

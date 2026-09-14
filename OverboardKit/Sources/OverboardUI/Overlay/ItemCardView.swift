@@ -20,9 +20,10 @@ struct ItemCardView: View {
     /// ItemCardView+Loading.swift, in addition to this file.
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
+    /// `internal`: read from `footer` in ItemCardView+Bodies.swift.
+    @Environment(\.referenceDate) var referenceDate
     /// Cards are a fixed grid of equal tiles, so the tile itself has to grow
-    /// with the type inside it.
-    @ScaledMetric(relativeTo: .callout) private var cardWidth: CGFloat = CardMetrics.width
+    /// with the type inside it — `cardShell` owns the matching width metric.
     /// `internal`: read from `textPreviewLineLimit` in ItemCardView+Bodies.swift.
     @ScaledMetric(relativeTo: .callout) var cardHeight: CGFloat = CardMetrics.height
     /// `internal`: read in ItemCardView+Bodies.swift, set from
@@ -50,29 +51,14 @@ struct ItemCardView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             self.footer
         }
-        .frame(width: self.cardWidth, height: self.cardHeight)
-        .background(.background.opacity(0.6))
-        // Clip the whole card so image fills can't bleed past the corners.
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-        .overlay {
-            RoundedRectangle(cornerRadius: 10)
-                .strokeBorder(
-                    self.isSelected ? Color.accentColor : Color.primary.opacity(0.1),
-                    lineWidth: self.isSelected ? 2.5 : 1
-                )
-        }
+        // Applied before `cardShell` so the hover pill scales and lifts with
+        // the card's selected-state transform instead of sitting outside it.
         .overlay(alignment: .topTrailing) {
             if self.hovering {
                 self.hoverActions
             }
         }
-        .scaleEffect(self.isSelected ? 1.04 : 1)
-        .shadow(
-            color: .black.opacity(self.isSelected ? 0.28 : 0),
-            radius: self.isSelected ? 9 : 0,
-            y: 4
-        )
-        .motion(.spring(response: 0.25, dampingFraction: 0.7), value: self.isSelected)
+        .cardShell(isSelected: self.isSelected)
         .motion(.easeOut(duration: 0.12), value: self.hovering)
         .onHover { self.hovering = $0 }
         .task(id: self.item.id) {
@@ -128,14 +114,15 @@ struct ItemCardView: View {
     /// so the card reads as one item instead of its individual subviews.
     private var accessibilityCardLabel: String {
         let app = self.item.sourceAppName ?? self.item.kind.displayName
+        let copied = ", copied \(TimestampFormatter.absolute(self.item.lastUsedAt))"
         if self.item.isSecret {
-            return "\(app), secret item"
+            return "\(app), secret item\(copied)"
         }
         let preview = self.item.previewText?.trimmingCharacters(in: .whitespacesAndNewlines)
         if let preview, !preview.isEmpty {
-            return "\(app), \(preview)"
+            return "\(app), \(preview)\(copied)"
         }
-        return app
+        return "\(app)\(copied)"
     }
 
     /// Quick actions that fade in on hover so mouse users skip the context menu.
@@ -159,6 +146,9 @@ struct ItemCardView: View {
             Image(systemName: systemImage)
                 .font(.caption)
                 .frame(width: 18, height: 18)
+                // Only the pin glyph actually swaps ("pin" ↔ "pin.slash"); a
+                // plain crossfade beats the glyph just popping between states.
+                .contentTransition(.symbolEffect(.replace))
         }
         .buttonStyle(.borderless)
         .accessibilityLabel(label)
@@ -185,19 +175,7 @@ struct ItemCardView: View {
                     .foregroundStyle(.secondary)
             }
             if self.item.isSecret {
-                // A yellow glyph on glass was easy to miss on the one card where
-                // misreading the content matters most; a filled capsule reads as
-                // a warning at any contrast setting.
-                HStack(spacing: 3) {
-                    Image(systemName: "lock.fill")
-                    Text("Secret")
-                }
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 5)
-                .padding(.vertical, 1.5)
-                .background(.orange, in: Capsule())
-                .accessibilityHidden(true)
+                SecretBadge()
             }
             if self.item.isPinned {
                 Image(systemName: "pin.fill")

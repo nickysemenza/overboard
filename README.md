@@ -55,9 +55,9 @@ window with the three shortcuts and an Accessibility button; grant
 without it. The first time you copy from a browser, macOS also prompts for
 **Automation** permission for that browser — this powers Back-to-source
 (capturing the page URL/title); declining just skips provenance for that
-browser. Settings → Permissions shows every one of these, plus any folders the
-file index couldn't read, and can ask for them again. No analytics, no
-account. Network is used only for one opt-outable feature: fetching
+browser. Settings → Permissions shows every one of these, plus whether Apple
+Intelligence is available and any folders the file index couldn't read, and
+can ask for them again. No analytics, no account. Network is used only for one opt-outable feature: fetching
 link-preview metadata (page title, favicon, description, og:image — toggle in
 Settings → General). All clipboard data stays on your machine.
 
@@ -162,9 +162,10 @@ is the update path.
 - **OCR**: copied images and screenshots are text-recognized (Vision) and
   fully searchable by their contents — find that wifi-password screenshot
   by typing the network name.
-- **Apple Intelligence** (macOS 26, on-device, optional): clips get short
-  auto-generated titles and category badges (code, error, address, …), and
-  the card menu gains AI transforms — summarize, fix grammar, make
+- **Apple Intelligence** (macOS 26, on-device; active whenever Apple
+  Intelligence is on — Settings › Permissions shows its status): clips get
+  short auto-generated titles and category badges (code, error, address, …),
+  and the card menu gains AI transforms — summarize, fix grammar, make
   formal/casual, extract action items.
 - **Paste-back**: synthesized ⌘V into the app you were in, then your previous
   clipboard is restored. Falls back to copy + HUD without Accessibility.
