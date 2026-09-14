@@ -14,14 +14,18 @@ private struct DelayedLauncherProvider: LauncherProvider {
     }
 }
 
+/// Shared by both suites below — a struct's test body is kept under
+/// SwiftLint's `type_body_length` budget by splitting the launcher-ranking
+/// regression tests out into their own suite rather than growing this one.
+@MainActor
+private func waitForSearch(_ model: LauncherViewModel) async {
+    await model.settle()
+    #expect(!model.isSearching)
+}
+
 @Suite(.serialized)
 @MainActor
 struct LauncherScopeTests {
-    private func waitForSearch(_ model: LauncherViewModel) async {
-        await model.settle()
-        #expect(!model.isSearching)
-    }
-
     @Test func firstSelectionTracksBestResultUntilUserNavigates() async {
         let file = LauncherResult.file(name: "hello.txt", url: URL(fileURLWithPath: "/tmp/hello.txt"))
         let model = LauncherViewModel(secondaryProviders: [
@@ -32,7 +36,7 @@ struct LauncherScopeTests {
         ])
         model.query = "hello"
         model.scheduleSearch()
-        await self.waitForSearch(model)
+        await waitForSearch(model)
         #expect(model.selectedResult == file)
         var opened: URL?
         model.onOpenFile = { opened = $0 }
@@ -57,7 +61,7 @@ struct LauncherScopeTests {
         }
         model.moveSelection(1)
         let chosen = model.selectedResult
-        await self.waitForSearch(model)
+        await waitForSearch(model)
         #expect(model.results.first == file)
         #expect(model.selectedResult == chosen)
         var searched = false
@@ -75,13 +79,13 @@ struct LauncherScopeTests {
         )
         model.query = "notes"
         model.setScope(.apps)
-        await self.waitForSearch(model)
+        await waitForSearch(model)
         #expect(model.results == [app])
         model.setScope(.files)
-        await self.waitForSearch(model)
+        await waitForSearch(model)
         #expect(model.results == [file])
         model.setScope(.all)
-        await self.waitForSearch(model)
+        await waitForSearch(model)
         #expect(model.results.contains(app) && model.results.contains(file))
         #expect(model.results.contains {
             if case .webSearch = $0 {
@@ -111,16 +115,16 @@ struct LauncherScopeTests {
         )
         model.runningAppPaths = ["/fixture/running.app"]
         model.scheduleSearch()
-        await self.waitForSearch(model)
+        await waitForSearch(model)
         #expect(model.results.first == running)
         #expect(Defaults[.launcherItemUseCounts].isEmpty)
         model.recordSuccessfulSelection(id: frequent.id, query: "")
         model.scheduleSearch()
-        await self.waitForSearch(model)
+        await waitForSearch(model)
         #expect(model.results.first == frequent)
         #expect(Defaults[.launcherItemUseCounts][frequent.id] == 1)
         model.setScope(.apps)
-        await self.waitForSearch(model)
+        await waitForSearch(model)
         #expect(model.results.first == frequent)
     }
 
@@ -138,14 +142,14 @@ struct LauncherScopeTests {
         ])
         model.query = "hello"
         model.scheduleSearch()
-        await self.waitForSearch(model)
+        await waitForSearch(model)
         #expect(!model.results.isEmpty)
         model.query = "completely different"
         model.scheduleSearch()
         // No await yet: the instant pass hasn't had a chance to run, so this
         // is the synchronous state right after the keystroke.
         #expect(!model.results.isEmpty)
-        await self.waitForSearch(model)
+        await waitForSearch(model)
         model.stopObserving()
     }
 
@@ -160,17 +164,17 @@ struct LauncherScopeTests {
         }
         let model = LauncherViewModel(secondaryProviders: [], clipboardStore: store)
         model.setScope(.clipboard)
-        await self.waitForSearch(model)
+        await waitForSearch(model)
         #expect(model.results.count == 200 && model.hasMoreClipboard)
         model.select(at: 20)
         let selected = model.selectedResult?.id
         model.loadMoreClipboard()
-        await self.waitForSearch(model)
+        await waitForSearch(model)
         #expect(model.results.count == 205 && !model.hasMoreClipboard)
         #expect(model.selectedResult?.id == selected)
         model.clipboardFilter.kind = .image
         model.scheduleSearch()
-        await self.waitForSearch(model)
+        await waitForSearch(model)
         #expect(model.results.isEmpty && !model.hasMoreClipboard)
     }
 
@@ -188,7 +192,7 @@ struct LauncherScopeTests {
         model.onOpenFile = { _ in opened += 1 }
         model.query = "budget"
         model.setScope(.files)
-        await self.waitForSearch(model)
+        await waitForSearch(model)
         model.select(at: 0)
         #expect(opened == 0)
         #expect(model.primaryActionLabel == "Download & Open")
@@ -209,14 +213,14 @@ struct LauncherScopeTests {
         ])
         model.query = "hello"
         model.scheduleSearch()
-        await self.waitForSearch(model)
+        await waitForSearch(model)
         var opened = false
         model.onOpenFile = { _ in opened = true }
         model.query = "completely different"
         model.scheduleSearch()
         model.commit()
         #expect(!opened)
-        await self.waitForSearch(model)
+        await waitForSearch(model)
         model.stopObserving()
     }
 
@@ -254,7 +258,7 @@ struct LauncherScopeTests {
         )
         model.query = "t"
         model.scheduleSearch()
-        await self.waitForSearch(model)
+        await waitForSearch(model)
         #expect(!model.results.isEmpty)
 
         // A bounded poll is the simplest reliable way to sample `results`
@@ -279,11 +283,68 @@ struct LauncherScopeTests {
         model.query = "term"
         model.scheduleSearch()
 
-        await self.waitForSearch(model)
+        await waitForSearch(model)
         observer.cancel()
 
         #expect(!observedEmptyResults)
         #expect(!model.isSearching)
         #expect(!model.results.isEmpty)
+    }
+}
+
+/// Split out from `LauncherScopeTests` (only to stay under SwiftLint's
+/// `type_body_length` budget): full-pipeline regression coverage for the
+/// "sm" acronym-tier and per-query-usage ranking rules in `LauncherRanking`.
+@Suite(.serialized)
+@MainActor
+struct LauncherRankingScopeTests {
+    /// Regression test for the "sm" bug: Sublime Merge is an instant-pass
+    /// acronym match (`.prefix` after the change), and must not be bumped
+    /// down when the slower secondary pass lands prefix-matched files that
+    /// used to tie (or beat) it on tier alone.
+    @Test func acronymAppSurvivesLateFileResults() async {
+        let app = LauncherResult.app(
+            name: "Sublime Merge",
+            url: URL(fileURLWithPath: "/Applications/Sublime Merge.app")
+        )
+        let smart = LauncherResult.file(name: "smart", url: URL(fileURLWithPath: "/tmp/smart"))
+        let smime = LauncherResult.file(name: "smime", url: URL(fileURLWithPath: "/tmp/smime"))
+        let model = LauncherViewModel(
+            instantProviders: [DelayedLauncherProvider(rows: [app])],
+            secondaryProviders: [DelayedLauncherProvider(rows: [smart, smime], delay: .milliseconds(20))],
+            secondaryDebounceInterval: .zero
+        )
+        model.query = "sm"
+        model.scheduleSearch()
+        await waitForSearch(model)
+        #expect(model.results.first == app)
+        #expect(model.selectedIndex == 0)
+        var opened: URL?
+        model.onOpenFile = { opened = $0 }
+        model.commit()
+        #expect(opened?.lastPathComponent == "Sublime Merge.app")
+    }
+
+    /// Usage is per-query (see `recordSuccessfulSelection`/`setResults`), so
+    /// a selection recorded for one query must not promote that row when a
+    /// different query happens to match it too.
+    @Test func usageFromADifferentQueryHasNoCrossQueryEffect() async {
+        let oldUsage = Defaults[.launcherSelectionUsage]
+        defer { Defaults[.launcherSelectionUsage] = oldUsage }
+        Defaults[.launcherSelectionUsage] = [:]
+        let app = LauncherResult.app(
+            name: "Sublime Merge",
+            url: URL(fileURLWithPath: "/Applications/Sublime Merge.app")
+        )
+        let file = LauncherResult.file(name: "sm.png", url: URL(fileURLWithPath: "/tmp/sm.png"))
+        let model = LauncherViewModel(
+            instantProviders: [DelayedLauncherProvider(rows: [app, file])],
+            secondaryProviders: []
+        )
+        model.recordSuccessfulSelection(id: app.id, query: "other query")
+        model.query = "sm"
+        model.scheduleSearch()
+        await waitForSearch(model)
+        #expect(model.results.first == file)
     }
 }

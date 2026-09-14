@@ -13,7 +13,7 @@ A personal, keyboard-driven launcher and clipboard manager. The primary jobs are
 ## Product principles
 
 - Enter always activates the selected result; the first result is selected by default.
-- Match quality outranks provider order. Successful use improves ranking within a match tier.
+- Choosing a result for a query makes it the top match for that query; otherwise match quality outranks provider order, and use counts only reorder within a tier.
 - All mixes results; Files, Clipboard, and Apps provide focused scopes.
 - The empty launcher suggests apps using frequency and recency of successful actions through Overboard; running apps provide an initial fallback.
 - Keep the bottom clipboard drawer for recent pastes and a list with preview for browsing history.
