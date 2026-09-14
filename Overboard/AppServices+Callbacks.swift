@@ -330,5 +330,22 @@ extension AppServices {
                 )
             }
         }
+
+        // ⌘K's "Sign in to <host>" entry: the same login the Settings row
+        // runs, then the same re-fetch a Settings sign-in triggers, so a
+        // link fixed from the palette doesn't wait for the next launch's
+        // backfill either.
+        self.overlay.onSignInToAccess = { [weak self] host in
+            guard let self else { return }
+            Task {
+                let success = await CloudflaredAccessTokens.shared.login(origin: host.origin)
+                guard success else {
+                    HUDController.shared.flash("Sign-in to \(host.host) didn't complete")
+                    return
+                }
+                HUDController.shared.flash("Signed in to \(host.host) — refreshing previews")
+                await self.enrichment.refetchLinkMetadata(origin: host.origin)
+            }
+        }
     }
 }

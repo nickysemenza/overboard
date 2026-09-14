@@ -74,6 +74,62 @@ struct CloudflareAccessHostTests {
         #expect(!updated.contains { $0.origin == "https://host0.example" })
     }
 
+    // MARK: - needsSignIn
+
+    @Test func needsSignInIsTrueWhenNeverSignedIn() {
+        #expect(self.host("https://a.b", firstSeen: .now, lastChallenged: .now).needsSignIn)
+    }
+
+    @Test func needsSignInIsTrueWhenChallengedAgainAfterSigningIn() {
+        let signedIn = Date(timeIntervalSince1970: 1000)
+        let challengedAgain = Date(timeIntervalSince1970: 2000)
+        let host = self.host(
+            "https://a.b", firstSeen: .now, lastChallenged: challengedAgain, lastSignedIn: signedIn
+        )
+        #expect(host.needsSignIn)
+    }
+
+    @Test func needsSignInIsFalseWhenTheSignInCoversTheLastChallenge() {
+        let challenged = Date(timeIntervalSince1970: 1000)
+        let signedInAfter = Date(timeIntervalSince1970: 2000)
+        let host = self.host(
+            "https://a.b", firstSeen: .now, lastChallenged: challenged, lastSignedIn: signedInAfter
+        )
+        #expect(!host.needsSignIn)
+    }
+
+    // MARK: - gatedHost
+
+    @Test func gatedHostMatchesAnOriginThatNeedsSignIn() throws {
+        let hosts = [self.host("https://a.b", firstSeen: .now, lastChallenged: .now)]
+        let url = try #require(URL(string: "https://a.b/some/page"))
+        #expect(CloudflareAccessHost.gatedHost(for: url, in: hosts)?.origin == "https://a.b")
+    }
+
+    @Test func gatedHostIsNilForASignedInHost() throws {
+        let signedIn = Date(timeIntervalSince1970: 2000)
+        let challenged = Date(timeIntervalSince1970: 1000)
+        let hosts = [self.host("https://a.b", firstSeen: .now, lastChallenged: challenged, lastSignedIn: signedIn)]
+        let url = try #require(URL(string: "https://a.b/some/page"))
+        #expect(CloudflareAccessHost.gatedHost(for: url, in: hosts) == nil)
+    }
+
+    @Test func gatedHostIsNilWithoutAMatchingOrigin() throws {
+        let hosts = [self.host("https://a.b", firstSeen: .now, lastChallenged: .now)]
+        let url = try #require(URL(string: "https://other.example/some/page"))
+        #expect(CloudflareAccessHost.gatedHost(for: url, in: hosts) == nil)
+    }
+
+    @Test func gatedHostRespectsExplicitPorts() throws {
+        let hosts = [self.host("https://a.b:8443", firstSeen: .now, lastChallenged: .now)]
+        // Same host, default port — a different origin, no match.
+        let defaultPortURL = try #require(URL(string: "https://a.b/some/page"))
+        #expect(CloudflareAccessHost.gatedHost(for: defaultPortURL, in: hosts) == nil)
+
+        let matchingURL = try #require(URL(string: "https://a.b:8443/some/page"))
+        #expect(CloudflareAccessHost.gatedHost(for: matchingURL, in: hosts)?.origin == "https://a.b:8443")
+    }
+
     // MARK: - recordSignIn
 
     @Test func recordSignInSetsLastSignedInOnTheMatchingHost() {

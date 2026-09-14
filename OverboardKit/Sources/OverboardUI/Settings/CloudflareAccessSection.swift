@@ -60,7 +60,12 @@ struct CloudflareAccessSection: View {
         } header: {
             Text("Cloudflare Access")
         }
-        .task(id: self.hosts.map(\.origin)) {
+        // Keyed on `lastSignedIn` too, not just which origins exist: a sign-in
+        // from the ⌘K palette (`DrawerViewModel.onSignInToAccess`) calls
+        // `CloudflaredAccessTokens.login` directly, bypassing `signIn(origin:)`
+        // below — the origin list doesn't change, so only a task id that
+        // moves with `lastSignedIn` re-probes and clears the stale pill.
+        .task(id: self.hosts.map { "\($0.origin)|\($0.lastSignedIn?.timeIntervalSince1970 ?? 0)" }) {
             await self.probeAllStatuses()
         }
     }

@@ -98,6 +98,11 @@ public nonisolated extension Defaults.Keys {
 public nonisolated struct CloudflareAccessHost: Codable, Hashable, Identifiable, Sendable, Defaults.Serializable {
     public var origin: String
     public var firstSeen: Date
+    /// The last challenge this machine *couldn't* answer from `cloudflared`'s
+    /// own cache — not every challenge: a hit doesn't move this, since it
+    /// means the previous sign-in still covers the host. The stored key name
+    /// (`lastChallenged`, below) predates this narrower meaning and stays as
+    /// it is so existing persisted data keeps loading.
     public var lastChallenged: Date
     public var lastSignedIn: Date?
 
@@ -109,6 +114,14 @@ public nonisolated struct CloudflareAccessHost: Codable, Hashable, Identifiable,
     /// than "https://wiki.cfdata.org").
     public var host: String {
         Self.host(fromOrigin: self.origin)
+    }
+
+    /// True while this machine has no answer for the host: never signed in,
+    /// or challenged again since. Drives the Settings status pill, the
+    /// card warning, and the ⌘K "Sign in" action — all three should agree
+    /// with each other, so they all read this instead of re-deriving it.
+    public var needsSignIn: Bool {
+        self.lastSignedIn.map { self.lastChallenged > $0 } ?? true
     }
 
     public init(origin: String, firstSeen: Date, lastChallenged: Date, lastSignedIn: Date? = nil) {
@@ -162,6 +175,15 @@ public nonisolated extension CloudflareAccessHost {
         guard let index = updated.firstIndex(where: { $0.origin == origin }) else { return updated }
         updated[index].lastSignedIn = now
         return updated
+    }
+
+    /// The recorded host `url` belongs to, but only when it still
+    /// `needsSignIn` — a signed-in host has nothing to warn a link card or
+    /// offer a ⌘K action about. Shared by the card warning and the palette
+    /// entry so both agree on exactly which links are gated right now.
+    static func gatedHost(for url: URL, in hosts: [CloudflareAccessHost]) -> CloudflareAccessHost? {
+        guard let origin = CloudflaredAccessTokens.origin(for: url) else { return nil }
+        return hosts.first { $0.origin == origin && $0.needsSignIn }
     }
 }
 

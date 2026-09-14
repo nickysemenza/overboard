@@ -83,13 +83,12 @@ public actor CloudflaredAccessTokens {
     /// `processTimeout` — every failure mode here is meant to be silent, per
     /// the fetcher's "a link works fine without a preview" philosophy.
     ///
-    /// Only ever called after `LinkMetadataFetcher` sees an Access challenge,
-    /// so every call — hit or miss — represents a real challenge; that's why
-    /// this is also where the origin gets recorded into `Defaults` for
-    /// Settings' host list.
+    /// Only ever called after `LinkMetadataFetcher` sees an Access challenge.
+    /// A *miss* here — no cached token — is the case Settings' host list
+    /// exists for, so that's the only outcome recorded into `Defaults`; a hit
+    /// means this machine already answered the challenge, which isn't news.
     public func token(for url: URL) async -> String? {
         guard let origin = Self.origin(for: url) else { return nil }
-        Self.recordChallenge(origin: origin)
 
         let now = Date()
         let token: String?
@@ -115,6 +114,7 @@ public actor CloudflaredAccessTokens {
         }
 
         if token == nil {
+            Self.recordChallenge(origin: origin)
             Self.logger.debug("no token for \(origin, privacy: .public)")
             if Self.shouldHint(origin: origin, alreadyHinted: self.hintedOrigins) {
                 self.hintedOrigins.insert(origin)
