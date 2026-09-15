@@ -5,10 +5,30 @@ import ImageIO
 @testable import OverboardCore
 import Testing
 import UniformTypeIdentifiers
+import Vision
 
 struct ImageTextRecognizerTests {
+    /// Whether Vision's text recognizer can run on this host at all. The
+    /// xcode-27 CI VM throws from `RecognizeTextRequest.perform` (no
+    /// inference context / ML assets), which `ImageTextRecognizer` folds into
+    /// `nil` — indistinguishable from "no text found". Probe the request
+    /// directly so a host that can't run OCR skips the read-back test instead
+    /// of failing it, while a host whose Vision misreads the label still fails.
+    private static func visionCanRecognizeText() async -> Bool {
+        guard let png = renderTextImage("PROBE"),
+              let image = ImageDownsampler.downsampledImage(from: png, maxPixel: ImageTextRecognizer.maxOCRPixel)
+        else { return false }
+        do {
+            _ = try await RecognizeTextRequest().perform(on: image)
+            return true
+        } catch {
+            print("Vision text recognition unavailable on this host: \(error)")
+            return false
+        }
+    }
+
     /// Renders a crisp black-on-white label and expects OCR to read it back.
-    private func renderTextImage(_ text: String) -> Data? {
+    private static func renderTextImage(_ text: String) -> Data? {
         let width = 1000, height = 120
         guard let context = CGContext(
             data: nil, width: width, height: height,
@@ -39,8 +59,9 @@ struct ImageTextRecognizerTests {
         return data as Data
     }
 
-    @Test func readsTextFromImage() async throws {
-        let png = try #require(renderTextImage("INVOICE 2024 OVERBOARD"))
+    @Test(.enabled("Vision text recognition can't run on this host") { await Self.visionCanRecognizeText() })
+    func readsTextFromImage() async throws {
+        let png = try #require(Self.renderTextImage("INVOICE 2024 OVERBOARD"))
         let recognized = await ImageTextRecognizer.recognizeText(in: png)
         let normalized = recognized?.uppercased() ?? ""
         #expect(normalized.contains("INVOICE"))

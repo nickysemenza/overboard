@@ -50,7 +50,7 @@ extension AppServices {
                     try? await self.store.markUsed(id: item.id)
                     self.pasteString(result, into: target)
                 } catch {
-                    HUDController.shared.flash("AI transform failed")
+                    HUDController.shared.flash((error as? AIFailure)?.userMessage ?? AIFailure.other.userMessage)
                     self.logger.error("AI transform failed: \(String(describing: error), privacy: .public)")
                 }
             }
@@ -235,7 +235,7 @@ extension AppServices {
                     case .copy: self.copyString(result, hud: "Copied — ⌘V to paste")
                     }
                 } catch {
-                    HUDController.shared.flash("AI transform failed")
+                    HUDController.shared.flash((error as? AIFailure)?.userMessage ?? AIFailure.other.userMessage)
                     self.logger.error("Ask AI failed: \(String(describing: error), privacy: .public)")
                 }
             }

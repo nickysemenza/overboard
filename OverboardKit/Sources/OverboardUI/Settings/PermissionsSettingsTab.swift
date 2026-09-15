@@ -254,7 +254,7 @@ struct PermissionsSettingsTab: View {
                     """
                     Titles, category badges, summaries, Paste with AI, and Ask AI run on-device \
                     whenever Apple Intelligence is on. Copied images are text-recognized on-device \
-                    either way. Nothing leaves this Mac.
+                    either way, and on macOS 27 get an AI title too. Nothing leaves this Mac.
                     """
                 )
             }
