@@ -12,4 +12,4 @@ updates:
   - package-ecosystem: swift
     directory: "/OverboardKit"
     schedule:
-      interval: monthly
+      interval: weekly
