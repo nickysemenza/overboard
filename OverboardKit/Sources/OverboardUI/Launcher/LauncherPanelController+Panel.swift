@@ -17,11 +17,11 @@ extension LauncherPanelController {
         let panel = OverlayPanel(
             contentRect: NSRect(x: 0, y: 0, width: Metrics.panelWidth, height: Metrics.panelHeight)
         )
-        let hosting = NSHostingView(
+        panel.contentView = PanelHosting.container(
             rootView: LauncherView(viewModel: self.viewModel, store: self.store)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top),
+            frame: panel.contentLayoutRect
         )
-        panel.contentView = hosting
         return panel
     }
 

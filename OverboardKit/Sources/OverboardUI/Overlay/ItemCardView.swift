@@ -1,7 +1,5 @@
 import AppKit
-import Defaults
 import OverboardCore
-import OverboardMac
 import SwiftUI
 
 struct ItemCardView: View {
@@ -49,12 +47,6 @@ struct ItemCardView: View {
     /// gradient — computed once per `.task(id:)` pass instead of during
     /// every layout pass. `internal`: set from ItemCardView+Loading.swift.
     @State var headerTint: Color?
-    /// Every Cloudflare Access host this machine has seen, read live so a
-    /// sign-in from Settings or ⌘K clears a card's warning immediately
-    /// instead of waiting for the card to reload. `internal`: read from
-    /// `gatedAccessHost` in ItemCardView+Bodies.swift.
-    @Default(.cloudflareAccessHosts) var cloudflareAccessHosts
-
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             self.header
@@ -133,16 +125,11 @@ struct ItemCardView: View {
         if self.item.isSecret {
             return "\(app), secret item\(copied)"
         }
-        // Folded in the same way `copied` is: a detail the visual card also
-        // shows (the caption in `linkContent`), read once as part of the
-        // whole-card label rather than as a separate element VoiceOver users
-        // would otherwise have to find on their own.
-        let accessWarning = self.gatedAccessHost != nil ? ", sign in required" : ""
         let preview = self.item.previewText?.trimmingCharacters(in: .whitespacesAndNewlines)
         if let preview, !preview.isEmpty {
-            return "\(app), \(preview)\(copied)\(accessWarning)"
+            return "\(app), \(preview)\(copied)"
         }
-        return "\(app)\(copied)\(accessWarning)"
+        return "\(app)\(copied)"
     }
 
     /// Quick actions that fade in on hover so mouse users skip the context menu.

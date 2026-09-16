@@ -3,7 +3,6 @@ import Foundation
 import Observation
 import os
 import OverboardCore
-import OverboardMac
 
 public enum DrawerMode: Sendable {
     case history
@@ -73,9 +72,6 @@ public final class DrawerViewModel {
     public var onOpenSettings: () -> Void = {}
     /// Runs a clip action against the selected items.
     public var onRunAction: (ClipAction, [ClipItem]) -> Void = { _, _ in }
-    /// Runs the ⌘K palette's "Sign in to <host>" entry (behavior in
-    /// DrawerViewModel+Palette.swift).
-    public var onSignInToAccess: (CloudflareAccessHost) -> Void = { _ in }
 
     // MARK: - ⌘K palette state (behavior in DrawerViewModel+Palette.swift)
 

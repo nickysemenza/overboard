@@ -58,13 +58,6 @@ final class AppServices {
     let store: ClipStore
     let monitor: ClipboardMonitor
     let pasteback: PastebackService
-    /// One long-lived fetcher (see `ClipEnrichmentPipeline.linkFetcher`'s
-    /// comment on why per-fetch instances leak) wired to the app's
-    /// `cloudflared`-backed Access token lookup, so a link behind Cloudflare
-    /// Access gets its real title instead of the login page's.
-    let linkFetcher = LinkMetadataFetcher(accessToken: { url in
-        await CloudflaredAccessTokens.shared.token(for: url)
-    })
     /// Post-ingest OCR / link / LLM enrichment, shared by the ingest loop and
     /// the link-backfill job.
     let enrichment: ClipEnrichmentPipeline
@@ -109,7 +102,6 @@ final class AppServices {
         self.store = Self.openStore(logger: self.logger)
         self.monitor = ClipboardMonitor()
         self.pasteback = PastebackService(store: self.store)
-        let linkFetcher = self.linkFetcher
         // macOS 27: the vision-capable on-device model can title an image
         // clip straight from its pixels. Nil on earlier systems, where the
         // pipeline falls back to its OCR-text-only labeling path.
@@ -123,7 +115,6 @@ final class AppServices {
         self.enrichment = ClipEnrichmentPipeline(
             store: self.store,
             settings: { ClipEnrichmentPipeline.Settings(richLinkPreviews: Defaults[.richLinkPreviews]) },
-            fetchLink: { await linkFetcher.fetch($0) },
             enrichImage: enrichImage
         )
         let stack = self.stack
@@ -181,7 +172,6 @@ final class AppServices {
         self.installOverlayCallbacks()
         self.installLauncherCallbacks()
         self.installEmojiCallbacks()
-        self.installCloudflareAccessCallbacks()
         // Decode the emoji dataset off-main now so the first ⌃⌘Space is instant.
         self.emojiViewModel.warm()
     }

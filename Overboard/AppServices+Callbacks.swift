@@ -311,41 +311,4 @@ extension AppServices {
             self?.copyString(emoji, hud: "Copied — ⌘V to paste")
         }
     }
-
-    /// Wires the Cloudflare Access "you're behind Access" HUD hint:
-    /// `CloudflaredAccessTokens` fires this at most once per origin per
-    /// launch, the first time a link fetch hits a challenge with nothing
-    /// cached for it, so a gated host isn't a silent dead end — Settings ›
-    /// General is where the user can actually do something about it.
-    /// Installing it is an actor hop, hence the `Task`; the callback itself
-    /// only fires later, once a real fetch hits a challenge, so there's no
-    /// race with wiring it a beat after `start()`.
-    func installCloudflareAccessCallbacks() {
-        Task {
-            await CloudflaredAccessTokens.shared.setChallengeHint { origin in
-                HUDController.shared.flash(
-                    "\(CloudflareAccessHost.host(fromOrigin: origin)) is behind Cloudflare Access — " +
-                        "sign in from Settings",
-                    duration: .seconds(3)
-                )
-            }
-        }
-
-        // ⌘K's "Sign in to <host>" entry: the same login the Settings row
-        // runs, then the same re-fetch a Settings sign-in triggers, so a
-        // link fixed from the palette doesn't wait for the next launch's
-        // backfill either.
-        self.overlay.onSignInToAccess = { [weak self] host in
-            guard let self else { return }
-            Task {
-                let success = await CloudflaredAccessTokens.shared.login(origin: host.origin)
-                guard success else {
-                    HUDController.shared.flash("Sign-in to \(host.host) didn't complete")
-                    return
-                }
-                HUDController.shared.flash("Signed in to \(host.host) — refreshing previews")
-                await self.enrichment.refetchLinkMetadata(origin: host.origin)
-            }
-        }
-    }
 }
