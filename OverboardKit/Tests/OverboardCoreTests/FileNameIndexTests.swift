@@ -103,4 +103,33 @@ struct FileNameIndexTests {
         try await second.reset()
         #expect(try await second.count() == 0)
     }
+
+    @Test func compactsOnceForPreexistingIndexes() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("files.sqlite")
+        let index = try FileNameIndex(url: url)
+        let audit = try DatabaseQueue(path: url.path)
+        func userVersion() async throws -> Int {
+            try await audit.read { db in try Int.fetchOne(db, sql: "PRAGMA user_version") ?? 0 }
+        }
+
+        // A fresh index is stamped current and has nothing to reclaim.
+        #expect(try await userVersion() == 1)
+        #expect(try await index.compactIfNeeded() == false)
+
+        // An index from before the stamp existed: compact exactly once, and
+        // search must survive the VACUUM.
+        try await audit.write { db in try db.execute(sql: "PRAGMA user_version = 0") }
+        try await index.upsert([self.entry("/fixture/report.pdf"), self.entry("/fixture/stale.txt")])
+        try await index.beginScan("two")
+        try await index.upsert([self.entry("/fixture/report.pdf", generation: "two")], seenIn: "two")
+        try await index.finishScan(root: "/fixture", generation: "two")
+        #expect(try await index.compactIfNeeded() == true)
+        #expect(try await userVersion() == 1)
+        #expect(try await index.compactIfNeeded() == false)
+        #expect(try await index.search("report").count == 1)
+        #expect(try await index.search("stale").isEmpty)
+    }
 }

@@ -69,6 +69,9 @@ public actor FileNameIndex {
             try db.execute(sql: "PRAGMA temp_store = MEMORY")
         }
         try self.database.write { db in
+            if try !db.tableExists("file_entry") {
+                try db.execute(sql: "PRAGMA user_version = \(Self.maintenanceVersion)")
+            }
             try db.execute(sql: """
             CREATE TABLE IF NOT EXISTS file_entry (
                 path TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL,
@@ -337,5 +340,32 @@ public actor FileNameIndex {
             }
             return left.0.path < right.0.path
         }.prefix(limit).map(\.0.result)
+    }
+}
+
+// MARK: - Maintenance
+
+extension FileNameIndex {
+    /// Stamped into `PRAGMA user_version`. Bumping it makes every existing
+    /// index run `compactIfNeeded()` once more on its next open; a freshly
+    /// created index is stamped immediately since it has nothing to reclaim.
+    private static let maintenanceVersion = 1
+
+    /// One-shot compaction for an index written before scans stopped rewriting
+    /// every row: each of those rewrites fired the FTS trigger, and FTS5 keeps
+    /// the deleted postings in its segments until a merge — so `VACUUM` alone
+    /// reclaims nothing (the freelist is empty), and `'optimize'` has to merge
+    /// first. Stamps `user_version` so it never runs twice; returns whether it
+    /// compacted. Run before any scan holds the connection.
+    public func compactIfNeeded() async throws -> Bool {
+        // VACUUM can't run inside a transaction, hence `writeWithoutTransaction`.
+        try await self.database.writeWithoutTransaction { db in
+            let version = try Int.fetchOne(db, sql: "PRAGMA user_version") ?? 0
+            guard version < Self.maintenanceVersion else { return false }
+            try db.execute(sql: "INSERT INTO file_fts(file_fts) VALUES('optimize')")
+            try db.execute(sql: "VACUUM")
+            try db.execute(sql: "PRAGMA user_version = \(Self.maintenanceVersion)")
+            return true
+        }
     }
 }

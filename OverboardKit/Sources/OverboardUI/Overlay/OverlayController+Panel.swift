@@ -6,25 +6,14 @@ import SwiftUI
 extension OverlayController {
     func makePanel() -> OverlayPanel {
         let panel = OverlayPanel(contentRect: NSRect(x: 0, y: 0, width: 800, height: CardMetrics.collapsedPanelHeight))
-        let hosting = NSHostingView(
-            rootView: DrawerView(viewModel: self.viewModel)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-        )
         // The panel's frame is set from AppKit (`show()` / `resizePanel`) and
-        // the content fills it. A hosting view that *is* the window's content
-        // view resizes the window to SwiftUI's ideal height on every layout
-        // (`NSHostingView.windowDidLayout`, regardless of `sizingOptions`) —
-        // which, once the preview pane (a `maxHeight: .infinity` body) is
-        // showing, is just its header and footer: the panel collapsed to
-        // ~190pt with an empty pane, and while the strip was showing it fought
-        // the frame animation for the same window. Hosting inside a plain
-        // container view keeps that path out of the picture.
-        hosting.sizingOptions = []
-        let container = NSView(frame: panel.contentLayoutRect)
-        hosting.frame = container.bounds
-        hosting.autoresizingMask = [.width, .height]
-        container.addSubview(hosting)
-        panel.contentView = container
+        // the content fills it — see `PanelHosting` for why the hosting view
+        // must not be the window's content view itself.
+        panel.contentView = PanelHosting.container(
+            rootView: DrawerView(viewModel: self.viewModel)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom),
+            frame: panel.contentLayoutRect
+        )
         return panel
     }
 
