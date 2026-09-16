@@ -75,16 +75,13 @@ public enum ClearHistoryPrompt {
 
 public struct SettingsView: View {
     private let store: ClipStore
-    private let enrichment: ClipEnrichmentPipeline
     @Bindable private var navigation: SettingsNavigation
 
     public init(
         store: ClipStore,
-        enrichment: ClipEnrichmentPipeline,
         navigation: SettingsNavigation = SettingsNavigation()
     ) {
         self.store = store
-        self.enrichment = enrichment
         self.navigation = navigation
     }
 
@@ -118,7 +115,7 @@ public struct SettingsView: View {
     private func detail(for tab: SettingsTab) -> some View {
         switch tab {
         case .general:
-            GeneralSettingsTab(enrichment: self.enrichment)
+            GeneralSettingsTab()
                 .navigationTitle(tab.title)
         case .history:
             HistorySettingsTab(store: self.store)
@@ -163,8 +160,7 @@ private struct SettingsSidebarRow: View {
 
 #if DEBUG
     #Preview("All tabs") {
-        let store = Fixtures.previewStore()
-        SettingsView(store: store, enrichment: Fixtures.noOpEnrichmentPipeline(store: store))
+        SettingsView(store: Fixtures.previewStore())
             .frame(width: 700, height: 580)
     }
 #endif

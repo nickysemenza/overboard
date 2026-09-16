@@ -99,7 +99,10 @@ let package = Package(
         ),
         .testTarget(
             name: "OverboardCoreTests",
-            dependencies: ["OverboardCore"],
+            dependencies: [
+                "OverboardCore",
+                .product(name: "GRDB", package: "GRDB.swift"),
+            ],
             swiftSettings: approachableConcurrency
         ),
         .testTarget(

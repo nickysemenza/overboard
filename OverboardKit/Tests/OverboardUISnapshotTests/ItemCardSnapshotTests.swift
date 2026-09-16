@@ -1,14 +1,12 @@
-import Defaults
 import OverboardCore
-import OverboardMac
 @testable import OverboardUI
 import SnapshotTesting
 import SwiftUI
 import Testing
 
 /// Visual smoke for the clipboard card: one selected text card with a full
-/// footer, the one card body that isn't text, the one warning treatment, and
-/// the accessibility-size layout. Ordinary text/link/file cards are covered by
+/// footer, the one card body that isn't text, and the accessibility-size
+/// layout. Ordinary text/link/file cards are covered by
 /// `DrawerSnapshotTests`; footer composition is unit-tested in Core.
 @MainActor
 struct ItemCardSnapshotTests {
@@ -67,26 +65,6 @@ struct ItemCardSnapshotTests {
             as: snapshotImageStrategy,
             record: snapshotRecordingMode
         )
-    }
-
-    /// A link whose fetch failed against a host this machine still needs to
-    /// sign in to: the description slot shows the Cloudflare Access warning
-    /// instead of staying blank. `cloudflareAccessHosts` is process-wide
-    /// `Defaults` state (same as the launcher suites' keys), so the previous
-    /// value is saved and restored around the test.
-    @Test func gatedByCloudflareAccess() {
-        let oldHosts = Defaults[.cloudflareAccessHosts]
-        defer { Defaults[.cloudflareAccessHosts] = oldHosts }
-        Defaults[.cloudflareAccessHosts] = [
-            CloudflareAccessHost(origin: "https://wiki.cfdata.org", firstSeen: .now, lastChallenged: .now),
-        ]
-        let item = Fixtures.item(
-            kind: .link,
-            preview: "https://wiki.cfdata.org/some/page",
-            appName: "Safari",
-            linkTitle: ""
-        )
-        assertSnapshot(of: self.host(item, index: 1), as: snapshotImageStrategy, record: snapshotRecordingMode)
     }
 
     /// Pins the accessibility-text layout: the card's own geometry scales with

@@ -93,7 +93,11 @@ public final class HUDController {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.animationBehavior = .none
         panel.isReleasedWhenClosed = false
-        panel.contentView = NSHostingView(rootView: HUDView(state: self.state))
+        panel.contentView = PanelHosting.container(
+            rootView: HUDView(state: self.state),
+            frame: panel.contentLayoutRect,
+            tracksContentSize: true
+        )
         return panel
     }
 }

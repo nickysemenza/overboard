@@ -1,7 +1,4 @@
-import Defaults
-import Foundation
 import OverboardCore
-import OverboardMac
 
 // MARK: - ⌘K palette
 
@@ -90,15 +87,11 @@ enum DrawerCommand: String, CaseIterable {
 enum DrawerPaletteEntry: Identifiable, Hashable {
     case clip(ClipAction)
     case command(DrawerCommand)
-    /// The selection's link is still gated behind Cloudflare Access — see
-    /// `DrawerViewModel.gatedAccessHostForSelection`.
-    case signInToAccess(CloudflareAccessHost)
 
     var id: String {
         switch self {
         case let .clip(action): "clip-\(action.id)"
         case let .command(command): "command-\(command.rawValue)"
-        case let .signInToAccess(host): "sign-in-\(host.origin)"
         }
     }
 
@@ -106,16 +99,14 @@ enum DrawerPaletteEntry: Identifiable, Hashable {
         switch self {
         case let .clip(action): action.systemImage
         case let .command(command): command.systemImage
-        case .signInToAccess: "lock.shield"
         }
     }
 
-    /// The palette-row keycap hint; `nil` for clip actions (no
-    /// positional-shortcut convention, see `CommandPaletteItem.hint`) and for
-    /// the sign-in action, which has no shortcut of its own.
+    /// The palette-row keycap hint; `nil` for clip actions, which have no
+    /// positional-shortcut convention (see `CommandPaletteItem.hint`).
     var hint: String? {
         switch self {
-        case .clip, .signInToAccess: nil
+        case .clip: nil
         case let .command(command): command.keycap
         }
     }
@@ -124,8 +115,6 @@ enum DrawerPaletteEntry: Identifiable, Hashable {
         switch self {
         case let .clip(action): action.label
         case let .command(command): command.title(isPinned: isPinned)
-        case let .signInToAccess(host):
-            String(localized: "Sign in to \(host.host) (Cloudflare Access)", bundle: .module)
         }
     }
 }
@@ -133,18 +122,15 @@ enum DrawerPaletteEntry: Identifiable, Hashable {
 public extension DrawerViewModel {
     /// Clip actions and drawer commands for the current selection, filtered
     /// by a case-insensitive fuzzy subsequence of the label; empty query
-    /// shows them all. A gated link's sign-in action comes first — it's the
-    /// one thing standing between the user and the card actually working —
-    /// then clip actions (content transforms), then commands (keyboard
-    /// shortcuts); the fuzzy match is identical to what `ClipAction`
-    /// filtering did before commands joined the list.
+    /// shows them all. Clip actions (content transforms) come first, then
+    /// commands (keyboard shortcuts) — the fuzzy match is identical to what
+    /// `ClipAction` filtering did before commands joined the list.
     internal var filteredPaletteActions: [DrawerPaletteEntry] {
-        let signInEntries = self.gatedAccessHostForSelection.map { [DrawerPaletteEntry.signInToAccess($0)] } ?? []
         let clipEntries = self.applicableActions.map(DrawerPaletteEntry.clip)
         let commandEntries = DrawerCommand.allCases
             .filter { $0.isApplicable(to: self.selectedItem) }
             .map(DrawerPaletteEntry.command)
-        let all = signInEntries + clipEntries + commandEntries
+        let all = clipEntries + commandEntries
         let needle = self.paletteQuery.trimmingCharacters(in: .whitespaces).lowercased()
         guard !needle.isEmpty else { return all }
         let isPinned = self.selectedItem?.isPinned ?? false
@@ -159,19 +145,6 @@ public extension DrawerViewModel {
             }
             return remaining.isEmpty
         }
-    }
-
-    /// The Cloudflare Access host the selected item's link is still gated
-    /// behind, if any. `linkTitle == ""` is the failed-fetch sentinel
-    /// (`ClipItem.swift`) — only then is the URL worth checking against the
-    /// recorded host list, since a link that was never fetched
-    /// (`linkTitle == nil`) hasn't necessarily hit a challenge at all.
-    private var gatedAccessHostForSelection: CloudflareAccessHost? {
-        guard let item = self.selectedItem, item.kind == .link, item.linkTitle == "",
-              let preview = item.previewText,
-              let url = URL(string: preview.trimmingCharacters(in: .whitespacesAndNewlines))
-        else { return nil }
-        return CloudflareAccessHost.gatedHost(for: url, in: Defaults[.cloudflareAccessHosts])
     }
 
     func togglePalette() {
@@ -204,7 +177,6 @@ public extension DrawerViewModel {
         switch entries[chosen] {
         case let .clip(action): self.runAction(action)
         case let .command(command): command.run(on: self)
-        case let .signInToAccess(host): self.onSignInToAccess(host)
         }
     }
 }

@@ -43,10 +43,6 @@ public struct ClipEnrichmentPipeline: Sendable {
     /// itself (and its `RedirectGuard`) until invalidated — which a value type
     /// can't do in `deinit` — so constructing one per link leaked a session each
     /// time. Sharing one session (safe for concurrent tasks) removes the leak.
-    /// This default has no `accessToken` provider (`OverboardCore` doesn't
-    /// know about `cloudflared`); the app injects its own, equally long-lived
-    /// `LinkMetadataFetcher` — with the Access token provider wired to
-    /// `CloudflaredAccessTokens` — via `fetchLink` in `AppServices`.
     public static let linkFetcher = LinkMetadataFetcher()
 
     private let store: ClipStore
@@ -161,21 +157,5 @@ public struct ClipEnrichmentPipeline: Sendable {
             faviconPNG: metadata?.faviconPNG,
             previewImagePNG: metadata?.previewImagePNG
         )
-    }
-
-    /// Re-fetches metadata for every `.link` item under `origin`, called from
-    /// Settings right after a Cloudflare Access sign-in: those links were
-    /// healed (metadata cleared) while the host was still gated, and the
-    /// startup backfill already ran for this launch and won't run again until
-    /// next launch, so nothing would otherwise pick them back up.
-    public func refetchLinkMetadata(origin: String) async {
-        guard let healed = try? await self.store.resetLinkMetadata(forOrigin: origin) else { return }
-        for item in healed {
-            await self.fetchLinkMetadata(for: item)
-            // Same politeness pause as the startup backfill (`AppServices+Capture.swift`'s
-            // `linkBackfillJob`) — several links under one freshly-signed-in
-            // host shouldn't hit it in a burst.
-            try? await Task.sleep(for: .seconds(1))
-        }
     }
 }

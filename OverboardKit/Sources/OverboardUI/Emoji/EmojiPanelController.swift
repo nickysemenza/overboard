@@ -92,11 +92,11 @@ public final class EmojiPanelController {
         let panel = OverlayPanel(
             contentRect: NSRect(x: 0, y: 0, width: Metrics.panelWidth, height: Metrics.panelHeight)
         )
-        let hosting = NSHostingView(
+        panel.contentView = PanelHosting.container(
             rootView: EmojiPickerView(viewModel: self.viewModel)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top),
+            frame: panel.contentLayoutRect
         )
-        panel.contentView = hosting
         return panel
     }
 

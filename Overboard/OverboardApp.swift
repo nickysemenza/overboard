@@ -121,7 +121,6 @@ struct OverboardApp: App {
         Settings {
             SettingsView(
                 store: AppServices.shared.store,
-                enrichment: AppServices.shared.enrichment,
                 navigation: AppServices.shared.settingsNavigation
             )
         }

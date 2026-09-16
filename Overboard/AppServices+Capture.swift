@@ -112,17 +112,6 @@ extension AppServices {
     ) -> MaintenanceJob {
         MaintenanceJob(name: "link backfill", interval: .zero, initialDelay: .seconds(60)) {
             guard Defaults[.richLinkPreviews] else { return .finished }
-            if !Defaults[.didResetAccessLoginPreviews] {
-                do {
-                    let healed = try await store.resetLinkMetadata(whereTitleContains: "Cloudflare Access")
-                    if healed > 0 {
-                        logger.info("healed \(healed, privacy: .public) Cloudflare Access login-page titles")
-                    }
-                } catch {
-                    logger.error("Cloudflare Access title reset failed: \(String(describing: error), privacy: .public)")
-                }
-                Defaults[.didResetAccessLoginPreviews] = true
-            }
             let links: [ClipItem]
             do {
                 links = try await store.linksNeedingMetadata(limit: 25)

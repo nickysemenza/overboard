@@ -15,23 +15,6 @@ public struct LinkMetadataFetcher: Sendable {
     /// LinkMetadataFetcher+Decoding.swift.
     let timeout: TimeInterval
 
-    /// Given the *original* request URL (not the challenge/login URL), returns
-    /// a cached Cloudflare Access JWT for that origin, or nil if none is
-    /// available. Injected so `OverboardCore` never talks to `cloudflared`
-    /// directly — the Mac-specific lookup (`CloudflaredAccessTokens`) lives in
-    /// `OverboardMac` and is wired in by the app. Nil by default, which keeps
-    /// every Access-gated link silently unenriched (no crash, no prompt) on a
-    /// machine without `cloudflared` — exactly the "silent when missing"
-    /// behavior the sync-between-two-laptops use case needs.
-    let accessToken: AccessTokenProvider?
-
-    /// See `accessToken`.
-    public typealias AccessTokenProvider = @Sendable (URL) async -> String?
-
-    /// The header Access validates a JWT from — the same one
-    /// `cloudflared access curl` adds.
-    static let accessTokenHeader = "cf-access-token"
-
     /// Cap on streamed HTML — enough for any real `<head>`, small enough that a
     /// pathological page can't exhaust memory. Internal (not `private`) so
     /// `fetchHTML` can reach it from LinkMetadataFetcher+Decoding.swift.
@@ -42,13 +25,8 @@ public struct LinkMetadataFetcher: Sendable {
     private static let faviconMaxPixel = 64
     private static let previewImageMaxPixel = 480
 
-    public init(
-        session: URLSession? = nil,
-        timeout: TimeInterval = 10,
-        accessToken: AccessTokenProvider? = nil
-    ) {
+    public init(session: URLSession? = nil, timeout: TimeInterval = 10) {
         self.timeout = timeout
-        self.accessToken = accessToken
         if let session {
             self.session = session
         } else {
@@ -64,23 +42,6 @@ public struct LinkMetadataFetcher: Sendable {
                 delegateQueue: nil
             )
         }
-    }
-
-    // MARK: - Cloudflare Access challenge detection
-
-    /// True for a Cloudflare Access login page: `<team>.cloudflareaccess.com`
-    /// (or the bare domain) serving `/cdn-cgi/access/login/…`. An
-    /// unauthenticated request to a site behind Access gets redirected here —
-    /// the public host in the original link genuinely resolves and isn't
-    /// private, so `RedirectGuard` would otherwise follow it and the fetcher
-    /// would store the login page's title ("Sign in ・ Cloudflare Access") as
-    /// the link's title instead of surfacing the redirect.
-    public static func isCloudflareAccessLogin(_ url: URL) -> Bool {
-        guard let host = url.host?.lowercased() else { return false }
-        guard host == "cloudflareaccess.com" || host.hasSuffix(".cloudflareaccess.com") else {
-            return false
-        }
-        return url.path.hasPrefix("/cdn-cgi/access/login")
     }
 
     // MARK: - Fetchability guard
@@ -231,33 +192,7 @@ public struct LinkMetadataFetcher: Sendable {
 
     public func fetch(_ url: URL) async -> LinkMetadata? {
         guard Self.isFetchable(url) else { return nil }
-
-        var headers: [String: String] = [:]
-        let html: String
-        let finalURL: URL
-        switch await self.fetchHTML(url) {
-        case let .page(pageHTML, pageFinalURL):
-            html = pageHTML
-            finalURL = pageFinalURL
-        case .accessChallenge:
-            // The site sits behind Cloudflare Access and we got the login
-            // redirect instead of the page. Ask for a token cached by the
-            // user's own `cloudflared` session (never opens a browser) and
-            // retry once with it; anything short of a full page on the retry
-            // means the token was rejected, expired, or missing, and we give
-            // up rather than looping.
-            guard let accessToken, let jwt = await accessToken(url) else { return nil }
-            headers = [Self.accessTokenHeader: jwt]
-            switch await self.fetchHTML(url, headers: headers) {
-            case let .page(pageHTML, pageFinalURL):
-                html = pageHTML
-                finalURL = pageFinalURL
-            case .accessChallenge, .failed:
-                return nil
-            }
-        case .failed:
-            return nil
-        }
+        guard let (html, finalURL) = await self.fetchHTML(url) else { return nil }
 
         let parsed = LinkMetadataParser.parse(html: html, baseURL: finalURL)
 
@@ -266,13 +201,11 @@ public struct LinkMetadataFetcher: Sendable {
 
         let faviconURL = parsed.faviconURL ?? self.defaultFaviconURL(for: finalURL)
         let faviconPNG = await self.fetchImagePNG(
-            faviconURL, byteCap: Self.faviconByteCap, maxPixel: Self.faviconMaxPixel,
-            headers: headers, pageHost: finalURL.host
+            faviconURL, byteCap: Self.faviconByteCap, maxPixel: Self.faviconMaxPixel
         )
         let previewPNG = await parsed.previewImageURL.asyncFlatMap {
             await self.fetchImagePNG(
-                $0, byteCap: Self.previewImageByteCap, maxPixel: Self.previewImageMaxPixel,
-                headers: headers, pageHost: finalURL.host
+                $0, byteCap: Self.previewImageByteCap, maxPixel: Self.previewImageMaxPixel
             )
         }
 
@@ -301,24 +234,11 @@ public struct LinkMetadataFetcher: Sendable {
     /// Downloads an image (capped at `byteCap`), downscales it to `maxPixel` on
     /// its longest side, and re-encodes as PNG via ImageIO — no AppKit. Nil on
     /// any failure, so a broken image URL never blocks the rest of the card.
-    ///
-    /// `headers` (the Access token, when present) is only applied when `url`'s
-    /// host matches `pageHost`: the favicon or og:image can live on a
-    /// completely different, third-party host (a CDN), and the Access JWT for
-    /// the page's own origin must never leak there.
-    private func fetchImagePNG(
-        _ url: URL?, byteCap: Int, maxPixel: Int,
-        headers: [String: String] = [:], pageHost: String? = nil
-    ) async -> Data? {
+    private func fetchImagePNG(_ url: URL?, byteCap: Int, maxPixel: Int) async -> Data? {
         guard let url, await Self.isConnectPermitted(url) else { return nil }
         var request = URLRequest(url: url)
         request.timeoutInterval = self.timeout
         request.setValue("image/*", forHTTPHeaderField: "Accept")
-        if url.host == pageHost {
-            for (field, value) in headers {
-                request.setValue(value, forHTTPHeaderField: field)
-            }
-        }
 
         do {
             let (bytes, response) = try await self.session.bytes(for: request)

@@ -62,6 +62,7 @@ public nonisolated enum FileMetadataScanner {
         // also mutating this state, and two `inout` borrows of the same local
         // across that overlap trip Swift's exclusivity checks at runtime.
         let accumulator = ScanAccumulator()
+        try await index.beginScan(generation)
         guard let enumerator = FileManager.default.enumerator(
             at: directory ?? root,
             includingPropertiesForKeys: Array(self.resourceKeys),
@@ -72,34 +73,49 @@ public nonisolated enum FileMetadataScanner {
                 }
                 return true
             }
-        ) else { return ["\(root.path): Couldn’t read this location. Check access in System Settings."] }
-
-        // An incremental enumeration yields descendants, not the directory
-        // itself. Refresh its record before pruning the old generation.
-        if let directory, directory != root,
-           let values = try? directory.resourceValues(forKeys: self.resourceKeys)
-        {
-            accumulator.batch.append(IndexedFile(path: directory.path, name: directory.lastPathComponent,
-                                                 root: root.path, generation: generation,
-                                                 modifiedAt: values.contentModificationDate ?? .distantPast,
-                                                 availability: FileAvailability.status(at: directory, values: values),
-                                                 isDirectory: true, location: FileIndexService.locationName(root)))
+        ) else {
+            try await index.discardScan(generation)
+            return ["\(root.path): Couldn’t read this location. Check access in System Settings."]
         }
 
-        try await self.indexEntries(
-            from: enumerator,
-            context: ScanContext(root: root, exclusions: exclusions, generation: generation, index: index),
-            accumulator: accumulator
-        )
+        do {
+            // An incremental enumeration yields descendants, not the directory
+            // itself. Refresh its record before reconciling the seen-path set.
+            if let directory, directory != root,
+               let values = try? directory.resourceValues(forKeys: self.resourceKeys)
+            {
+                accumulator.batch.append(IndexedFile(
+                    path: directory.path,
+                    name: directory.lastPathComponent,
+                    root: root.path,
+                    generation: generation,
+                    modifiedAt: values.contentModificationDate ?? .distantPast,
+                    availability: FileAvailability.status(at: directory, values: values),
+                    isDirectory: true,
+                    location: FileIndexService.locationName(root)
+                ))
+            }
 
-        try Task.checkCancellation()
-        try await index.upsert(accumulator.batch)
-        try Task.checkCancellation()
-        // Never erase known cloud/permission-denied entries after a partial scan.
-        if accumulator.failures.isEmpty {
-            try await index.finishScan(root: root.path, generation: generation, under: directory?.path)
+            try await self.indexEntries(
+                from: enumerator,
+                context: ScanContext(root: root, exclusions: exclusions, generation: generation, index: index),
+                accumulator: accumulator
+            )
+
+            try Task.checkCancellation()
+            try await index.upsert(accumulator.batch, seenIn: generation)
+            try Task.checkCancellation()
+            // Never erase known cloud/permission-denied entries after a partial scan.
+            if accumulator.failures.isEmpty {
+                try await index.finishScan(root: root.path, generation: generation, under: directory?.path)
+            } else {
+                try await index.discardScan(generation)
+            }
+            return accumulator.failures
+        } catch {
+            try? await index.discardScan(generation)
+            throw error
         }
-        return accumulator.failures
     }
 
     /// Groups one scan invocation's fixed parameters so `indexEntries` stays
@@ -157,7 +173,7 @@ public nonisolated enum FileMetadataScanner {
                 }
             }
             if accumulator.batch.count >= 400 {
-                try await context.index.upsert(accumulator.batch)
+                try await context.index.upsert(accumulator.batch, seenIn: context.generation)
                 accumulator.batch.removeAll(keepingCapacity: true)
             }
         }

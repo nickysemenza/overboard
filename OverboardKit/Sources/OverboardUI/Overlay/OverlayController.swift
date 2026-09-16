@@ -1,6 +1,5 @@
 import AppKit
 import OverboardCore
-import OverboardMac
 import SwiftUI
 
 /// Owns the overlay panel lifecycle: summon, position, key handling, dismiss.
@@ -32,8 +31,6 @@ public final class OverlayController {
     /// Called when the user runs a clip action on the selection.
     public var onBrowseHistory: (String, NSRunningApplication?) -> Void = { _, _ in }
     public var onRunAction: (ClipAction, [ClipItem], NSRunningApplication?) -> Void = { _, _, _ in }
-    /// Called when the user runs the ⌘K palette's "Sign in to <host>" entry.
-    public var onSignInToAccess: (CloudflareAccessHost) -> Void = { _ in }
 
     public init(store: ClipStore, stack: PasteStack) {
         self.viewModel = DrawerViewModel(store: store, stack: stack)
@@ -78,8 +75,8 @@ public final class OverlayController {
     }
 
     /// Wires the remaining view-model callbacks: panel resizing, running a
-    /// clip action, the ⌘K palette's Cloudflare Access sign-in entry,
-    /// dismissal, and handing a query off to the launcher's browse-history view.
+    /// clip action, dismissal, and handing a query off to the launcher's
+    /// browse-history view.
     private func installActionCallbacks() {
         self.viewModel.onPreviewVisibilityChanged = { [weak self] expanded in
             self?.resizePanel(expanded: expanded)
@@ -91,14 +88,6 @@ public final class OverlayController {
             // ones could keep it open, but consistency wins.
             self.hide()
             self.onRunAction(action, items, target)
-        }
-        self.viewModel.onSignInToAccess = { [weak self] host in
-            guard let self else { return }
-            // Paste-producing actions need the drawer out of the way; this
-            // hands off to a browser sign-in, which needs it out of the way
-            // even more.
-            self.hide()
-            self.onSignInToAccess(host)
         }
         self.viewModel.onDismiss = { [weak self] in self?.hide() }
         self.viewModel.onBrowseHistory = { [weak self] in

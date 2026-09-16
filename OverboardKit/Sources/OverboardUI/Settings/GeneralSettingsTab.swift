@@ -7,8 +7,6 @@ import ServiceManagement
 import SwiftUI
 
 struct GeneralSettingsTab: View {
-    let enrichment: ClipEnrichmentPipeline
-
     @Default(.restoreClipboard) private var restoreClipboard
     @Default(.launcherFileResults) private var launcherFileResults
     @Default(.launcherClipResults) private var launcherClipResults
@@ -26,27 +24,6 @@ struct GeneralSettingsTab: View {
         AppVersion.isDirtyOrAhead
             ? "ahead of, or dirty against, that tag."
             : "matching the tag means it’s a clean release build."
-    }
-
-    /// The base footer, plus one of two `cloudflared`-specific sentences:
-    /// installed hosts get the "Cloudflare Access" section below to sign in
-    /// from, so the footer just explains the automatic (no-toggle, silent)
-    /// reuse of `cloudflared`'s own cached login; without `cloudflared` there's
-    /// no section to point at, so the footer suggests installing it instead.
-    private static var linkPreviewsFooter: String {
-        let base = """
-        Connects to the URLs you copy to fetch each page’s title, description, \
-        favicon, and preview image, rendered on link cards. Requests come only from \
-        your Mac; nothing is sent anywhere else. Turn this off to keep Overboard fully \
-        offline.
-        """
-        guard CloudflaredAccessTokens.isInstalled() else {
-            return base + " Install cloudflared to preview links behind Cloudflare Access."
-        }
-        return base + """
-         Links behind Cloudflare Access reuse the login cloudflared already has cached; \
-        Overboard only opens a browser to sign in when you ask it to below.
-        """
     }
 
     var body: some View {
@@ -130,11 +107,14 @@ struct GeneralSettingsTab: View {
             } header: {
                 Text("Link previews")
             } footer: {
-                Text(Self.linkPreviewsFooter)
-            }
-
-            if CloudflaredAccessTokens.isInstalled() {
-                CloudflareAccessSection(enrichment: self.enrichment)
+                Text(
+                    """
+                    Connects to the URLs you copy to fetch each page’s title, description, \
+                    favicon, and preview image, rendered on link cards. Requests come only from \
+                    your Mac; nothing is sent anywhere else. Turn this off to keep Overboard fully \
+                    offline.
+                    """
+                )
             }
 
             Section {
@@ -193,8 +173,7 @@ struct LaunchAtLoginToggle: View {
 
 #if DEBUG
     #Preview("General") {
-        let store = Fixtures.previewStore()
-        GeneralSettingsTab(enrichment: Fixtures.noOpEnrichmentPipeline(store: store))
+        GeneralSettingsTab()
             .frame(width: 520, height: 580)
     }
 #endif

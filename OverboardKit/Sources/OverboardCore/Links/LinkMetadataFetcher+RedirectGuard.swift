@@ -4,18 +4,13 @@ import Foundation
 
 /// Re-validates every redirect target with `isFetchable` and refuses the hop
 /// when it points somewhere unsafe (e.g. a public URL that 302s to an
-/// internal IP), or when it's a Cloudflare Access login challenge. Passing
-/// nil to `completionHandler` refuses the redirect and delivers the redirect
-/// response itself back to the caller as the task's result — it does not
-/// cancel the task. For the private-host case that response is a non-2xx
-/// status, so `fetchHTML` treats it as `.failed`, same as before. For the
-/// Access-login case `fetchHTML` recognizes the 3xx status and the
-/// `Location` header itself and returns `.accessChallenge` — the guard here
-/// only has to stop the automatic follow so that response reaches it.
+/// internal IP). Passing nil to `completionHandler` refuses the redirect and
+/// delivers the redirect response itself back to the caller as the task's
+/// result; `fetchHTML` then rejects its non-2xx status.
 final class RedirectGuard: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
     func urlSession(
         _: URLSession,
-        task: URLSessionTask,
+        task _: URLSessionTask,
         willPerformHTTPRedirection _: HTTPURLResponse,
         newRequest: URLRequest,
         completionHandler: @escaping (URLRequest?) -> Void
@@ -23,17 +18,6 @@ final class RedirectGuard: NSObject, URLSessionTaskDelegate, @unchecked Sendable
         guard let url = newRequest.url else {
             completionHandler(nil)
             return
-        }
-        if LinkMetadataFetcher.isCloudflareAccessLogin(url) {
-            completionHandler(nil)
-            return
-        }
-        // URLSession carries the original headers onto the redirected
-        // request. The Access JWT is scoped to the page's own origin and
-        // must not follow a hop to some other host.
-        var request = newRequest
-        if url.host != task.originalRequest?.url?.host {
-            request.setValue(nil, forHTTPHeaderField: LinkMetadataFetcher.accessTokenHeader)
         }
         // The DNS check is now async (see `isConnectPermitted`), so the
         // decision can't be made before this synchronous delegate callback
@@ -44,7 +28,7 @@ final class RedirectGuard: NSObject, URLSessionTaskDelegate, @unchecked Sendable
         let box = CompletionHandlerBox(completionHandler)
         Task {
             let permitted = await LinkMetadataFetcher.isConnectPermitted(url)
-            box.handler(permitted ? request : nil)
+            box.handler(permitted ? newRequest : nil)
         }
     }
 }

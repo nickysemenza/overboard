@@ -65,6 +65,9 @@ public actor FileNameIndex {
 
     public init(url: URL? = nil) throws {
         self.database = try url.map { try DatabaseQueue(path: $0.path) } ?? DatabaseQueue()
+        try self.database.writeWithoutTransaction { db in
+            try db.execute(sql: "PRAGMA temp_store = MEMORY")
+        }
         try self.database.write { db in
             try db.execute(sql: """
             CREATE TABLE IF NOT EXISTS file_entry (
@@ -86,25 +89,90 @@ public actor FileNameIndex {
                 INSERT INTO file_fts(file_fts, rowid, foldedName, foldedPath) VALUES \
             ('delete', old.rowid, old.foldedName, old.foldedPath);
             END;
-            CREATE TRIGGER IF NOT EXISTS file_update AFTER UPDATE ON file_entry BEGIN
-                INSERT INTO file_fts(file_fts, rowid, foldedName, foldedPath) VALUES \
-            ('delete', old.rowid, old.foldedName, old.foldedPath);
-                INSERT INTO file_fts(rowid, foldedName, foldedPath) VALUES (new.rowid, new.foldedName, new.foldedPath);
-            END;
+            CREATE TEMP TABLE IF NOT EXISTS file_scan_seen (
+                scanID TEXT NOT NULL, path TEXT NOT NULL,
+                PRIMARY KEY (scanID, path)
+            ) WITHOUT ROWID;
             """)
-        }
-    }
-
-    /// One transaction for the whole batch — the FSEvents refresh path feeds
-    /// this in chunks and a per-row transaction would fsync each one.
-    public func upsert(_ files: [IndexedFile]) async throws {
-        try await self.database.write { db in
-            for file in files {
-                try file.upsert(db)
+            let updateTrigger = try String.fetchOne(
+                db,
+                sql: "SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = 'file_update'"
+            )
+            if updateTrigger?.contains("AFTER UPDATE OF foldedName, foldedPath") != true {
+                try db.execute(sql: "DROP TRIGGER IF EXISTS file_update")
+                try db.execute(sql: """
+                CREATE TRIGGER file_update AFTER UPDATE OF foldedName, foldedPath ON file_entry
+                WHEN old.foldedName IS NOT new.foldedName OR old.foldedPath IS NOT new.foldedPath BEGIN
+                    INSERT INTO file_fts(file_fts, rowid, foldedName, foldedPath) VALUES \
+                ('delete', old.rowid, old.foldedName, old.foldedPath);
+                    INSERT INTO file_fts(rowid, foldedName, foldedPath) VALUES \
+                (new.rowid, new.foldedName, new.foldedPath);
+                END;
+                """)
             }
         }
     }
 
+    /// Starts one full-root or incremental scan. Seen paths live only on this
+    /// SQLite connection: they are deletion-reconciliation state, not index
+    /// data, and must never turn an unchanged rescan into persistent writes.
+    public func beginScan(_ scanID: String) async throws {
+        try await self.database.write { db in
+            try db.execute(sql: "DELETE FROM temp.file_scan_seen WHERE scanID = ?", arguments: [scanID])
+        }
+    }
+
+    /// One transaction for the whole batch — the FSEvents refresh path feeds
+    /// this in chunks and a per-row transaction would fsync each one. When a
+    /// scan ID is supplied, paths are also recorded in the temporary seen set.
+    public func upsert(_ files: [IndexedFile], seenIn scanID: String? = nil) async throws {
+        try await self.database.write { db in
+            for file in files {
+                if let scanID {
+                    try db.execute(
+                        sql: "INSERT OR IGNORE INTO temp.file_scan_seen (scanID, path) VALUES (?, ?)",
+                        arguments: [scanID, file.path]
+                    )
+                }
+                try db.execute(
+                    sql: """
+                    INSERT INTO file_entry (
+                        path, name, foldedName, foldedPath, root, generation,
+                        modifiedAt, availability, isDirectory, location
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(path) DO UPDATE SET
+                        name = excluded.name,
+                        foldedName = excluded.foldedName,
+                        foldedPath = excluded.foldedPath,
+                        root = excluded.root,
+                        generation = excluded.generation,
+                        modifiedAt = excluded.modifiedAt,
+                        availability = excluded.availability,
+                        isDirectory = excluded.isDirectory,
+                        location = excluded.location
+                    WHERE file_entry.name IS NOT excluded.name
+                       OR file_entry.foldedName IS NOT excluded.foldedName
+                       OR file_entry.foldedPath IS NOT excluded.foldedPath
+                       OR file_entry.root IS NOT excluded.root
+                       OR file_entry.modifiedAt IS NOT excluded.modifiedAt
+                       OR file_entry.availability IS NOT excluded.availability
+                       OR file_entry.isDirectory IS NOT excluded.isDirectory
+                       OR file_entry.location IS NOT excluded.location
+                    """,
+                    arguments: [
+                        file.path, file.name, file.foldedName, file.foldedPath,
+                        file.root, file.generation, file.modifiedAt,
+                        file.availability.rawValue, file.isDirectory, file.location,
+                    ]
+                )
+            }
+        }
+    }
+
+    /// Deletes entries absent from a successful scan and then releases its
+    /// temporary path set. The generation column remains for on-disk schema
+    /// compatibility, but deletion no longer requires rewriting it on every
+    /// unchanged row.
     public func finishScan(root: String, generation: String, under path: String? = nil) async throws {
         let root = root.precomposedStringWithCanonicalMapping
         let path = path?.precomposedStringWithCanonicalMapping
@@ -112,17 +180,38 @@ public actor FileNameIndex {
             if let path {
                 try db.execute(
                     sql: """
-                    DELETE FROM file_entry WHERE root = ? AND generation != ? \
+                    DELETE FROM file_entry WHERE root = ?
                     AND (path = ? OR substr(path, 1, length(?)) = ?)
+                    AND NOT EXISTS (
+                        SELECT 1 FROM temp.file_scan_seen
+                        WHERE scanID = ? AND file_scan_seen.path = file_entry.path
+                    )
                     """,
-                    arguments: [root, generation, path, path + "/", path + "/"]
+                    arguments: [root, path, path + "/", path + "/", generation]
                 )
             } else {
                 try db.execute(
-                    sql: "DELETE FROM file_entry WHERE root = ? AND generation != ?",
+                    sql: """
+                    DELETE FROM file_entry WHERE root = ? AND NOT EXISTS (
+                        SELECT 1 FROM temp.file_scan_seen
+                        WHERE scanID = ? AND file_scan_seen.path = file_entry.path
+                    )
+                    """,
                     arguments: [root, generation]
                 )
             }
+            try db.execute(
+                sql: "DELETE FROM temp.file_scan_seen WHERE scanID = ?",
+                arguments: [generation]
+            )
+        }
+    }
+
+    /// Abandons only the temporary seen set. Persistent entries already read
+    /// during a partial scan remain valid, and no deletion reconciliation runs.
+    public func discardScan(_ scanID: String) async throws {
+        try await self.database.write { db in
+            try db.execute(sql: "DELETE FROM temp.file_scan_seen WHERE scanID = ?", arguments: [scanID])
         }
     }
 
