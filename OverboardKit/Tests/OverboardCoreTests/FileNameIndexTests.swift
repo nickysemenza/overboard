@@ -52,7 +52,7 @@ struct FileNameIndexTests {
         let url = directory.appendingPathComponent("files.sqlite")
         let index = try FileNameIndex(url: url)
         let audit = try DatabaseQueue(path: url.path)
-        try audit.write { db in
+        try await audit.write { db in
             try db.execute(sql: "CREATE TABLE file_update_audit (updates INTEGER NOT NULL)")
             try db.execute(sql: "INSERT INTO file_update_audit VALUES (0)")
             try db.execute(sql: """
@@ -66,7 +66,7 @@ struct FileNameIndexTests {
         try await index.beginScan("two")
         try await index.upsert([self.entry("/fixture/report.pdf", generation: "two")], seenIn: "two")
         try await index.finishScan(root: "/fixture", generation: "two")
-        let unchangedUpdates = try audit.read { db in
+        let unchangedUpdates = try await audit.read { db in
             try Int.fetchOne(db, sql: "SELECT updates FROM file_update_audit")
         }
         #expect(unchangedUpdates == 0)
@@ -76,7 +76,7 @@ struct FileNameIndexTests {
             self.entry("/fixture/report.pdf", generation: "three", availability: .cloud),
         ], seenIn: "three")
         try await index.finishScan(root: "/fixture", generation: "three")
-        let changedUpdates = try audit.read { db in
+        let changedUpdates = try await audit.read { db in
             try Int.fetchOne(db, sql: "SELECT updates FROM file_update_audit")
         }
         #expect(changedUpdates == 1)

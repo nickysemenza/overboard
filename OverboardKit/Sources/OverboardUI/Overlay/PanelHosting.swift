@@ -6,8 +6,8 @@ import SwiftUI
 /// fixed-size panels fill their AppKit frame while preserving intrinsic
 /// fitting-size propagation for content-sized panels such as the HUD.
 enum PanelHosting {
-    static func container<Content: View>(
-        rootView: Content,
+    static func container(
+        rootView: some View,
         frame: NSRect,
         tracksContentSize: Bool = false
     ) -> NSView {

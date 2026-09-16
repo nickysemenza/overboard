@@ -55,8 +55,7 @@ public nonisolated enum FileMetadataScanner {
     ) async throws -> [String] {
         // Directory enumeration resolves aliases such as /var -> /private/var.
         // Roots and incremental scopes must use the same filesystem identity.
-        let root = self.canonicalURL(root)
-        let directory = directory.map(self.canonicalURL)
+        let (root, directory) = (self.canonicalURL(root), directory.map(self.canonicalURL))
         // A reference type, not `inout` locals: the errorHandler closure below
         // escapes into the enumerator and keeps firing while `indexEntries` is
         // also mutating this state, and two `inout` borrows of the same local
