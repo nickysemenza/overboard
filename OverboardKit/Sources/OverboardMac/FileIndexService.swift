@@ -162,6 +162,10 @@ public final class FileIndexService {
             self.index = try FileNameIndex(url: directory.appendingPathComponent("filenames.sqlite"))
         }
         guard let index = self.index else { return }
+        // Runs once per index, before any scan holds the connection; a few
+        // seconds on a bloated pre-existing file (still under the
+        // "Preparing file search…" status `rebuild()` set), a no-op ever after.
+        _ = try await index.compactIfNeeded()
         if clear {
             try await index.reset()
         }
