@@ -34,3 +34,11 @@ public struct Snippet: Codable, Sendable, Equatable, Identifiable {
 extension Snippet: FetchableRecord, PersistableRecord {
     public static let databaseTableName = "snippet"
 }
+
+public enum SnippetSaveError: Error, Sendable, Equatable, LocalizedError {
+    case revisionConflict(id: String, expected: Int64, actual: Int64?)
+
+    public var errorDescription: String? {
+        "This snippet changed or was deleted elsewhere. Your draft is preserved; reload before saving."
+    }
+}

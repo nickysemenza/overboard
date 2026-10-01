@@ -18,5 +18,6 @@ struct SettingsTextListEditor: View {
             .padding(4)
             .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
             .accessibilityLabel(self.accessibilityLabel)
+            .accessibilityHint("One entry per line.")
     }
 }

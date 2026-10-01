@@ -3,6 +3,10 @@ import OverboardCore
 // MARK: - Multi-selection
 
 public extension DrawerViewModel {
+    var browserHandoff: ClipboardBrowserHandoff {
+        ClipboardBrowserHandoff(query: self.query, selectedItemID: self.selectedItem?.id, filter: self.browserFilter)
+    }
+
     /// All selected items, anchor included, in display order.
     var selectedItems: [ClipItem] {
         guard self.mode == .history else { return [] }

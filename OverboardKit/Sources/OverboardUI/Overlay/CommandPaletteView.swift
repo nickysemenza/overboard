@@ -8,11 +8,8 @@ struct CommandPaletteItem: Identifiable {
     let id: String
     let label: String
     let systemImage: String
-    /// The modifier glyph for this row's keyboard shortcut (↩ / ⌘↩ / ⌥↩), for
-    /// hosts whose rows commit via a positional keyboard shortcut (the
-    /// launcher's ↩/⌘↩/⌥↩ triad — see `LauncherActions.hint(at:)`). `nil` for
-    /// hosts with no such convention (the drawer's palette).
     var hint: String?
+    var detail: String?
 }
 
 /// The ⌘K command-palette chrome, factored out of `ActionPalette` so the
@@ -27,7 +24,8 @@ struct CommandPaletteView: View {
     /// keeps its own wording).
     let emptyMessage: String
     let onRun: (Int) -> Void
-    @FocusState private var queryFocused: Bool
+    var maximumHeight: CGFloat = 320
+    @State private var measuredContentHeight: CGFloat = 240
     /// The query row's height is pinned rather than left to the text field:
     /// a plain `TextField` reports a slightly different height before and
     /// after it takes focus, which moved the whole palette by a few points
@@ -40,10 +38,7 @@ struct CommandPaletteView: View {
                 Image(systemName: "command")
                     .foregroundStyle(.secondary)
                     .accessibilityHidden(true)
-                TextField("Type an action…", text: self.$query)
-                    .textFieldStyle(.plain)
-                    .font(.title3)
-                    .focused(self.$queryFocused)
+                NativePaletteQueryField(text: self.$query)
             }
             .frame(height: self.queryHeight)
             .padding(12)
@@ -60,21 +55,21 @@ struct CommandPaletteView: View {
                     ScrollView {
                         VStack(spacing: 2) {
                             ForEach(Array(self.items.enumerated()), id: \.element.id) { index, item in
-                                self.row(item, isHighlighted: index == self.index)
-                                    .id(item.id)
-                                    .onTapGesture {
-                                        self.onRun(index)
-                                    }
+                                Button { self.onRun(index) } label: {
+                                    self.row(item, isHighlighted: index == self.index)
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel(item.label)
+                                .accessibilityHint(item.detail ?? "")
+                                .accessibilityAddTraits(index == self.index ? .isSelected : [])
+                                .id(item.id)
                             }
                         }
                         .padding(6)
+                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: {
+                            self.measuredContentHeight = $0
+                        }
                     }
-                    // A bare ScrollView has no natural "hug my content" height —
-                    // it greedily fills whatever it's offered — so an explicit
-                    // height keyed to the row count is what lets a short list
-                    // (the common case) stay content-sized instead of ballooning
-                    // to fill the palette's floating position, while a longer
-                    // one caps at `maxVisibleRows` and scrolls.
                     .frame(height: self.listHeight)
                     .onChange(of: self.index) {
                         guard self.items.indices.contains(self.index) else { return }
@@ -95,23 +90,13 @@ struct CommandPaletteView: View {
         }
         .compositingGroup()
         .shadow(color: .black.opacity(0.25), radius: 18, y: 6)
-        .onAppear { self.queryFocused = true }
         .onChange(of: self.query) {
             self.index = 0
         }
     }
 
-    /// Approximate rendered height of one `row(_:isHighlighted:)` (its
-    /// vertical padding plus one line of `.body` text) — close enough for
-    /// sizing the scroll area; a pixel or two of slack doesn't matter since
-    /// it only governs how many rows show before scrolling kicks in.
-    private static let rowHeight: CGFloat = 32
-    private static let maxVisibleRows = 8
-
     private var listHeight: CGFloat {
-        let rows = min(self.items.count, Self.maxVisibleRows)
-        guard rows > 0 else { return 0 }
-        return CGFloat(rows) * Self.rowHeight + CGFloat(rows - 1) * 2 + 12
+        min(self.measuredContentHeight, max(0, self.maximumHeight - self.queryHeight - 25))
     }
 
     private func row(_ item: CommandPaletteItem, isHighlighted: Bool) -> some View {
@@ -120,7 +105,16 @@ struct CommandPaletteView: View {
                 .frame(width: 18)
                 .foregroundStyle(isHighlighted ? .primary : .secondary)
                 .accessibilityHidden(true)
-            Text(item.label)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(item.label)
+                if let detail = item.detail {
+                    Text(detail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .help(detail)
+                }
+            }
             Spacer()
             if let hint = item.hint {
                 Text(hint)
@@ -128,8 +122,6 @@ struct CommandPaletteView: View {
                     .foregroundStyle(.secondary)
                     .accessibilityHidden(true)
             } else if isHighlighted {
-                // Hosts with no positional-shortcut convention (the drawer's
-                // palette) keep the old highlighted-row-only ↩ affordance.
                 Image(systemName: "return")
                     .font(.caption)
                     .contrastAwareForeground(.tertiary)
@@ -158,7 +150,7 @@ struct CommandPaletteView: View {
                     id: "pastePlain",
                     label: "Paste as Plain Text",
                     systemImage: "textformat",
-                    hint: "⌥↩"
+                    hint: "⇧↩"
                 ),
                 CommandPaletteItem(id: "openLink", label: "Open Link in Browser", systemImage: "safari"),
             ],

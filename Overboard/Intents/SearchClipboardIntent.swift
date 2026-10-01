@@ -20,6 +20,7 @@ struct SearchClipboardIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<String> & ProvidesDialog {
+        try IntentDependencies.current.checkLibrary()
         let store = IntentDependencies.current.store
         // The store's own FTS/frecency search; a few extra results are pulled
         // so a secret sitting above the true best (text) match doesn't block it.

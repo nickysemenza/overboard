@@ -17,33 +17,104 @@ public nonisolated enum FileMetadataScanner {
     /// Foundation deliberately abbreviates /private/var back to /var on some
     /// macOS releases. POSIX realpath agrees with enumerator/FSEvents paths.
     public static func canonicalURL(_ url: URL) -> URL {
-        guard let resolved = realpath(url.path, nil) else { return url.standardized }
+        guard let resolved = realpath(url.path, nil) else {
+            let parent = url.deletingLastPathComponent()
+            guard parent.path != url.path else { return url.standardizedFileURL }
+            return self.canonicalURL(parent).appendingPathComponent(url.lastPathComponent,
+                                                                    isDirectory: url.hasDirectoryPath)
+        }
         defer { free(resolved) }
-        return URL(fileURLWithPath: String(cString: resolved), isDirectory: url.hasDirectoryPath)
+        return URL(fileURLWithPath: String(cString: resolved).precomposedStringWithCanonicalMapping,
+                   isDirectory: url.hasDirectoryPath)
     }
 
     public static func shouldInclude(_ url: URL, root: URL, exclusions: [String]) -> Bool {
         // Use lexical normalization after canonicalizing roots. File-based
         // normalization rewrites /private/var only while a path exists, which
         // would discard the very FSEvents paths that report deleted files.
-        let path = url.standardized.path
-        let rootPath = root.standardized.path
+        let path = url.standardized.path.precomposedStringWithCanonicalMapping
+        let rootPath = root.standardized.path.precomposedStringWithCanonicalMapping
         guard path == rootPath || path.hasPrefix(rootPath + "/") else { return false }
         let relative = String(path.dropFirst(rootPath.count)).split(separator: "/").map(String.init)
         // Cloud roots inside Library are scanned explicitly, not through Home.
-        if root == FileManager.default.homeDirectoryForCurrentUser, relative.first == "Library" {
+        if rootPath == self.canonicalURL(FileManager.default.homeDirectoryForCurrentUser).path,
+           relative.first == "Library"
+        {
             return false
         }
         if relative.contains(where: { $0.hasPrefix(".") }) {
             return false
         }
         return !exclusions.contains { exclusion in
-            let expanded = (exclusion.trimmingCharacters(in: .whitespaces) as NSString).expandingTildeInPath
+            let expanded = (exclusion.trimmingCharacters(in: .whitespacesAndNewlines) as NSString).expandingTildeInPath
+            guard !expanded.isEmpty else { return false }
             if expanded.hasPrefix("/") {
-                return path == expanded || path.hasPrefix(expanded + "/")
+                let excluded = self.canonicalURL(URL(fileURLWithPath: expanded)).path
+                return path == excluded || path.hasPrefix(excluded + "/")
             }
             return relative.contains(expanded)
         }
+    }
+
+    public static func owner(of url: URL, roots: [URL], exclusions: [String]) -> URL? {
+        let path = url.standardized.path.precomposedStringWithCanonicalMapping
+        guard let root = roots.filter({ path == $0.path || path.hasPrefix($0.path + "/") })
+            .max(by: { $0.path.count < $1.path.count }),
+            self.shouldInclude(url, root: root, exclusions: exclusions)
+        else { return nil }
+        return root
+    }
+
+    private static func hasPackageAncestor(_ url: URL, root: URL) -> Bool {
+        var parent = url.deletingLastPathComponent()
+        while parent.path != root.path, parent.path.hasPrefix(root.path + "/") {
+            if (try? parent.resourceValues(forKeys: [.isPackageKey]).isPackage) == true {
+                return true
+            }
+            parent.deleteLastPathComponent()
+        }
+        return false
+    }
+
+    public static func refresh(
+        _ url: URL,
+        roots: [URL],
+        exclusions: [String],
+        index: FileNameIndex
+    ) async throws -> [String] {
+        try Task.checkCancellation()
+        guard let root = self.owner(of: url, roots: roots, exclusions: exclusions),
+              !self.hasPackageAncestor(url, root: root)
+        else {
+            try await index.remove(under: url.path)
+            return []
+        }
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            try await index.remove(under: url.path)
+            return []
+        }
+        let values = try url.resourceValues(forKeys: self.resourceKeys)
+        if values.isSymbolicLink == true {
+            try await index.remove(under: url.path)
+            return []
+        }
+        if values.isDirectory == true, values.isPackage != true {
+            return try await self.scan(root: root, exclusions: exclusions, generation: UUID().uuidString,
+                                       index: index, under: url, roots: roots)
+        }
+        if values.isPackage == true {
+            try await index.remove(under: url.path)
+        }
+        try Task.checkCancellation()
+        try await index.upsert([self.entry(url, values: values, root: root, generation: UUID().uuidString)])
+        return []
+    }
+
+    private static func entry(_ url: URL, values: URLResourceValues, root: URL, generation: String) -> IndexedFile {
+        IndexedFile(path: url.path, name: url.lastPathComponent, root: root.path, generation: generation,
+                    modifiedAt: values.contentModificationDate ?? .distantPast,
+                    availability: FileAvailability.status(at: url, values: values),
+                    isDirectory: values.isDirectory == true, location: FileIndexService.locationName(root))
     }
 
     public static func scan(
@@ -51,53 +122,42 @@ public nonisolated enum FileMetadataScanner {
         exclusions: [String],
         generation: String,
         index: FileNameIndex,
-        under directory: URL? = nil
+        under directory: URL? = nil,
+        roots: [URL] = []
     ) async throws -> [String] {
         // Directory enumeration resolves aliases such as /var -> /private/var.
         // Roots and incremental scopes must use the same filesystem identity.
         let (root, directory) = (self.canonicalURL(root), directory.map(self.canonicalURL))
+        let roots = roots.isEmpty ? [root] : roots.map(self.canonicalURL)
+        let scope = directory ?? root
+        guard self.owner(of: scope, roots: roots, exclusions: exclusions)?.path == root.path,
+              !self.hasPackageAncestor(scope, root: root)
+        else {
+            try await index.remove(under: scope.path)
+            return []
+        }
+        if let values = try? scope.resourceValues(forKeys: self.resourceKeys), values.isPackage == true {
+            return try await self.refresh(scope, roots: roots, exclusions: exclusions, index: index)
+        }
         // A reference type, not `inout` locals: the errorHandler closure below
         // escapes into the enumerator and keeps firing while `indexEntries` is
         // also mutating this state, and two `inout` borrows of the same local
         // across that overlap trip Swift's exclusivity checks at runtime.
         let accumulator = ScanAccumulator()
         try await index.beginScan(generation)
-        guard let enumerator = FileManager.default.enumerator(
-            at: directory ?? root,
-            includingPropertiesForKeys: Array(self.resourceKeys),
-            options: [.skipsHiddenFiles, .skipsPackageDescendants],
-            errorHandler: { url, error in
-                if accumulator.failures.count < 12 {
-                    accumulator.failures.append("\(url.path): \(error.localizedDescription)")
-                }
-                return true
-            }
-        ) else {
+        guard let enumerator = self.enumerator(at: directory ?? root, accumulator: accumulator) else {
             try await index.discardScan(generation)
             return ["\(root.path): Couldn’t read this location. Check access in System Settings."]
         }
 
         do {
-            // An incremental enumeration yields descendants, not the directory
-            // itself. Refresh its record before reconciling the seen-path set.
-            if let directory, directory != root,
-               let values = try? directory.resourceValues(forKeys: self.resourceKeys)
-            {
-                accumulator.batch.append(IndexedFile(
-                    path: directory.path,
-                    name: directory.lastPathComponent,
-                    root: root.path,
-                    generation: generation,
-                    modifiedAt: values.contentModificationDate ?? .distantPast,
-                    availability: FileAvailability.status(at: directory, values: values),
-                    isDirectory: true,
-                    location: FileIndexService.locationName(root)
-                ))
-            }
+            self.appendDirectoryEntry(directory, root: root, generation: generation, accumulator: accumulator)
 
             try await self.indexEntries(
                 from: enumerator,
-                context: ScanContext(root: root, exclusions: exclusions, generation: generation, index: index),
+                context: ScanContext(
+                    root: root, roots: roots, exclusions: exclusions, generation: generation, index: index
+                ),
                 accumulator: accumulator
             )
 
@@ -117,10 +177,51 @@ public nonisolated enum FileMetadataScanner {
         }
     }
 
+    private static func enumerator(
+        at directory: URL,
+        accumulator: ScanAccumulator
+    ) -> FileManager.DirectoryEnumerator? {
+        FileManager.default.enumerator(
+            at: directory,
+            includingPropertiesForKeys: Array(self.resourceKeys),
+            options: [.skipsHiddenFiles, .skipsPackageDescendants],
+            errorHandler: { url, error in
+                if accumulator.failures.count < 12 {
+                    accumulator.failures.append("\(url.path): \(error.localizedDescription)")
+                }
+                return true
+            }
+        )
+    }
+
+    private static func appendDirectoryEntry(
+        _ directory: URL?,
+        root: URL,
+        generation: String,
+        accumulator: ScanAccumulator
+    ) {
+        // An incremental enumeration yields descendants, not the directory
+        // itself. Refresh its record before reconciling the seen-path set.
+        guard let directory, directory != root,
+              let values = try? directory.resourceValues(forKeys: self.resourceKeys)
+        else { return }
+        accumulator.batch.append(IndexedFile(
+            path: directory.path,
+            name: directory.lastPathComponent,
+            root: root.path,
+            generation: generation,
+            modifiedAt: values.contentModificationDate ?? .distantPast,
+            availability: FileAvailability.status(at: directory, values: values),
+            isDirectory: true,
+            location: FileIndexService.locationName(root)
+        ))
+    }
+
     /// Groups one scan invocation's fixed parameters so `indexEntries` stays
     /// under SwiftLint's parameter-count limit without losing readability.
     private struct ScanContext {
         let root: URL
+        let roots: [URL]
         let exclusions: [String]
         let generation: String
         let index: FileNameIndex
@@ -144,7 +245,8 @@ public nonisolated enum FileMetadataScanner {
     ) async throws {
         while let url = enumerator.nextObject() as? URL {
             try Task.checkCancellation()
-            guard self.shouldInclude(url, root: context.root, exclusions: context.exclusions) else {
+            guard self.owner(of: url, roots: context.roots, exclusions: context.exclusions)?.path == context.root.path
+            else {
                 enumerator.skipDescendants()
                 continue
             }

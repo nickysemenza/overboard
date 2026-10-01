@@ -40,6 +40,8 @@ struct FileIndexBenchmark {
             "project 126 invoice",
             "report 45874",
             "budegt",
+            "noets",
+            "notes 77",
             "design",
             "schedule 778",
             "notes",
@@ -65,14 +67,44 @@ struct FileIndexBenchmark {
         }
         durations.sort()
         let p95 = durations[Int(ceil(Double(durations.count) * 0.95)) - 1]
+        let writer = Task.detached(priority: .utility) {
+            var batch = 0
+            do {
+                while !Task.isCancelled {
+                    let files = (0 ..< 400).map { offset in
+                        let id = (batch * 400 + offset) % 100_000
+                        let root = id.isMultiple(of: 2) ? "/fixture/iCloud Drive" : "/fixture/Documents"
+                        let name = "\(names[id % names.count])-\(id).\(extensions[(id / 10) % extensions.count])"
+                        return IndexedFile(path: "\(root)/Project-\(id % 317)/\(name)", name: name, root: root,
+                                           generation: "concurrent", modifiedAt: .now)
+                    }
+                    try await index.upsert(files)
+                    batch += 1
+                }
+            } catch is CancellationError {}
+            return batch
+        }
+        var concurrentDurations: [Double] = []
+        for _ in 0 ..< 10 {
+            for query in queries {
+                let begin = clock.now
+                _ = try await index.search(query)
+                let parts = begin.duration(to: clock.now).components
+                concurrentDurations.append(Double(parts.seconds) * 1000 + Double(parts.attoseconds) / 1e15)
+            }
+        }
+        writer.cancel()
+        let concurrentBatches = try await writer.value
+        concurrentDurations.sort()
+        let concurrentP95 = concurrentDurations[Int(ceil(Double(concurrentDurations.count) * 0.95)) - 1]
         let bytes = try FileManager.default.contentsOfDirectory(
             at: directory,
             includingPropertiesForKeys: [.fileSizeKey]
         )
         .reduce(0) { $0 + ((try? $1.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0) }
-        let report = "FILE_INDEX_BENCHMARK count=100000 initial_metadata_ingest=\(initial) disk_bytes=\(bytes) warm_samples=\(durations.count) p95_ms=\(p95)\n"
+        let report = "FILE_INDEX_BENCHMARK count=100000 initial_metadata_ingest=\(initial) disk_bytes=\(bytes) warm_samples=\(durations.count) p95_ms=\(p95) concurrent_samples=\(concurrentDurations.count) concurrent_p95_ms=\(concurrentP95) concurrent_batches=\(concurrentBatches)\n"
         FileHandle.standardOutput.write(Data(report.utf8))
-        guard p95 < 100 else { throw BenchmarkFailure.tooSlow }
+        guard p95 < 100, concurrentP95 < 100, concurrentBatches > 0 else { throw BenchmarkFailure.tooSlow }
     }
 
     enum BenchmarkFailure: Error { case tooSlow }

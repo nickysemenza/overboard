@@ -27,32 +27,34 @@ extension AppServices {
         _ item: ClipItem,
         mode: PasteMode,
         into target: NSRunningApplication?,
-        onPasted: (@MainActor () -> Void)? = nil
+        onPasted: (@MainActor () -> Void)? = nil,
+        onCompletion: (@MainActor (PastebackService.Outcome) -> Void)? = nil
     ) {
         Task {
-            do {
-                var effectiveMode = mode
-                if effectiveMode == .full,
-                   item.kind == .text || item.kind == .link,
-                   let bundleID = target?.bundleIdentifier,
-                   Preferences.currentPlainTextApps().contains(bundleID)
-                {
-                    effectiveMode = .plainText
-                }
-                let restore = Defaults[.restoreClipboard]
-                let outcome = try await self.pasteback.paste(
-                    item, into: target, restoreClipboard: restore, mode: effectiveMode
-                )
-                switch outcome {
-                case .pasted:
-                    onPasted?()
-                case .copiedOnly:
-                    HUDController.shared.flash(PermissionService.copyOnlyPasteMessage())
-                    PermissionService.promptIfNeeded()
-                }
-            } catch {
-                self.logger.error("paste failed: \(String(describing: error), privacy: .public)")
+            var effectiveMode = mode
+            if effectiveMode == .full,
+               item.kind == .text || item.kind == .link,
+               let bundleID = target?.bundleIdentifier,
+               Preferences.currentPlainTextApps().contains(bundleID)
+            {
+                effectiveMode = .plainText
             }
+            let restore = Defaults[.restoreClipboard]
+            let outcome = await self.pasteback.paste(
+                item, into: target, restoreClipboard: restore, mode: effectiveMode
+            )
+            switch outcome {
+            case .dispatched:
+                onPasted?()
+            case .copied:
+                HUDController.shared.flash(PermissionService.copyOnlyPasteMessage())
+                PermissionService.promptIfNeeded()
+            case .cancelled:
+                break
+            case .failed:
+                HUDController.shared.flash("Couldn't paste this item")
+            }
+            onCompletion?(outcome)
         }
     }
 }

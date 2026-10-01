@@ -9,23 +9,25 @@ import OverboardUI
 /// function accumulates the branching of two dozen independent closures.
 extension AppServices {
     func installOverlayCallbacks() {
+        self.overlay.onRunClipQuicklink = { [weak self] item, quicklink in
+            self?.invokeQuicklink(quicklink, with: item)
+        }
         self.overlay.onCommit = { [weak self] item, mode, target in
             self?.pasteItem(item, mode: mode, into: target)
         }
 
         self.overlay.onCommitSnippet = { [weak self] snippet, target in
-            guard let self else { return }
-            let clipboard = NSPasteboard.general.string(forType: .string)
-            let expanded = SnippetTemplate.expand(snippet.body, clipboard: clipboard)
-            self.pasteString(expanded, into: target)
+            self?.invokeSnippet(snippet, into: target, copyOnly: false)
         }
 
         self.overlay.onCommitTransform = { [weak self] item, transform, target in
             guard let self else { return }
             Task {
                 guard let text = try? await self.store.plainText(for: item.id) else { return }
-                try? await self.store.markUsed(id: item.id)
-                self.pasteString(transform.apply(to: text), into: target)
+                let outcome = await self.actions.pasteStringAndWait(transform.apply(to: text), into: target)
+                if outcome == .copied || outcome == .dispatched {
+                    try? await self.store.markUsed(id: item.id)
+                }
             }
         }
 
@@ -47,11 +49,13 @@ extension AppServices {
                 HUDController.shared.flash("✨ \(transform.label)…", duration: .seconds(15))
                 do {
                     let result = try await AITransformer.apply(transform, to: text)
-                    try? await self.store.markUsed(id: item.id)
-                    self.pasteString(result, into: target)
+                    let outcome = await self.actions.pasteStringAndWait(result, into: target)
+                    if outcome == .copied || outcome == .dispatched {
+                        try? await self.store.markUsed(id: item.id)
+                    }
                 } catch {
                     HUDController.shared.flash((error as? AIFailure)?.userMessage ?? AIFailure.other.userMessage)
-                    self.logger.error("AI transform failed: \(String(describing: error), privacy: .public)")
+                    self.logger.error("AI transform failed")
                 }
             }
         }
@@ -78,16 +82,20 @@ extension AppServices {
                 self.launcherViewModel.scheduleSearch(preserveSelection: true)
             }
         }
-        self.overlay.onBrowseHistory = { [weak self] query, target in
-            self?.launcher.show(scope: .clipboard, query: query, target: target)
+        self.overlay.onBrowseHistoryState = { [weak self] state, target in
+            self?.launcher.showBrowser(state: state, target: target)
+        }
+        self.launcher.onShowDrawer = { [weak self] state, target in
+            self?.overlay.showBrowserState(state: state, target: target)
         }
         // Reconcile the Spotify now-playing snapshot (its onChange only
         // refreshes an open panel, so a missed track change is caught here)
         // and snapshot running apps for the row indicator dots. Observation
         // runs only while the panel is visible.
         self.launcher.onWillShow = { [weak self] in
-            guard let self else { return }
+            guard let self, self.isStarted else { return }
             if !Self.isDemo {
+                self.reconcileEnabledSources()
                 self.spotify.refreshSnapshot()
                 self.calendar.refreshSnapshot()
             }
@@ -98,7 +106,7 @@ extension AppServices {
             self?.runningApps.stopObserving()
         }
         self.runningApps.onChange = { [weak self] in
-            guard let self, self.launcher.isVisible else { return }
+            guard let self, self.isStarted, self.launcher.isVisible else { return }
             self.launcherViewModel.runningAppPaths = self.runningApps.snapshot()
         }
     }
@@ -153,6 +161,9 @@ extension AppServices {
 
     /// Paste/copy for clips and snippets picked in the launcher.
     private func installLauncherClipCallbacks() {
+        self.launcher.onRunClipQuicklink = { [weak self] item, quicklink in
+            self?.invokeQuicklink(quicklink, with: item)
+        }
         self.launcher.onPasteClip = { [weak self] item, mode, target in
             guard let self else { return }
             let query = self.launcherViewModel.query
@@ -163,26 +174,19 @@ extension AppServices {
         self.launcher.onCopyClip = { [weak self] item in
             guard let self else { return }
             Task {
-                do {
-                    try await self.pasteback.copy(item)
+                let outcome = await self.pasteback.copy(item)
+                if outcome == .copied {
                     HUDController.shared.flash("Copied — ⌘V to paste")
-                } catch {
-                    self.logger.error("copy failed: \(String(describing: error), privacy: .public)")
+                } else if outcome == .failed {
+                    HUDController.shared.flash("Couldn't copy this item")
                 }
             }
         }
         self.launcher.onPasteSnippet = { [weak self] snippet, target in
-            guard let self else { return }
-            // Read {clipboard} before pasteString overwrites the pasteboard.
-            let clipboard = NSPasteboard.general.string(forType: .string)
-            let expanded = SnippetTemplate.expand(snippet.body, clipboard: clipboard)
-            self.pasteString(expanded, into: target)
+            self?.invokeSnippet(snippet, into: target, copyOnly: false)
         }
         self.launcher.onCopySnippet = { [weak self] snippet in
-            guard let self else { return }
-            let clipboard = NSPasteboard.general.string(forType: .string)
-            let expanded = SnippetTemplate.expand(snippet.body, clipboard: clipboard)
-            self.copyString(expanded, hud: "Snippet copied — ⌘V to paste")
+            self?.invokeSnippet(snippet, into: nil, copyOnly: true)
         }
     }
 
@@ -236,7 +240,7 @@ extension AppServices {
                     }
                 } catch {
                     HUDController.shared.flash((error as? AIFailure)?.userMessage ?? AIFailure.other.userMessage)
-                    self.logger.error("Ask AI failed: \(String(describing: error), privacy: .public)")
+                    self.logger.error("Ask AI failed")
                 }
             }
         }

@@ -5,14 +5,19 @@ import GRDB
 
 public extension ClipStore {
     internal func storeEmbedding(itemID: String, text: String) async throws {
+        try Task.checkCancellation()
+        guard ClipSensitivity.label(for: text) == nil else { return }
         guard let embedding = sentenceEmbedding,
               let vector = embedding.vector(for: String(text.prefix(300)))
         else { return }
         let blob = EmbeddingCoder.encode(vector)
-        try await self.dbWriter.write { db in
+        try await self.writeCancellable { db in
             try db.execute(
-                sql: "INSERT OR REPLACE INTO item_embedding (itemID, vector) VALUES (?, ?)",
-                arguments: [itemID, blob]
+                sql: """
+                INSERT OR REPLACE INTO item_embedding (itemID, vector)
+                SELECT id, ? FROM item WHERE id = ? AND isSecret = 0 AND deletedAt IS NULL
+                """,
+                arguments: [blob, itemID]
             )
         }
     }
@@ -40,7 +45,7 @@ public extension ClipStore {
             SELECT e.itemID, e.vector
             FROM item_embedding e
             JOIN item i ON i.id = e.itemID
-            WHERE i.deletedAt IS NULL
+            WHERE i.deletedAt IS NULL AND i.isSecret = 0
             ORDER BY i.lastUsedAt DESC
             LIMIT 1000
             """).map { (id: $0["itemID"] as String, vector: $0["vector"] as Data) }
@@ -59,7 +64,7 @@ public extension ClipStore {
 
         let items = try await self.dbWriter.read { db in
             try ClipItem
-                .filter(sql: "deletedAt IS NULL")
+                .filter(sql: "deletedAt IS NULL AND isSecret = 0")
                 .filter(keys: topIDs)
                 .fetchAll(db)
         }
@@ -84,7 +89,7 @@ public extension ClipStore {
             SELECT i.contentHash AS contentHash, e.vector AS vector
             FROM item_embedding e
             JOIN item i ON i.id = e.itemID
-            WHERE e.itemID = ?
+            WHERE e.itemID = ? AND i.isSecret = 0 AND i.deletedAt IS NULL
             """, arguments: [itemID])
             else { return ([], []) }
 
@@ -123,7 +128,7 @@ public extension ClipStore {
 
         let items = try await self.dbWriter.read { db in
             try ClipItem
-                .filter(sql: "deletedAt IS NULL")
+                .filter(sql: "deletedAt IS NULL AND isSecret = 0")
                 .filter(keys: topIDs)
                 .fetchAll(db)
         }

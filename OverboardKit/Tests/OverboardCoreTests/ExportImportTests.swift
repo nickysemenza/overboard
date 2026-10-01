@@ -132,12 +132,7 @@ struct ExportImportTests {
         let restored = try #require(await destination.store.recent().first)
         #expect(restored.isPinned)
         #expect(restored.useCount == original.useCount)
-        // The archive keeps millisecond precision (see `ClipJSONCoding.archiveEncoder`)
-        // and formatting truncates rather than rounds, so a round trip can lose up to
-        // one whole millisecond. The extra microsecond absorbs Double noise at Date's
-        // magnitude (its ULP is ~2e-7 s), which once pushed the delta to 0.0010000467.
-        let millisecond: TimeInterval = 0.001
-        #expect(restored.lastUsedAt.timeIntervalSince(original.lastUsedAt).magnitude <= millisecond + 1e-6)
+        #expect(restored.lastUsedAt == original.lastUsedAt)
     }
 
     @Test func secretsAreExcludedByDefaultAndIncludedOnRequest() async throws {
@@ -205,7 +200,7 @@ struct ExportImportTests {
         #expect(hits.first?.previewText == "quarterly revenue projection")
     }
 
-    /// One unreadable line costs one clip; the rest of the archive still restores.
+    /// Legacy archives salvage unreadable lines; versioned archives verify checksums.
     @Test func malformedLinesAreReportedNotFatal() async throws {
         let source = try Harness()
         let destination = try Harness()
@@ -219,6 +214,8 @@ struct ExportImportTests {
         try await source.store.export(to: source.exportDirectory)
 
         let itemsURL = source.exportDirectory.appendingPathComponent(ClipArchive.itemsFileName)
+        let manifestURL = source.exportDirectory.appendingPathComponent(ClipArchive.manifestFileName)
+        try FileManager.default.removeItem(at: manifestURL)
         var lines = try String(contentsOf: itemsURL, encoding: .utf8)
             .split(separator: "\n", omittingEmptySubsequences: true)
             .map(String.init)

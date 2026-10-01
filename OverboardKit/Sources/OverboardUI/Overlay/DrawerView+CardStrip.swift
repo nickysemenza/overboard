@@ -89,21 +89,24 @@ extension DrawerView {
                     self.viewModel.select(at: index)
                 }
             }
+            .accessibilityAction(named: "Paste") { self.viewModel.select(at: index) }
         }
     }
 
     var snippetCards: some View {
         ForEach(Array(self.viewModel.snippets.enumerated()), id: \.element.id) { index, snippet in
-            SnippetCardView(
-                snippet: snippet,
-                index: index,
-                isSelected: index == self.viewModel.selectedIndex
-            )
+            Button { self.viewModel.select(at: index) } label: {
+                SnippetCardView(
+                    snippet: snippet,
+                    index: index,
+                    isSelected: index == self.viewModel.selectedIndex
+                )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(snippet.title)
+            .accessibilityAddTraits(index == self.viewModel.selectedIndex ? .isSelected : [])
             .cardEntrance(index: index)
             .zIndex(index == self.viewModel.selectedIndex ? 1 : 0)
-            .onTapGesture {
-                self.viewModel.select(at: index)
-            }
         }
     }
 
@@ -159,7 +162,7 @@ extension DrawerView {
                 ? self.viewModel.snippets[self.viewModel.selectedIndex].id : nil
         }
         guard let id else { return }
-        withAnimation(.easeOut(duration: 0.15)) {
+        withAnimation(self.reduceMotion || self.skipsEntranceMotion ? nil : .easeOut(duration: 0.15)) {
             proxy.scrollTo(id, anchor: .center)
         }
     }

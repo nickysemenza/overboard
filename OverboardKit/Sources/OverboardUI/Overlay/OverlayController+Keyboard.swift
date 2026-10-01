@@ -9,6 +9,13 @@ extension OverlayController {
         // search field, so typing always filters.
         self.keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self, let panel = self.panel, event.window === panel else { return event }
+            let focus = NativePanelKeyRouting.focus(in: panel)
+            if focus == .editor, self.viewModel.previewState == .editing {
+                return self.handleEditingKeyDown(event)
+            }
+            guard !NativePanelKeyRouting.shouldDefer(
+                keyCode: event.keyCode, modifiers: event.modifierFlags, focus: focus
+            ) else { return event }
 
             // The palette owns the keyboard above everything else.
             if self.viewModel.isPaletteOpen {
@@ -72,6 +79,7 @@ extension OverlayController {
             self.viewModel.closePalette()
             return nil
         case .returnKey, .keypadEnter: // runs the highlighted action
+            guard NativePanelKeyRouting.modifiers(event.modifierFlags).isEmpty else { return event }
             self.viewModel.runPaletteAction()
             return nil
         case .upArrow:
@@ -91,7 +99,8 @@ extension OverlayController {
         case .escape: // cancels the edit, back to the card strip
             self.viewModel.closePreview()
             return nil
-        case .returnKey where event.modifierFlags.contains(.command): // ⌘↩ paste edited
+        case .returnKey, .keypadEnter:
+            guard NativePanelKeyRouting.modifiers(event.modifierFlags) == .command else { return event }
             self.viewModel.commitEdit()
             return nil
         default: // everything else belongs to the text editor
@@ -102,27 +111,17 @@ extension OverlayController {
     /// Preview pane keys while viewing (not editing) the item.
     private func handleViewingKeyDown(_ event: NSEvent) -> NSEvent? {
         switch KeyCode(rawValue: event.keyCode) {
-        case .escape, .space: // close
+        case .escape:
             self.viewModel.closePreview()
             return nil
         case .letterY where event.modifierFlags.contains(.command): // ⌘Y closes too
             self.viewModel.closePreview()
             return nil
-        case .returnKey, .keypadEnter: // pastes (⇧ plain)
-            let mode: PasteMode = event.modifierFlags.contains(.shift) ? .plainText : .full
-            self.viewModel.selectCurrent(mode: mode)
-            return nil
-        case .leftArrow: // browse while previewing
-            self.viewModel.moveSelection(-1)
-            return nil
-        case .rightArrow:
-            self.viewModel.moveSelection(1)
-            return nil
         case .letterE where event.modifierFlags.contains(.command): // ⌘E edit
             self.viewModel.beginEdit()
             return nil
         default:
-            return nil // swallow stray typing while previewing
+            return self.handleMainKeyDown(event)
         }
     }
 
@@ -202,13 +201,9 @@ extension OverlayController {
     /// Return/Enter (paste, or ⌘ to queue on the stack) and ⌘/ (mode toggle).
     private func handleCommitKeys(_ event: NSEvent) -> Bool {
         switch KeyCode(rawValue: event.keyCode) {
-        case .returnKey, .keypadEnter: // ⇧ plain text, ⌘ queue on stack
-            if event.modifierFlags.contains(.command) {
-                self.viewModel.addSelectedToStack()
-            } else {
-                let mode: PasteMode = event.modifierFlags.contains(.shift) ? .plainText : .full
-                self.viewModel.selectCurrent(mode: mode)
-            }
+        case .returnKey, .keypadEnter:
+            guard let action = PanelActionID.commit(for: event.modifierFlags) else { return false }
+            self.viewModel.performPanelAction(action)
             return true
         case .slash where event.modifierFlags.contains(.command): // ⌘/ history ⇄ snippets
             self.viewModel.toggleMode()

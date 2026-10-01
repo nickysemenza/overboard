@@ -1,13 +1,13 @@
 import Foundation
 import os
 
-/// One recurring background chore: history purge, secret expiry, blob/VACUUM
-/// sweep, link backfill. Each was its own hand-rolled
+/// One recurring background chore: history purge or blob/VACUUM sweep.
+/// Each was its own hand-rolled
 /// `while !Task.isCancelled { work; try? await Task.sleep(...) }` loop before;
 /// this is the shape they all shared.
 public struct MaintenanceJob: Sendable {
     /// What one run says about whether the job should run again. Most jobs
-    /// always reschedule; a drain-style job (link backfill) reports `.finished`
+    /// always reschedule; a drain-style job reports `.finished`
     /// when there's nothing left to do and isn't started again until relaunch.
     public enum Outcome: Sendable {
         case repeatLater
@@ -19,7 +19,7 @@ public struct MaintenanceJob: Sendable {
     /// Delay between the end of one run and the start of the next.
     public let interval: Duration
     /// Delay before the first run. `.zero` means "run at start" — the others
-    /// stagger themselves so a launch isn't a stampede of disk and network.
+    /// stagger themselves so a launch isn't a stampede of disk work.
     public let initialDelay: Duration
     public let priority: TaskPriority
     public let work: @Sendable () async -> Outcome

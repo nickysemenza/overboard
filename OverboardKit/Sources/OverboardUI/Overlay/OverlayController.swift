@@ -22,6 +22,18 @@ public final class OverlayController {
     public var onCommit: (ClipItem, PasteMode, NSRunningApplication?) -> Void = { _, _, _ in }
     /// Called with the committed snippet and the recorded target app.
     public var onCommitSnippet: (Snippet, NSRunningApplication?) -> Void = { _, _ in }
+    public var onCopyClip: (ClipItem) -> Void = { _ in }
+    public var onRunClipQuicklink: ((ClipItem, Quicklink) -> Void)? {
+        didSet {
+            self.viewModel.onRunClipQuicklink = self.onRunClipQuicklink == nil ? nil : { [weak self] item, quicklink in
+                guard let self, let onRunClipQuicklink = self.onRunClipQuicklink else { return }
+                self.hide()
+                onRunClipQuicklink(item, quicklink)
+            }
+        }
+    }
+
+    public var onCopySnippet: (Snippet) -> Void = { _ in }
     /// Called when the user pastes an item through a transform.
     public var onCommitTransform: (ClipItem, ClipTransform, NSRunningApplication?) -> Void = { _, _, _ in }
     /// Called when the user pastes an item through an LLM transform.
@@ -30,6 +42,7 @@ public final class OverlayController {
     public var onCommitEditedText: (String, NSRunningApplication?) -> Void = { _, _ in }
     /// Called when the user runs a clip action on the selection.
     public var onBrowseHistory: (String, NSRunningApplication?) -> Void = { _, _ in }
+    public var onBrowseHistoryState: ((ClipboardBrowserHandoff, NSRunningApplication?) -> Void)?
     public var onRunAction: (ClipAction, [ClipItem], NSRunningApplication?) -> Void = { _, _, _ in }
 
     public init(store: ClipStore, stack: PasteStack) {
@@ -42,6 +55,16 @@ public final class OverlayController {
     /// transformed, AI, or hand-edited text) or a snippet paste. Each hides
     /// the panel first, then hands off with the recorded target app.
     private func installCommitCallbacks() {
+        self.viewModel.onCopyClip = { [weak self] item in
+            guard let self else { return }
+            self.hide()
+            self.onCopyClip(item)
+        }
+        self.viewModel.onCopySnippet = { [weak self] snippet in
+            guard let self else { return }
+            self.hide()
+            self.onCopySnippet(snippet)
+        }
         self.viewModel.onCommit = { [weak self] item, mode in
             guard let self else { return }
             let target = self.targetApp
@@ -92,10 +115,14 @@ public final class OverlayController {
         self.viewModel.onDismiss = { [weak self] in self?.hide() }
         self.viewModel.onBrowseHistory = { [weak self] in
             guard let self else { return }
-            let query = self.viewModel.query
+            let state = self.viewModel.browserHandoff
             let target = self.targetApp
             self.hide()
-            self.onBrowseHistory(query, target)
+            if let onBrowseHistoryState = self.onBrowseHistoryState {
+                onBrowseHistoryState(state, target)
+            } else {
+                self.onBrowseHistory(state.query, target)
+            }
         }
     }
 
@@ -138,7 +165,6 @@ public final class OverlayController {
         self.viewModel.togglePalette()
     }
 
-    /// Queue the selected item on the paste stack — same path as ⌘↩.
     public func addSelectedToStack() {
         self.viewModel.addSelectedToStack()
     }
@@ -151,9 +177,21 @@ public final class OverlayController {
         }
     }
 
-    public func show() {
+    public func showBrowserState(state: ClipboardBrowserHandoff, target: NSRunningApplication? = nil) {
+        self.show(target: target)
+        if let target {
+            self.targetApp = target
+        }
+        self.viewModel.targetAppName = self.targetApp?.localizedName
+            ?? String(localized: "previous app", bundle: .module)
+        self.viewModel.applyBrowserState(state)
+    }
+
+    public func show(target: NSRunningApplication? = nil) {
         guard !self.isVisible else { return }
-        self.targetApp = NSWorkspace.shared.frontmostApplication
+        let finishPresentation = obTracePanelPresentation("drawer.show")
+        defer { finishPresentation() }
+        self.targetApp = target ?? NSWorkspace.shared.frontmostApplication
         self.viewModel.targetAppName = self.targetApp?.localizedName
             ?? String(localized: "previous app", bundle: .module)
 
@@ -171,10 +209,12 @@ public final class OverlayController {
         self.viewModel.prepareForShow()
         self.viewModel.startLiveUpdates()
         panel.makeKeyAndOrderFront(nil)
+        panel.contentView?.layoutSubtreeIfNeeded()
         self.installMonitors()
     }
 
     public func hide() {
+        obTrace("drawer.hide")
         self.viewModel.stopLiveUpdates()
         self.removeMonitors()
         self.panel?.orderOut(nil)

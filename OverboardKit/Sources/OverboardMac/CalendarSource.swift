@@ -27,16 +27,39 @@ public final class CalendarSource {
     public var onChange: () -> Void = {}
 
     private var changeObserver: NSObjectProtocol?
+    private var generation = 0
+    public private(set) var isRunning = false
     /// Debounces fetches so a burst of change notifications (or launcher
     /// reopens) doesn't hammer EventKit.
     private var lastRefreshAt: Date?
-    private let fetchQueue = DispatchQueue(label: "com.nickysemenza.overboard.calendar-fetch")
+    private nonisolated static let fetchQueue = DispatchQueue(label: "com.nickysemenza.overboard.calendar-fetch")
+    private let access: () -> PermissionState
+    private let now: () -> Date
+    private let readEvents: @Sendable (Date, Date) async -> [CalendarEvent]
+    private let sleep: @Sendable (Duration) async throws -> Void
+    private var needsRefresh = false
+    private(set) var fetchTask: Task<Void, Never>?
+    private(set) var cooldownTask: Task<Void, Never>?
 
     /// Today plus tomorrow is the widest window any launcher query needs.
     private nonisolated static let fetchWindowDays = 2
     private nonisolated static let fetchCap = 32
 
-    public init() {}
+    public convenience init() {
+        self.init(access: { Self.authorization }, readEvents: Self.readEvents)
+    }
+
+    init(
+        access: @escaping () -> PermissionState,
+        readEvents: @escaping @Sendable (Date, Date) async -> [CalendarEvent],
+        now: @escaping () -> Date = Date.init,
+        sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
+    ) {
+        self.access = access
+        self.readEvents = readEvents
+        self.now = now
+        self.sleep = sleep
+    }
 
     /// Maps EventKit's authorization status to Overboard's tri-state
     /// permission model. `fullAccess` is the only state that lets Overboard
@@ -66,6 +89,14 @@ public final class CalendarSource {
     }
 
     public func start() {
+        guard !self.isRunning, self.access() == .granted else { return }
+        self.isRunning = true
+        self.generation += 1
+        self.lastRefreshAt = nil
+        self.fetchTask?.cancel()
+        self.cooldownTask?.cancel()
+        self.cooldownTask = nil
+        self.needsRefresh = false
         self.changeObserver = NotificationCenter.default.addObserver(
             forName: .EKEventStoreChanged,
             object: self.store,
@@ -79,10 +110,18 @@ public final class CalendarSource {
     }
 
     public func stop() {
+        self.isRunning = false
+        self.generation += 1
+        self.lastRefreshAt = nil
+        self.fetchTask?.cancel()
+        self.cooldownTask?.cancel()
+        self.cooldownTask = nil
+        self.needsRefresh = false
         if let changeObserver {
             NotificationCenter.default.removeObserver(changeObserver)
         }
         self.changeObserver = nil
+        self.apply([])
     }
 
     /// The next event that hasn't ended yet — nil once every fetched event is over.
@@ -95,23 +134,78 @@ public final class CalendarSource {
     /// granted, otherwise fetches off the main actor and applies the result
     /// back on it.
     public func refreshSnapshot() {
-        if let last = lastRefreshAt, Date().timeIntervalSince(last) < 1 {
+        guard self.isRunning else { return }
+        guard self.access() == .granted else {
+            self.clearUnavailableEvents()
             return
         }
-        self.lastRefreshAt = Date()
-        guard Self.authorization == .granted else {
-            self.apply([])
+        self.needsRefresh = true
+        self.scheduleRefresh()
+    }
+
+    private func scheduleRefresh() {
+        guard self.isRunning, self.needsRefresh, self.fetchTask == nil else { return }
+        let now = self.now()
+        if let last = self.lastRefreshAt, now.timeIntervalSince(last) < 1 {
+            self.scheduleCooldown(for: .seconds(max(0, 1 - now.timeIntervalSince(last))))
             return
         }
-        let now = Date()
+        self.cooldownTask?.cancel()
+        self.cooldownTask = nil
+        self.needsRefresh = false
+        self.lastRefreshAt = now
+        let generation = self.generation
         let calendar = Calendar.autoupdatingCurrent
         guard let end = calendar.date(
             byAdding: .day, value: Self.fetchWindowDays, to: calendar.startOfDay(for: now)
         ) else { return }
-        self.fetchQueue.async { [weak self] in
-            let events = Self.fetchUpcomingEvents(start: now, end: end)
-            Task { @MainActor [weak self] in
-                self?.apply(events)
+        let readEvents = self.readEvents
+        self.fetchTask = Task { [weak self] in
+            let events = await readEvents(now, end)
+            guard let self else { return }
+            self.fetchTask = nil
+            guard self.isRunning else { return }
+            guard self.access() == .granted else {
+                self.clearUnavailableEvents()
+                return
+            }
+            if !Task.isCancelled, self.generation == generation {
+                self.apply(events)
+            }
+            self.scheduleRefresh()
+        }
+    }
+
+    private func scheduleCooldown(for delay: Duration) {
+        guard self.cooldownTask == nil else { return }
+        let generation = self.generation
+        let sleep = self.sleep
+        self.cooldownTask = Task { [weak self] in
+            do { try await sleep(delay) } catch { return }
+            guard let self, !Task.isCancelled, self.isRunning, self.generation == generation else { return }
+            self.cooldownTask = nil
+            self.refreshSnapshot()
+        }
+    }
+
+    private func clearUnavailableEvents() {
+        self.generation += 1
+        self.fetchTask?.cancel()
+        self.cooldownTask?.cancel()
+        self.cooldownTask = nil
+        self.needsRefresh = false
+        self.lastRefreshAt = nil
+        self.apply([])
+    }
+
+    private nonisolated static func readEvents(start: Date, end: Date) async -> [CalendarEvent] {
+        await withCheckedContinuation { continuation in
+            self.fetchQueue.async {
+                guard self.authorization == .granted else {
+                    continuation.resume(returning: [])
+                    return
+                }
+                continuation.resume(returning: self.fetchUpcomingEvents(start: start, end: end))
             }
         }
     }

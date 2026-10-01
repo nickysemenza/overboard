@@ -6,6 +6,8 @@ import SwiftUI
 public struct DrawerView: View {
     @Bindable var viewModel: DrawerViewModel
     @FocusState private var searchFocused: Bool
+    @Environment(\.accessibilityReduceMotion) var reduceMotion
+    @Environment(\.skipsEntranceMotion) var skipsEntranceMotion
     @Environment(\.openSettings) private var openSettings
     @Default(.savedSearches) private var savedSearches
     /// Card height for the strip; the drawer panel itself is sized from the
@@ -23,6 +25,8 @@ public struct DrawerView: View {
 
     public var body: some View {
         VStack(spacing: 10) {
+            self.searchBar
+                .disabled(self.viewModel.previewState == .editing || self.viewModel.isPaletteOpen)
             // The two states overlap in a ZStack rather than swapping in the
             // VStack, so the height the outgoing content still occupies never
             // adds to the incoming one. Opening: the strip block fades out in
@@ -35,7 +39,6 @@ public struct DrawerView: View {
             ZStack(alignment: .bottom) {
                 if self.viewModel.previewState == .hidden {
                     VStack(spacing: 10) {
-                        self.searchBar
                         if self.viewModel.mode == .history, !self.savedSearches.isEmpty {
                             self.savedSearchBar
                         }
@@ -45,6 +48,15 @@ public struct DrawerView: View {
                 } else {
                     PreviewPane(viewModel: self.viewModel)
                         .transition(.asymmetric(insertion: .opacity, removal: .identity))
+                }
+            }
+            .overlay {
+                if self.viewModel.isPaletteOpen {
+                    GeometryReader { geometry in
+                        ActionPalette(viewModel: self.viewModel, maximumHeight: max(0, geometry.size.height - 16))
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    }
+                    .transition(.scale(scale: 0.95).combined(with: .opacity))
                 }
             }
             Divider()
@@ -61,15 +73,9 @@ public struct DrawerView: View {
                 self.viewModel.collapsedShellHeight = height
             }
         }
-        .overlay {
-            if self.viewModel.isPaletteOpen {
-                ActionPalette(viewModel: self.viewModel)
-                    .transition(.scale(scale: 0.95).combined(with: .opacity))
-            }
-        }
         .padding(Self.outerPadding)
         .onAppear {
-            self.searchFocused = true
+            self.searchFocused = !self.viewModel.isPaletteOpen
             // The overlay controller can't reach SwiftUI environment actions;
             // hand it the capability.
             self.viewModel.onOpenSettings = {
@@ -81,17 +87,12 @@ public struct DrawerView: View {
             self.viewModel.scheduleSearch()
         }
         .onChange(of: self.viewModel.previewState) {
-            if self.viewModel.previewState == .hidden {
+            if self.viewModel.previewState != .editing, !self.viewModel.isPaletteOpen {
                 self.searchFocused = true
             }
         }
         .onChange(of: self.viewModel.isPaletteOpen) {
-            // The ⌘K palette owns focus while open; when it closes, first
-            // responder isn't returned automatically, so typed characters would
-            // be dropped until the user clicks back into the field.
-            if !self.viewModel.isPaletteOpen {
-                self.searchFocused = true
-            }
+            self.searchFocused = !self.viewModel.isPaletteOpen && self.viewModel.previewState != .editing
         }
     }
 
@@ -105,7 +106,7 @@ public struct DrawerView: View {
             focus: self.$searchFocused
         ) {
             Button("Browse History", systemImage: "list.bullet.rectangle", action: self.viewModel.onBrowseHistory)
-                .buttonStyle(.plain).font(.caption).help("Open searchable history with a preview")
+                .buttonStyle(.plain).font(.caption).help("Open searchable clipboard history; preview is optional")
 
             if self.canSaveCurrentSearch {
                 Button {

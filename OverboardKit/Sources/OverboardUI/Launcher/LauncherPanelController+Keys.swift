@@ -56,11 +56,16 @@ extension LauncherPanelController {
     /// (`handleMainKeyDown`). Returns `nil` to consume the event, or the
     /// event itself to fall through to the text field.
     private func handleKeyDown(_ event: NSEvent) -> NSEvent? {
+        guard let panel else { return event }
+        let focus = NativePanelKeyRouting.focus(in: panel)
+        guard !NativePanelKeyRouting.shouldDefer(
+            keyCode: event.keyCode, modifiers: event.modifierFlags, focus: focus
+        ) else { return event }
         if self.viewModel.isPaletteOpen {
             return self.handlePaletteKeyDown(event)
         }
         let scopeKeys: [KeyCode] = [.one, .two, .three, .four]
-        if event.modifierFlags.contains(.command),
+        if NativePanelKeyRouting.modifiers(event.modifierFlags) == .command,
            let index = scopeKeys.firstIndex(where: { $0.rawValue == event.keyCode })
         {
             self.viewModel.setScope(LauncherScope.allCases[index])
@@ -75,15 +80,23 @@ extension LauncherPanelController {
             self.setPaletteOpen(false)
             return nil
         case .returnKey, .keypadEnter: // runs the highlighted action
-            self.viewModel.runPaletteAction()
+            guard NativePanelKeyRouting.modifiers(event.modifierFlags).isEmpty else { return event }
+            self.viewModel.runPaletteEntry(
+                onAddClipToStack: self.onAddClipToStack,
+                onRunClipQuicklink: self.onRunClipQuicklink == nil ? nil : { [weak self] item, quicklink in
+                    self?.runClipQuicklink(item, quicklink: quicklink)
+                }
+            )
             return nil
         case .upArrow:
-            self.viewModel.movePaletteSelection(-1)
+            self.viewModel.movePaletteEntry(
+                -1, includeStack: self.onAddClipToStack != nil, includeClipQuicklinks: self.onRunClipQuicklink != nil
+            )
             return nil
         case .downArrow:
-            self.viewModel.movePaletteSelection(1)
-            return nil
-        case .tab: // never hands focus away from the palette
+            self.viewModel.movePaletteEntry(
+                1, includeStack: self.onAddClipToStack != nil, includeClipQuicklinks: self.onRunClipQuicklink != nil
+            )
             return nil
         default: // typing filters
             return event
@@ -108,7 +121,8 @@ extension LauncherPanelController {
             // text editing when the selected row isn't a recent.
             return self.viewModel.deleteSelectedRecent() ? nil : event
         case .returnKey, .keypadEnter:
-            self.viewModel.commit(modifier: self.commitModifier(for: event))
+            guard let action = PanelActionID.commit(for: event.modifierFlags) else { return event }
+            self.viewModel.performPanelCommit(action, onAddClipToStack: self.onAddClipToStack)
             return nil
         case .tab: // cycles the scope bar instead of moving focus
             self.viewModel.cycleScope(event.modifierFlags.contains(.shift) ? -1 : 1)
@@ -122,7 +136,7 @@ extension LauncherPanelController {
     /// switch in `handleMainKeyDown`. Returns whether the shortcut fired
     /// (and so already consumed the event).
     private func handleCommandShortcut(_ event: NSEvent) -> Bool {
-        guard event.modifierFlags.contains(.command) else { return false }
+        guard NativePanelKeyRouting.modifiers(event.modifierFlags) == .command else { return false }
         switch KeyCode(rawValue: event.keyCode) {
         case .letterY: // ⌘Y previews without consuming query spaces
             self.viewModel.togglePreview()
@@ -154,16 +168,6 @@ extension LauncherPanelController {
         }
         self.hide()
         return nil
-    }
-
-    private func commitModifier(for event: NSEvent) -> LauncherViewModel.CommitModifier {
-        if event.modifierFlags.contains(.command) {
-            .command
-        } else if event.modifierFlags.contains(.option) {
-            .option
-        } else {
-            .none
-        }
     }
 
     /// The ⌘K palette fits inside the reserved result viewport.

@@ -205,7 +205,7 @@ struct ClipEnrichmentPipelineTests {
 
     // MARK: - Links
 
-    @Test func linkClipAttachesFetchedMetadata() async throws {
+    @Test func linkClipNeverFetchesMetadataEvenWithLegacyPreferenceEnabled() async throws {
         let store = try self.makeStore()
         let calls = SeamCalls()
         let snapshot = self.textSnapshot("https://swift.org/blog/post")
@@ -220,16 +220,14 @@ struct ClipEnrichmentPipelineTests {
         await pipeline.enrich(item: item, snapshot: snapshot)
 
         let enriched = try await self.reload(item.id, from: store)
-        #expect(enriched.linkTitle == "Swift Blog")
-        #expect(enriched.linkDescription == "Posts about Swift.")
-        #expect(await calls.fetched.map(\.absoluteString) == ["https://swift.org/blog/post"])
+        #expect(enriched.linkTitle == nil)
+        #expect(enriched.linkDescription == nil)
+        #expect(await calls.fetched.isEmpty)
     }
 
-    @Test func unfetchableLinkGetsTheAttemptedSentinelWithoutFetching() async throws {
+    @Test func privateNetworkLinkIsLeftUntouchedWithoutFetching() async throws {
         let store = try self.makeStore()
         let calls = SeamCalls()
-        // A private-network host: never fetched (SSRF hardening), but still
-        // marked attempted so backfill doesn't re-check it every pass.
         let snapshot = self.textSnapshot("http://192.168.1.10/admin")
         let item = try #require(try await store.ingest(snapshot))
         #expect(item.kind == .link)
@@ -241,7 +239,7 @@ struct ClipEnrichmentPipelineTests {
         )
         await pipeline.enrich(item: item, snapshot: snapshot)
 
-        #expect(try await self.reload(item.id, from: store).linkTitle == "")
+        #expect(try await self.reload(item.id, from: store).linkTitle == nil)
         #expect(await calls.fetched.isEmpty)
     }
 
@@ -260,13 +258,10 @@ struct ClipEnrichmentPipelineTests {
         await pipeline.enrich(item: item, snapshot: snapshot)
 
         #expect(await calls.fetched.isEmpty)
-        // No sentinel either — the link is untouched, so enabling the setting
-        // later still picks it up.
         #expect(try await self.reload(item.id, from: store).linkTitle == nil)
     }
 
-    /// Backfill calls this directly, bypassing `enrich`.
-    @Test func fetchLinkMetadataAttachesWithoutTheSettingGate() async throws {
+    @Test func legacyBackfillEntryPointNeverFetches() async throws {
         let store = try self.makeStore()
         let calls = SeamCalls()
         let item = try #require(try await store.ingest(self.textSnapshot("https://example.com/a")))
@@ -278,7 +273,8 @@ struct ClipEnrichmentPipelineTests {
         )
         await pipeline.fetchLinkMetadata(for: item)
 
-        #expect(try await self.reload(item.id, from: store).linkTitle == "Example")
+        #expect(try await self.reload(item.id, from: store).linkTitle == nil)
+        #expect(await calls.fetched.isEmpty)
     }
 
     // MARK: - Images

@@ -9,14 +9,24 @@ public extension ClipStore {
     /// screenshots become findable by their contents.
     /// Empty text still sets the column (to "") so textless images are marked
     /// as attempted and don't get re-OCR'd by every backfill pass.
-    func attachRecognizedText(itemID: String, text: String) async throws {
+    @discardableResult
+    func attachRecognizedText(itemID: String, text: String) async throws -> Bool {
+        try Task.checkCancellation()
         let capped = String(text.prefix(CaptureClassifier.searchTextLimit))
-        let attached: Bool = try await self.dbWriter.write { db in
+        let sensitivity = ClipSensitivity.label(for: text)
+        let attached: Bool = try await self.writeCancellable { db in
             guard let row = try Row.fetchOne(
                 db,
-                sql: "SELECT rowid, searchText FROM item WHERE id = ? AND deletedAt IS NULL",
+                sql: "SELECT rowid, searchText, isSecret FROM item WHERE id = ? AND deletedAt IS NULL",
                 arguments: [itemID]
-            ), (row["searchText"] as String?) == nil else { return false }
+            ) else { return false }
+            if let sensitivity {
+                try Self.protectSensitiveItem(db, itemID: itemID, label: sensitivity)
+                return false
+            }
+            guard !(row["isSecret"] as Bool) else { return false }
+            guard (row["searchText"] as String?) == nil else { return true }
+            try Self.checkItemCountersCanAdvance(db, itemID: itemID)
 
             try db.execute(
                 sql: "UPDATE item SET searchText = ?, updatedAt = ?, lamport = lamport + 1 WHERE id = ?",
@@ -28,11 +38,13 @@ public extension ClipStore {
                     arguments: [row["rowid"] as Int64, capped]
                 )
             }
-            return !capped.isEmpty
+            return true
         }
-        if attached {
+        try Task.checkCancellation()
+        if attached, !capped.isEmpty {
             try? await self.storeEmbedding(itemID: itemID, text: capped)
         }
+        return attached
     }
 
     /// Stores generated title + category + optional summary, and folds the
@@ -45,14 +57,18 @@ public extension ClipStore {
         category: String,
         summary: String? = nil
     ) async throws {
-        try await self.dbWriter.write { db in
+        try await self.writeCancellable { db in
             guard let row = try Row.fetchOne(
                 db,
-                sql: "SELECT rowid, searchText FROM item WHERE id = ? AND aiTitle IS NULL AND deletedAt IS NULL",
+                sql: """
+                SELECT rowid, searchText FROM item
+                WHERE id = ? AND aiTitle IS NULL AND isSecret = 0 AND deletedAt IS NULL
+                """,
                 arguments: [itemID]
             ) else { return }
             let rowid: Int64 = row["rowid"]
             let oldSearchText: String? = row["searchText"]
+            try Self.checkItemCountersCanAdvance(db, itemID: itemID)
 
             let parts = [oldSearchText, title, summary].compactMap(\.self).filter { !$0.isEmpty }
             let newSearchText = String(
@@ -94,14 +110,13 @@ public extension ClipStore {
 // MARK: - Rich link metadata
 
 public extension ClipStore {
-    /// Attaches fetched rich-link metadata to a `.link` item that has none yet,
+    /// Attaches cached rich-link metadata to a `.link` item that has none yet,
     /// and folds the title + description into the FTS index so links are findable
     /// by their page title, not just their URL. Never overwrites existing
     /// metadata (`linkTitle IS NULL` guard).
     ///
-    /// Failed-fetch sentinel: pass `title == ""` to mark the link as "attempted"
-    /// so backfill won't retry it. The empty title still populates `linkTitle`
-    /// (the UI treats "" as absent) but contributes nothing to FTS.
+    /// An empty title populates `linkTitle` (the UI treats "" as absent)
+    /// but contributes nothing to FTS.
     func attachLinkMetadata(
         itemID: String,
         title: String,
@@ -109,16 +124,20 @@ public extension ClipStore {
         faviconPNG: Data?,
         previewImagePNG: Data?
     ) async throws {
-        try await self.dbWriter.write { db in
+        try await self.writeCancellable { db in
             guard let row = try Row.fetchOne(
                 db,
-                sql: "SELECT rowid, searchText FROM item WHERE id = ? AND linkTitle IS NULL AND deletedAt IS NULL",
+                sql: """
+                SELECT rowid, searchText FROM item
+                WHERE id = ? AND linkTitle IS NULL AND isSecret = 0 AND deletedAt IS NULL
+                """,
                 arguments: [itemID]
             ) else { return }
             let rowid: Int64 = row["rowid"]
             let oldSearchText: String? = row["searchText"]
+            try Self.checkItemCountersCanAdvance(db, itemID: itemID)
 
-            // Fold the fetched text into searchText so the link is findable by
+            // Fold the cached text into searchText so the link is findable by
             // its title/description. An empty (sentinel) title adds nothing.
             let additions = [title, description].compactMap(\.self).filter { !$0.isEmpty }
             let parts = [oldSearchText].compactMap(\.self).filter { !$0.isEmpty } + additions
@@ -126,7 +145,7 @@ public extension ClipStore {
                 ? nil
                 : String(parts.joined(separator: "\n").prefix(CaptureClassifier.searchTextLimit))
 
-            if let oldSearchText {
+            if let oldSearchText, !oldSearchText.isEmpty {
                 try db.execute(
                     sql: "INSERT INTO item_fts (item_fts, rowid, searchText) VALUES ('delete', ?, ?)",
                     arguments: [rowid, oldSearchText]
@@ -152,16 +171,7 @@ public extension ClipStore {
         }
     }
 
-    /// Live `.link` items that haven't had a metadata fetch attempted yet
-    /// (`linkTitle IS NULL`), newest first, for the startup backfill pass.
-    /// Secrets are excluded — their URLs never leave the machine.
-    func linksNeedingMetadata(limit: Int) async throws -> [ClipItem] {
-        try await self.dbWriter.read { db in
-            try ClipItem
-                .filter(sql: "kind = 'link' AND linkTitle IS NULL AND isSecret = 0 AND deletedAt IS NULL")
-                .order(sql: "createdAt DESC")
-                .limit(limit)
-                .fetchAll(db)
-        }
+    func linksNeedingMetadata(limit _: Int) async throws -> [ClipItem] {
+        []
     }
 }

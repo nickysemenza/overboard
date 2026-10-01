@@ -10,7 +10,6 @@ struct HistorySettingsTab: View {
     let store: ClipStore
 
     @Default(.historyLimit) private var historyLimit
-    @Default(.secretTTLMinutes) private var secretTTLMinutes
     @State private var diskUsage: String?
     @State private var stats: LibraryStats?
     @State private var activity: DailyActivity?
@@ -36,14 +35,17 @@ struct HistorySettingsTab: View {
                     Text("5,000 items").tag(5000)
                 }
 
-                Picker("Expire detected secrets after", selection: self.$secretTTLMinutes) {
-                    Text("5 minutes").tag(5)
-                    Text("10 minutes").tag(10)
-                    Text("30 minutes").tag(30)
-                    Text("Never").tag(0)
-                }
+                LabeledContent("Detected secrets", value: "Kept until explicitly deleted")
             } header: {
                 Text("Retention")
+            } footer: {
+                Text(
+                    """
+                    Secrets are exempt from history limits and age cleanup, even when unpinned. \
+                    Their original payloads remain readable on disk; previews are masked and contents excluded \
+                    from search and enrichment.
+                    """
+                )
             }
 
             Section {
@@ -77,7 +79,7 @@ struct HistorySettingsTab: View {
                 Text(
                     """
                     An export is a folder of readable JSON plus the large payloads it references. \
-                    Detected secrets are left out — they expire on purpose. Importing skips clips \
+                    Detected secrets are left out by default. Importing skips clips \
                     you already have.
                     """
                 )

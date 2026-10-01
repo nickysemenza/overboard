@@ -42,4 +42,20 @@ public enum AutoTransform {
         let result = matching.reduce(text) { $1.transform.apply(to: $0) }
         return result == text ? nil : result
     }
+
+    public static func apply(to original: PasteboardSnapshot, rules: [AutoTransformRule]) -> PasteboardSnapshot {
+        var snapshot = original
+        var changedItems = Set<Int?>()
+        for index in snapshot.reps.indices where snapshot.reps[index].uti == WellKnownUTI.plainText {
+            guard let text = String(data: snapshot.reps[index].data, encoding: .utf8),
+                  let transformed = self.apply(to: text, bundleID: snapshot.sourceBundleID, rules: rules)
+            else { continue }
+            snapshot.reps[index].data = Data(transformed.utf8)
+            changedItems.insert(snapshot.reps[index].itemIndex)
+        }
+        snapshot.reps.removeAll {
+            changedItems.contains($0.itemIndex) && [WellKnownUTI.html, WellKnownUTI.rtf].contains($0.uti)
+        }
+        return snapshot
+    }
 }

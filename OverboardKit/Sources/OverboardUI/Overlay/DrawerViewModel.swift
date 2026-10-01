@@ -47,6 +47,8 @@ public final class DrawerViewModel {
     public private(set) var snippets: [Snippet] = []
     public private(set) var mode: DrawerMode = .history
     public var query: String = ""
+    public private(set) var browserFilter = ClipboardFilter()
+    private var pendingBrowserState: ClipboardBrowserHandoff?
     /// The frontmost app's name when the drawer was summoned — the footer's
     /// "Paste to …" label and paste destination. Set by `OverlayController`,
     /// the same way `LauncherPanelController.show(…)` sets the launcher's.
@@ -64,6 +66,9 @@ public final class DrawerViewModel {
     /// Called when the user commits an item (Return, click, ⌘n).
     public var onCommit: (ClipItem, PasteMode) -> Void = { _, _ in }
     public var onCommitSnippet: (Snippet) -> Void = { _ in }
+    public var onCopyClip: (ClipItem) -> Void = { _ in }
+    public var onRunClipQuicklink: ((ClipItem, Quicklink) -> Void)?
+    public var onCopySnippet: (Snippet) -> Void = { _ in }
     public var onCommitTransform: (ClipItem, ClipTransform) -> Void = { _, _ in }
     public var onCommitAITransform: (ClipItem, AITransform) -> Void = { _, _ in }
     public var onDismiss: () -> Void = {}
@@ -151,6 +156,8 @@ public final class DrawerViewModel {
     /// Reset and reload; called every time the drawer is summoned.
     public func prepareForShow() {
         self.query = ""
+        self.browserFilter = ClipboardFilter()
+        self.pendingBrowserState = nil
         self.selectedIndex = 0
         self.multiSelection = []
         self.mode = .history
@@ -165,7 +172,7 @@ public final class DrawerViewModel {
     }
 
     /// While the drawer is visible, any store change (background enrichment,
-    /// a new copy, an expiring secret) re-runs the current query so cards
+    /// a new copy, or a retained item) re-runs the current query so cards
     /// update in place. Selection follows the selected item.
     public func startLiveUpdates() {
         guard self.liveUpdateTask == nil else { return }
@@ -199,6 +206,8 @@ public final class DrawerViewModel {
     public func toggleMode() {
         self.mode = self.mode == .history ? .snippets : .history
         self.query = ""
+        self.browserFilter = ClipboardFilter()
+        self.pendingBrowserState = nil
         self.selectedIndex = 0
         self.multiSelection = []
         self.searchTask?.cancel()
@@ -209,10 +218,27 @@ public final class DrawerViewModel {
         Task { [searchChannel] in await searchChannel.send(()) }
     }
 
+    public func applyBrowserState(_ state: ClipboardBrowserHandoff) {
+        self.searchTask?.cancel()
+        self.mode = .history
+        self.query = state.query
+        self.browserFilter = state.filter
+        self.pendingBrowserState = state
+        self.selectedIndex = 0
+        self.multiSelection = []
+        self.closePalette()
+        self.closePreview()
+        self.searchTask = Task { await self.refresh() }
+    }
+
     /// Re-runs the current query. `internal`: also called from the
     /// multi-selection (`jump(toItemID:)`) and paste-action
     /// (`togglePinSelected`/`deleteSelected`) extensions in other files.
     func refresh(resetSelection: Bool = true, followItemID: String? = nil) async {
+        let query = self.query
+        let mode = self.mode
+        let filter = self.browserFilter
+        let generation = self.showGeneration
         // Capture the multi-selected rows' identities before the list is
         // replaced, so a live update that inserts/removes rows moves the
         // selection with its items instead of leaving stale indices that would
@@ -223,12 +249,13 @@ public final class DrawerViewModel {
                 .map { self.items[$0].id }
         )
         do {
-            let query = self.query
-            switch self.mode {
+            switch mode {
             case .history:
                 let trimmed = query.trimmingCharacters(in: .whitespaces)
                 var results: [ClipItem]
-                if trimmed.isEmpty {
+                if filter != ClipboardFilter() {
+                    results = try await self.store.browseHistory(query, filter: filter, limit: 100)
+                } else if trimmed.isEmpty {
                     results = try await self.store.recent(limit: 100)
                 } else {
                     results = try await self.store.search(query, limit: 100)
@@ -241,30 +268,45 @@ public final class DrawerViewModel {
                         results += extras.filter { !seen.contains($0.id) && parsed.matches($0) }
                     }
                 }
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled, self.query == query, self.mode == mode,
+                      self.browserFilter == filter, self.showGeneration == generation else { return }
                 self.items = results
             case .snippets:
                 let results = try await self.store.searchSnippets(query)
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled, self.query == query, self.mode == mode,
+                      self.showGeneration == generation else { return }
                 self.snippets = results
             }
-            if let followItemID, let index = self.items.firstIndex(where: { $0.id == followItemID }) {
-                self.selectedIndex = index
-                self.multiSelection = self.remapSelection(to: priorMultiIDs)
-            } else if resetSelection {
-                self.selectedIndex = 0
-                self.multiSelection = []
-            } else {
-                self.selectedIndex = min(self.selectedIndex, max(self.entryCount - 1, 0))
-                self.multiSelection = self.remapSelection(to: priorMultiIDs)
-            }
+            self.restoreSelection(query: query, filter: filter, followItemID: followItemID,
+                                  priorMultiIDs: priorMultiIDs, resetSelection: resetSelection)
             // A live update may have removed the item being previewed.
             if self.previewState != .hidden, self.selectedItem == nil {
                 self.closePreview()
             }
         } catch {
+            guard !Task.isCancelled, self.query == query, self.mode == mode,
+                  self.browserFilter == filter, self.showGeneration == generation else { return }
             self.items = []
             self.snippets = []
+        }
+    }
+
+    private func restoreSelection(
+        query: String, filter: ClipboardFilter, followItemID: String?, priorMultiIDs: Set<String>, resetSelection: Bool
+    ) {
+        let pending = self.pendingBrowserState
+        let selectionID = pending?.query == query && pending?.filter == filter
+            ? pending?.selectedItemID : followItemID
+        self.pendingBrowserState = nil
+        if let selectionID, let index = self.items.firstIndex(where: { $0.id == selectionID }) {
+            self.selectedIndex = index
+            self.multiSelection = self.remapSelection(to: priorMultiIDs)
+        } else if resetSelection {
+            self.selectedIndex = 0
+            self.multiSelection = []
+        } else {
+            self.selectedIndex = min(self.selectedIndex, max(self.entryCount - 1, 0))
+            self.multiSelection = self.remapSelection(to: priorMultiIDs)
         }
     }
 }

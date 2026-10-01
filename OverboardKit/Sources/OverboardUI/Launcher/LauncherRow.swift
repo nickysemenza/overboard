@@ -94,9 +94,16 @@ struct LauncherRow: View {
         .accessibilityAddTraits(self.isSelected ? .isSelected : [])
         .accessibilityActions {
             ForEach(self.actions) { action in
-                Button(action.label) { self.onPerformAction(action) }
+                Button(self.actionLabel(action)) { self.onPerformAction(action) }
             }
         }
+    }
+
+    private func actionLabel(_ action: LauncherAction) -> String {
+        if action == .copy, case .calculation = self.result {
+            return "Copy Calculation"
+        }
+        return action.panelActionID?.metadata.label ?? action.label
     }
 
     @ViewBuilder private var icon: some View {

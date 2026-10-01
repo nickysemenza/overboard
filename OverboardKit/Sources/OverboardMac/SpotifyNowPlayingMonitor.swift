@@ -19,13 +19,19 @@ public final class SpotifyNowPlayingMonitor {
     public var onChange: () -> Void = {}
 
     private var playbackObserver: NSObjectProtocol?
+    private var generation = 0
+    public private(set) var isRunning = false
     private var terminateObserver: NSObjectProtocol?
     /// Debounces snapshots so rapid launcher reopens don't stack Apple Events.
     private var lastSnapshotAt: Date?
+    private let applicationIsRunning: () -> Bool
+    private let readSnapshot: @Sendable () async -> String?
+    private let now: () -> Date
+    private(set) var snapshotTask: Task<Void, Never>?
     /// Concurrent so a wedged Spotify Apple Event can't block later snapshots
     /// for the process lifetime; each job runs an independent NSAppleScript and
     /// hops back to the main actor to apply. See BrowserProvenanceService.
-    private let snapshotQueue = DispatchQueue(
+    private nonisolated static let snapshotQueue = DispatchQueue(
         label: "com.nickysemenza.overboard.spotify-snapshot",
         attributes: .concurrent
     )
@@ -34,9 +40,30 @@ public final class SpotifyNowPlayingMonitor {
     /// so the queue block can signal it without capturing the main-actor self.
     private nonisolated static let snapshotSlots = DispatchSemaphore(value: 2)
 
-    public init() {}
+    public convenience init() {
+        self.init(
+            applicationIsRunning: {
+                !NSRunningApplication.runningApplications(withBundleIdentifier: Self.spotifyBundleID).isEmpty
+            },
+            readSnapshot: Self.readSnapshot
+        )
+    }
+
+    init(
+        applicationIsRunning: @escaping () -> Bool,
+        readSnapshot: @escaping @Sendable () async -> String?,
+        now: @escaping () -> Date = Date.init
+    ) {
+        self.applicationIsRunning = applicationIsRunning
+        self.readSnapshot = readSnapshot
+        self.now = now
+    }
 
     public func start() {
+        guard !self.isRunning else { return }
+        self.isRunning = true
+        self.generation += 1
+        self.lastSnapshotAt = nil
         // Passive: receiving distributed notifications needs no permission and
         // no running-app guard, which also keeps the headless fake-notification
         // test path working without Spotify installed.
@@ -49,7 +76,7 @@ public final class SpotifyNowPlayingMonitor {
             // Notification itself isn't Sendable.
             let track = NowPlayingTrack.parse(playbackNotification: notification.userInfo ?? [:])
             MainActor.assumeIsolated {
-                self?.apply(track)
+                self?.receivedPlayback(track)
             }
         }
 
@@ -64,7 +91,7 @@ public final class SpotifyNowPlayingMonitor {
             let isSpotify = app?.bundleIdentifier == Self.spotifyBundleID
             MainActor.assumeIsolated {
                 guard isSpotify else { return }
-                self?.apply(nil)
+                self?.applicationTerminated()
             }
         }
 
@@ -73,6 +100,10 @@ public final class SpotifyNowPlayingMonitor {
     }
 
     public func stop() {
+        self.isRunning = false
+        self.generation += 1
+        self.snapshotTask?.cancel()
+        self.lastSnapshotAt = nil
         if let playbackObserver {
             DistributedNotificationCenter.default().removeObserver(playbackObserver)
         }
@@ -81,6 +112,7 @@ public final class SpotifyNowPlayingMonitor {
         }
         self.playbackObserver = nil
         self.terminateObserver = nil
+        self.apply(nil)
     }
 
     /// AppleScript snapshot of Spotify's current track — the reconcile backstop
@@ -88,35 +120,66 @@ public final class SpotifyNowPlayingMonitor {
     /// No-ops when a snapshot ran within the last second; clears the row when
     /// Spotify isn't running (sending Apple Events would relaunch it).
     public func refreshSnapshot() {
-        guard !NSRunningApplication.runningApplications(withBundleIdentifier: Self.spotifyBundleID).isEmpty else {
-            self.apply(nil)
+        guard self.isRunning else { return }
+        guard self.applicationIsRunning() else {
+            self.applicationTerminated()
             return
         }
-        if let last = lastSnapshotAt, Date().timeIntervalSince(last) < 1 {
+        let now = self.now()
+        if let last = lastSnapshotAt, now.timeIntervalSince(last) < 1 {
             return
         }
-        self.lastSnapshotAt = Date()
+        self.lastSnapshotAt = now
+        self.generation += 1
+        self.snapshotTask?.cancel()
+        let generation = self.generation
+        let readSnapshot = self.readSnapshot
 
+        self.snapshotTask = Task { [weak self] in
+            let line = await readSnapshot()
+            guard let self, !Task.isCancelled, self.isRunning, self.generation == generation else { return }
+            guard self.applicationIsRunning() else {
+                self.applicationTerminated()
+                return
+            }
+            if line?.isEmpty == true {
+                self.apply(nil)
+            } else if let line, let track = NowPlayingTrack.parse(snapshotLine: line) {
+                self.apply(track)
+            }
+        }
+    }
+
+    func receivedPlayback(_ track: NowPlayingTrack?) {
+        guard self.isRunning else { return }
+        self.generation += 1
+        self.snapshotTask?.cancel()
+        self.apply(track)
+    }
+
+    func applicationTerminated() {
+        guard self.isRunning else { return }
+        self.generation += 1
+        self.snapshotTask?.cancel()
+        self.lastSnapshotAt = nil
+        self.apply(nil)
+    }
+
+    private nonisolated static func readSnapshot() async -> String? {
         // Off the main thread so a slow Apple Event (or the one-time Automation
         // TCC prompt) never freezes the launcher summon. Non-blocking slot
         // acquire caps in-flight scripts so wedges can't leak threads.
-        guard Self.snapshotSlots.wait(timeout: .now()) == .success else { return }
-        self.snapshotQueue.async { [weak self] in
-            defer { Self.snapshotSlots.signal() }
-            let line = Self.runSnapshotScript()
-            let track = line.flatMap(NowPlayingTrack.parse(snapshotLine:))
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                // A definitive empty ("") result clears the row; a parsed track
-                // sets it. An unparseable non-empty line (ads, errors) is left
-                // to the notification path rather than clobbering live state.
-                if line?.isEmpty == true {
-                    self.apply(nil)
-                } else if let track {
-                    self.apply(track)
-                }
+        guard self.acquireSnapshotSlot() else { return nil }
+        return await withCheckedContinuation { continuation in
+            self.snapshotQueue.async {
+                defer { self.snapshotSlots.signal() }
+                continuation.resume(returning: self.runSnapshotScript())
             }
         }
+    }
+
+    private nonisolated static func acquireSnapshotSlot() -> Bool {
+        self.snapshotSlots.wait(timeout: .now()) == .success
     }
 
     /// Runs the Spotify snapshot AppleScript. Returns the tab-separated line,

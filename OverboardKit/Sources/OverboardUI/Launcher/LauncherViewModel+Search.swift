@@ -1,4 +1,3 @@
-import AsyncAlgorithms
 import Foundation
 import os
 import OverboardCore
@@ -13,6 +12,7 @@ public extension LauncherViewModel {
     /// `scheduleSearch()` repopulates its rows (and clears them when the query is
     /// empty). When `clearQuery` is true the bar opens fresh.
     func prepareForShow(clearQuery: Bool) {
+        self.searchIsActive = true
         self.searchTask?.cancel()
         if clearQuery {
             self.query = ""
@@ -29,7 +29,9 @@ public extension LauncherViewModel {
     }
 
     func scheduleSearch(preserveSelection: Bool = false) {
+        guard self.searchIsActive else { return }
         self.searchTask?.cancel()
+        self.secondaryTask?.cancel()
         let query = self.query.trimmingCharacters(in: .whitespacesAndNewlines)
         let scope = self.scope
         if !preserveSelection {
@@ -51,6 +53,7 @@ public extension LauncherViewModel {
         // exit is allowed to flip the flag back off.
         self.searchGeneration += 1
         let generation = self.searchGeneration
+        self.activeSearchContext = self.searchContext(for: query)
         if query.isEmpty, scope == .all {
             self.scheduleRecentsSearch(preserveSelection: preserveSelection, generation: generation)
         } else {
@@ -65,8 +68,8 @@ public extension LauncherViewModel {
             .map { LauncherResult.recentSearch(query: $0) }
         self.setResults(recents, preserveSelection: preserveSelection)
         self.searchTask = Task {
-            let apps = await self.instantRouter.results(for: "", scope: .apps)
-            guard !Task.isCancelled else {
+            let apps = await self.instantRouter.results(for: "", scope: .apps, context: self.activeSearchContext)
+            guard self.isCurrentSearch(generation) else {
                 self.finishSearch(generation)
                 return
             }
@@ -99,13 +102,13 @@ public extension LauncherViewModel {
             // `resultsAreStale` (set above) keeps ↩ from acting on the old
             // list until then.
             if scope == .clipboard, self.clipboardStore != nil {
-                self.sendToSecondaryChannel()
+                self.scheduleSecondaryPass(generation: generation)
                 return
             }
             let instantState = self.searchSignposter.beginInterval("instant pass")
-            let instant = await self.instantRouter.results(for: query, scope: scope)
+            let instant = await self.instantRouter.results(for: query, scope: scope, context: self.activeSearchContext)
             self.searchSignposter.endInterval("instant pass", instantState)
-            guard !Task.isCancelled else {
+            guard self.isCurrentSearch(generation) else {
                 self.finishSearch(generation)
                 return
             }
@@ -124,52 +127,37 @@ public extension LauncherViewModel {
             // Secondary providers (indexed files FTS, clipboard FTS, snippet
             // scans) don't run on every keystroke — only once the query has
             // been stable for the debounce interval passed to `init`.
-            self.sendToSecondaryChannel()
+            self.scheduleSecondaryPass(generation: generation)
         }
     }
 
-    /// See `secondaryChannel`: the send must outlive `searchTask`'s
-    /// cancellation, so it gets a task of its own. The debounce collapses
-    /// any pile-up into one pass.
-    private func sendToSecondaryChannel() {
-        Task { [secondaryChannel] in await secondaryChannel.send(()) }
+    /// Debounces the current generation without queuing behind earlier providers.
+    private func scheduleSecondaryPass(generation: Int) {
+        self.secondaryTask?.cancel()
+        self.secondaryTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await Task.sleep(for: self.secondaryDebounceInterval)
+                guard self.isCurrentSearch(generation) else { return }
+                await self.runSecondaryPass()
+            } catch {}
+        }
     }
 
     /// The debounced half of a search: the clipboard-scope store query, or
     /// the secondary-provider fan-out (indexed files FTS, clipboard FTS,
-    /// snippet scans). Runs on the long-lived consumer started in `init`, so
-    /// it isn't tied to `searchTask`'s per-keystroke cancellation — instead it
-    /// reads the *current* query/scope when the debounce settles (matching
-    /// `AsyncChannel.debounce`'s coalescing: only the latest keystroke's send
-    /// actually fires this) and checks `searchGeneration` before touching
-    /// `results`, so a pass superseded by a still-newer keystroke can't
-    /// clobber it.
+    /// snippet scans). Every awaited publication checks cancellation and the
+    /// query/visibility generation before touching observable state.
     internal func runSecondaryPass() async {
         let generation = self.searchGeneration
+        guard self.isCurrentSearch(generation) else { return }
+        let context = self.activeSearchContext
         let state = self.searchSignposter.beginInterval("secondary pass")
         defer { self.searchSignposter.endInterval("secondary pass", state) }
         let query = self.query.trimmingCharacters(in: .whitespacesAndNewlines)
         let scope = self.scope
         if scope == .clipboard, let store = self.clipboardStore {
-            do {
-                let items = try await store.browseHistory(
-                    query,
-                    filter: self.clipboardFilter,
-                    limit: self.clipboardLimit + 1
-                )
-                let stats = try await store.libraryStats(topSources: 100)
-                guard self.searchGeneration == generation else { return }
-                self.sources = stats.bySource.map(\.app).sorted()
-                self.hasMoreClipboard = items.count > self.clipboardLimit
-                let clips = Array(items.prefix(self.clipboardLimit))
-                self.setResults(clips.map(LauncherResult.clip), preserveSelection: true)
-                await self.refreshMatchExcerpts(itemIDs: clips.map(\.id), query: query)
-            } catch {
-                guard self.searchGeneration == generation else { return }
-                self.statusMessage = "Couldn’t search clipboard history. Try again."
-                self.setResults([])
-            }
-            self.finishSearch(generation)
+            await self.runClipboardPass(query: query, store: store, generation: generation)
             return
         }
         let instant = self.lastInstantResults
@@ -185,16 +173,41 @@ public extension LauncherViewModel {
         var buckets = [[LauncherResult]](repeating: [], count: providers.count)
         await withTaskGroup(of: (Int, [LauncherResult]).self) { group in
             for (index, provider) in providers.enumerated() {
-                group.addTask { await (index, provider.results(for: query)) }
+                group.addTask { await (index, provider.results(for: query, context: context)) }
             }
             for await (index, rows) in group {
-                guard self.searchGeneration == generation else { return }
+                guard self.isCurrentSearch(generation) else {
+                    group.cancelAll()
+                    return
+                }
                 buckets[index] = rows.filter(scope.includes)
                 self.setResults(instant + buckets.flatMap(\.self), preserveSelection: true)
             }
         }
-        guard self.searchGeneration == generation else { return }
+        guard self.isCurrentSearch(generation) else { return }
         await self.refreshMatchExcerpts(for: self.results, query: query)
+        self.finishSearch(generation)
+    }
+
+    private func runClipboardPass(query: String, store: ClipStore, generation: Int) async {
+        do {
+            let items = try await store.browseHistory(
+                query,
+                filter: self.clipboardFilter,
+                limit: self.clipboardLimit + 1
+            )
+            let stats = try await store.libraryStats(topSources: 100)
+            guard self.isCurrentSearch(generation) else { return }
+            self.sources = stats.bySource.map(\.app).sorted()
+            self.hasMoreClipboard = items.count > self.clipboardLimit
+            let clips = Array(items.prefix(self.clipboardLimit))
+            self.setResults(clips.map(LauncherResult.clip), preserveSelection: true)
+            await self.refreshMatchExcerpts(itemIDs: clips.map(\.id), query: query)
+        } catch {
+            guard self.isCurrentSearch(generation) else { return }
+            self.statusMessage = "Couldn’t search clipboard history. Try again."
+            self.setResults([])
+        }
         self.finishSearch(generation)
     }
 
@@ -211,11 +224,27 @@ public extension LauncherViewModel {
     }
 
     private func refreshMatchExcerpts(itemIDs: [String], query: String) async {
+        let generation = self.searchGeneration
         guard !itemIDs.isEmpty, !query.isEmpty, let store = self.clipboardStore else {
             self.matchExcerpts = [:]
             return
         }
-        self.matchExcerpts = await (try? store.matchExcerpts(itemIDs: itemIDs, query: query)) ?? [:]
+        let excerpts = await (try? store.matchExcerpts(itemIDs: itemIDs, query: query)) ?? [:]
+        guard self.isCurrentSearch(generation) else { return }
+        self.matchExcerpts = excerpts
+    }
+
+    private func isCurrentSearch(_ generation: Int) -> Bool {
+        self.searchIsActive && !Task.isCancelled && self.searchGeneration == generation
+    }
+
+    private func searchContext(for query: String) -> LauncherSearchContext {
+        let prefix = AppMatcher.fold(query.trimmingCharacters(in: .whitespacesAndNewlines)) + "\u{1F}"
+        let usage = Dictionary(uniqueKeysWithValues: Defaults[.launcherSelectionUsage].compactMap { key, value in
+            key.hasPrefix(prefix) ? (String(key.dropFirst(prefix.count)), value) : nil
+        })
+        return LauncherSearchContext(usage: usage, counts: Defaults[.launcherItemUseCounts],
+                                     lastUsed: Defaults[.launcherItemLastUsed])
     }
 
     /// Clears `isSearching` only if no newer `scheduleSearch` call has started

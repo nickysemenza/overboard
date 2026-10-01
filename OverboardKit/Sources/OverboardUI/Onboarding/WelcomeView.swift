@@ -16,17 +16,20 @@ public struct WelcomeView: View {
     /// `AppServices.openSettings(tab:)`.
     private let openShortcutSettings: () -> Void
     private let onDone: () -> Void
+    private let openPermissionSettings: (() -> Void)?
 
     @Environment(\.dismiss) private var dismiss
 
     public init(
         permissions: PermissionService = .shared,
         openShortcutSettings: @escaping () -> Void,
-        onDone: @escaping () -> Void
+        onDone: @escaping () -> Void,
+        openPermissionSettings: (() -> Void)? = nil
     ) {
         self.permissions = permissions
         self.openShortcutSettings = openShortcutSettings
         self.onDone = onDone
+        self.openPermissionSettings = openPermissionSettings
     }
 
     private var shortcuts: [WelcomeShortcut] {
@@ -51,36 +54,8 @@ public struct WelcomeView: View {
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            self.header
-
-            VStack(spacing: 10) {
-                ForEach(self.shortcuts) { shortcut in
-                    WelcomeShortcutRow(
-                        shortcut: shortcut,
-                        change: self.openShortcutSettings
-                    )
-                }
-            }
-
-            Divider()
-
-            VStack(alignment: .leading, spacing: 10) {
-                AccessibilityPermissionRow(permissions: self.permissions)
-                Text("Without it, items are copied and you press ⌘V yourself.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                CalendarPermissionRow(permissions: self.permissions)
-                Text("Optional — shows your next meeting in the launcher.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                LaunchAtLoginToggle()
-                Text("No account and no analytics — your clipboard stays on this Mac.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            Spacer(minLength: 0)
+            ScrollView { self.orientation }
+                .scrollIndicators(.hidden)
 
             HStack {
                 Text(self.footerHint)
@@ -102,6 +77,48 @@ public struct WelcomeView: View {
         .onAppear {
             self.permissions.refresh()
         }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            self.permissions.refresh()
+        }
+    }
+
+    private var orientation: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            self.header
+            VStack(spacing: 10) {
+                ForEach(self.shortcuts) { shortcut in
+                    WelcomeShortcutRow(shortcut: shortcut, change: self.openShortcutSettings)
+                }
+            }
+            Divider()
+            VStack(alignment: .leading, spacing: 10) {
+                AccessibilityPermissionRow(permissions: self.permissions)
+                Text("Without Accessibility access, Overboard still copies items. Press ⌘V in your app to paste.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if self.permissions.accessibility == .denied {
+                    HStack {
+                        Button("Review Paste Permissions") {
+                            if let openPermissionSettings = self.openPermissionSettings {
+                                openPermissionSettings()
+                            } else {
+                                self.permissions.openAccessibilitySettings()
+                            }
+                        }
+                        Button("Check Again", action: self.permissions.refresh)
+                    }
+                    .controlSize(.small)
+                }
+                CalendarPermissionRow(permissions: self.permissions)
+                Text("Optional — shows your next meeting in the launcher.")
+                    .font(.caption).foregroundStyle(.secondary)
+                LaunchAtLoginToggle()
+                Text("No account and no analytics — your clipboard stays on this Mac.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var header: some View {

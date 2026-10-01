@@ -16,7 +16,7 @@ extension ItemCardView {
                     Text(self.item.previewText ?? "Secret")
                         .font(.callout)
                         .foregroundStyle(.secondary)
-                    Text("Auto-expires soon")
+                    Text("Kept until deleted")
                         .font(.caption2)
                         .contrastAwareForeground(.tertiary)
                 }

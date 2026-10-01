@@ -55,16 +55,22 @@ public final class FileIndexService {
     public var onChange: () -> Void = {}
 
     var index: FileNameIndex?
-    private var scanTask: Task<Void, Never>?
+    private(set) var scanTask: Task<Void, Never>?
     var refreshTask: Task<Void, Never>?
     var eventStream: FSEventStreamRef?
     var dirtyPaths = Set<String>()
+    var dirtySubtrees = Set<String>()
+    var dirtyOrder: [String: Int] = [:]
+    var nextDirtyOrder = 0
     private var started = false
+    var lifecycleGeneration = 0
+    var isStopped = false
     var activeRoots: [URL] = []
     var activeExclusions: [String] = []
 
     private let rootsOverride: [URL]?
     private let exclusionsOverride: [String]?
+    let operations: FileIndexOperations
     /// Callers parked in ``nextReconcile()``, resumed by ``signalReconcile()``
     /// or, one at a time, by cancellation — hence keyed rather than a list.
     private var reconcileWaiters: [UUID: CheckedContinuation<Void, Never>] = [:]
@@ -73,6 +79,14 @@ public final class FileIndexService {
         self.index = index
         self.rootsOverride = roots
         self.exclusionsOverride = exclusions
+        self.operations = FileIndexOperations()
+    }
+
+    init(index: FileNameIndex, roots: [URL], operations: FileIndexOperations) {
+        self.index = index
+        self.rootsOverride = roots
+        self.exclusionsOverride = []
+        self.operations = operations
     }
 
     isolated deinit {
@@ -86,9 +100,17 @@ public final class FileIndexService {
     /// process `exit()` never runs — called explicitly from app shutdown
     /// (`AppServices.stop()`) so the stream doesn't survive to `exit()`.
     public func stop() {
+        self.isStopped = true
+        self.started = false
+        self.lifecycleGeneration += 1
         self.scanTask?.cancel()
         self.refreshTask?.cancel()
         self.stopWatching()
+        self.dirtyPaths.removeAll()
+        self.dirtySubtrees.removeAll()
+        self.dirtyOrder.removeAll()
+        self.isIndexing = false
+        self.signalReconcile()
     }
 
     public static var defaultRoots: [URL] {
@@ -116,11 +138,17 @@ public final class FileIndexService {
     }
 
     public func rebuild(clear: Bool = true) {
+        self.isStopped = false
+        self.lifecycleGeneration += 1
         let previousScan = self.scanTask
         let previousRefresh = self.refreshTask
         previousScan?.cancel()
         previousRefresh?.cancel()
         self.stopWatching()
+        self.dirtyPaths.removeAll()
+        self.dirtySubtrees.removeAll()
+        self.dirtyOrder.removeAll()
+        self.refreshTask = nil
         self.issues = []
         self.isIndexing = true
         self.status = "Preparing file search…"
@@ -134,10 +162,11 @@ public final class FileIndexService {
             .split(whereSeparator: \.isNewline).map(String.init)
         let roots = self.activeRoots
         let exclusions = self.activeExclusions
+        let lifecycle = self.lifecycleGeneration
         self.scanTask = Task {
             await previousScan?.value
             await previousRefresh?.value
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, self.lifecycleGeneration == lifecycle, !self.isStopped else { return }
             do {
                 try await self.runScan(roots: roots, exclusions: exclusions, clear: clear)
             } catch is CancellationError {
@@ -166,13 +195,16 @@ public final class FileIndexService {
         // seconds on a bloated pre-existing file (still under the
         // "Preparing file search…" status `rebuild()` set), a no-op ever after.
         _ = try await index.compactIfNeeded()
+        try Task.checkCancellation()
         if clear {
             try await index.reset()
         }
         try await index.retainRoots(roots.map(\.path))
         guard !Task.isCancelled else { return }
         self.watch(roots)
-        self.fileCount = try await index.count()
+        let initialCount = try await index.count()
+        try Task.checkCancellation()
+        self.fileCount = initialCount
         for root in roots {
             try await self.scanRoot(root, exclusions: exclusions, index: index)
             guard !Task.isCancelled else { return }
@@ -191,20 +223,21 @@ public final class FileIndexService {
         guard !Task.isCancelled else { return }
         self.status = "Indexing \(Self.locationName(root))…"
         let generation = UUID().uuidString
+        let request = FileIndexScanRequest(
+            root: root, exclusions: exclusions, generation: generation, index: index, roots: self.activeRoots
+        )
+        let scan = self.operations.scan
         let worker = Task.detached(priority: .utility) {
-            try await FileMetadataScanner.scan(
-                root: root,
-                exclusions: exclusions,
-                generation: generation,
-                index: index
-            )
+            try await scan(request)
         }
         let failures = try await withTaskCancellationHandler {
             try await worker.value
         } onCancel: { worker.cancel() }
         guard !Task.isCancelled else { return }
+        let fileCount = try await index.count()
+        try Task.checkCancellation()
         self.issues += failures
-        self.fileCount = try await index.count()
+        self.fileCount = fileCount
         self.onChange()
     }
 
@@ -250,8 +283,18 @@ public final class FileIndexService {
     }
 
     public func results(for query: String) async -> [LauncherResult] {
-        guard let index = self.index else { return [] }
-        do { return try await index.search(query) } catch {
+        await self.results(for: query, context: LauncherSearchContext())
+    }
+
+    public func results(for query: String, context: LauncherSearchContext) async -> [LauncherResult] {
+        let generation = self.lifecycleGeneration
+        guard !Task.isCancelled, !self.isStopped, let index = self.index else { return [] }
+        do {
+            let results = try await self.operations.search(index, query, context)
+            guard !Task.isCancelled, !self.isStopped, self.lifecycleGeneration == generation else { return [] }
+            return results
+        } catch {
+            guard !Task.isCancelled, !self.isStopped, self.lifecycleGeneration == generation else { return [] }
             self.status = "File search failed. Rebuild in Settings → Files."
             return []
         }
@@ -290,5 +333,9 @@ public struct IndexedFileSearchProvider: LauncherProvider {
 
     public func results(for query: String) async -> [LauncherResult] {
         await self.service.results(for: query)
+    }
+
+    public func results(for query: String, context: LauncherSearchContext) async -> [LauncherResult] {
+        await self.service.results(for: query, context: context)
     }
 }

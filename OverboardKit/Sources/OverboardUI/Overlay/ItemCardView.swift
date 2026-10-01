@@ -123,7 +123,7 @@ struct ItemCardView: View {
         // being a separate footer-only detail VoiceOver users can't reach.
         let copied = ", \(self.copiedCountPhrase.lowercased()), \(TimestampFormatter.absolute(self.item.lastUsedAt))"
         if self.item.isSecret {
-            return "\(app), secret item\(copied)"
+            return "\(app), secret item, kept until deleted\(copied)"
         }
         let preview = self.item.previewText?.trimmingCharacters(in: .whitespacesAndNewlines)
         if let preview, !preview.isEmpty {

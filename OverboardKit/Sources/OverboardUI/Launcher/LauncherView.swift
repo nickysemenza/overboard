@@ -17,15 +17,27 @@ public struct LauncherView: View {
     @Bindable var viewModel: LauncherViewModel
     let store: ClipStore
     @FocusState private var fieldFocused: Bool
+    var onAddClipToStack: ((ClipItem) -> Void)?
+    var onShowDrawer: (() -> Void)?
+    var onRunClipQuicklink: ((ClipItem, Quicklink) -> Void)?
 
-    public init(viewModel: LauncherViewModel, store: ClipStore) {
+    public init(
+        viewModel: LauncherViewModel, store: ClipStore, onAddClipToStack: ((ClipItem) -> Void)? = nil,
+        onShowDrawer: (() -> Void)? = nil, onRunClipQuicklink: ((ClipItem, Quicklink) -> Void)? = nil
+    ) {
         self.viewModel = viewModel
         self.store = store
+        self.onAddClipToStack = onAddClipToStack
+        self.onShowDrawer = onShowDrawer
+        self.onRunClipQuicklink = onRunClipQuicklink
     }
 
     public var body: some View {
         VStack(spacing: 0) {
-            LauncherSearchBar(viewModel: self.viewModel, fieldFocused: self.$fieldFocused)
+            LauncherSearchBar(
+                viewModel: self.viewModel, fieldFocused: self.$fieldFocused, onShowDrawer: self.onShowDrawer
+            )
+            .disabled(self.viewModel.isPaletteOpen)
             LauncherScopeBar(viewModel: self.viewModel)
             if self.viewModel.scope == .clipboard {
                 self.clipboardFilters
@@ -40,7 +52,7 @@ public struct LauncherView: View {
                         result: self.viewModel.selectedResult,
                         store: self.store,
                         query: self.viewModel.query,
-                        onOpen: { self.viewModel.commit() }
+                        onOpen: { self.viewModel.performPanelCommit(.paste) }
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
@@ -52,8 +64,15 @@ public struct LauncherView: View {
             // error banner, the divider, and the footer.
             .overlay(alignment: .bottom) {
                 if self.viewModel.isPaletteOpen {
-                    LauncherActionPalette(viewModel: self.viewModel)
+                    GeometryReader { geometry in
+                        LauncherActionPalette(
+                            viewModel: self.viewModel, onAddClipToStack: self.onAddClipToStack,
+                            onRunClipQuicklink: self.onRunClipQuicklink,
+                            maximumHeight: max(80, geometry.size.height - 16)
+                        )
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                         .padding(.bottom, 8)
+                    }
                 }
             }
             if let message = self.viewModel.statusMessage {
@@ -64,13 +83,11 @@ public struct LauncherView: View {
         }
         .glassPanel(cornerRadius: PanelRadius.launcher)
         .padding(12)
-        .onAppear { self.fieldFocused = true }
-        .onChange(of: self.viewModel.showGeneration) { self.fieldFocused = true }
-        .onChange(of: self.viewModel.scope) { self.fieldFocused = true }
+        .onAppear { self.fieldFocused = !self.viewModel.isPaletteOpen }
+        .onChange(of: self.viewModel.showGeneration) { self.fieldFocused = !self.viewModel.isPaletteOpen }
+        .onChange(of: self.viewModel.scope) { self.fieldFocused = !self.viewModel.isPaletteOpen }
         .onChange(of: self.viewModel.isPaletteOpen) {
-            if !self.viewModel.isPaletteOpen {
-                self.fieldFocused = true
-            }
+            self.fieldFocused = !self.viewModel.isPaletteOpen
         }
         .onChange(of: self.viewModel.query) { self.viewModel.scheduleSearch() }
         .onChange(of: self.viewModel.clipboardFilter) { self.viewModel.scheduleSearch() }

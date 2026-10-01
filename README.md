@@ -57,36 +57,29 @@ without it. The first time you copy from a browser, macOS also prompts for
 (capturing the page URL/title); declining just skips provenance for that
 browser. Settings → Permissions shows every one of these, plus whether Apple
 Intelligence is available and any folders the file index couldn't read, and
-can ask for them again. No analytics, no account. Network is used only for one opt-outable feature: fetching
-link-preview metadata (page title, favicon, description, og:image — toggle in
-Settings → General). All clipboard data stays on your machine.
+can ask for them again. No analytics, no account, and no background network
+requests for clipboard enrichment. All clipboard data stays on your machine.
 
 ### Network activity
 
-Overboard makes exactly one kind of outbound request, on by default but
-toggleable, and it never sends any of your clipboard content:
-
-- **Link-preview metadata** — fetches a copied page's title, favicon,
-  description, and og:image. Toggle: Settings → General → "Fetch link titles
-  and icons".
-
-It uses an ephemeral `URLSession` with cookie storage and the URL cache
-disabled, so the request can't read or leave behind cookies, and nothing is
-cached to disk. The app does not check for updates itself — `brew upgrade`
-is the update path.
+Link previews use previously stored metadata and local assets only. There is
+no remote metadata fetch or background backfill. Explicitly opening a link,
+web search, quicklink, or meeting link delegates to the destination application;
+review the destination before opening it. The app does not check for updates
+itself — `brew upgrade` is the update path.
 
 ## Features
 
 - **Capture**: clipboard history for text, rich text, links, images, files,
   and colors, with content-hash dedupe and source-app attribution.
 - **Card metadata**: text cards display character and line counts; images show
-  pixel dimensions; file cards display item counts. Rich link cards fetch page
-  title, favicon, description, and og:image preview (toggle in Settings).
+  pixel dimensions; file cards display item counts. Link cards can display
+  existing titles and images without fetching the copied URL.
 - **Back-to-source**: clips copied from Safari/Chrome/Arc/Brave/Edge/Vivaldi
   remember the page URL and title; "Open Source Page" action in Quick Look
   and context menu. First copy per browser triggers a macOS Automation prompt.
 - **Drawer** (⌘⇧V): bottom overlay over any app that never steals focus.
-  Type to search, ←/→ or ⌘1–9 to select, ↩ to paste, ⇧↩ plain text,
+  Type to search, ←/→ or ⌘1–9 to select, ↩ to paste, ⌘↩ to copy, ⇧↩ plain text,
   ⌘P pin, ⌘⌫ delete, esc to dismiss. Drag cards out to other apps.
 - **Launcher** (⌥Space): **All · Files · Clipboard · Apps**, with ⌘1–4 to
   switch scopes. Exact names and aliases rank above path/word matches and fuzzy
@@ -104,11 +97,12 @@ is the update path.
   Settings → Files controls roots, exclusions, rebuilding, and indexing status.
   Indexing reads metadata only. Cloud files download only when **Download & Open**
   is chosen; selecting or highlighting a result does not read its contents.
-- **Clipboard browser**: choose Clipboard scope or **Browse History** in the
-  existing bottom drawer for a large adjacent content preview. Filter by type,
+- **Clipboard browser**: the launcher opens in Clipboard scope; All, Files,
+  and Apps remain available. **Browse History** transfers the drawer's query,
+  selected clip, and target application. The content preview is optional. Filter by type,
   source app, date, or pins; OCR is searchable. Browsing groups by time, search
   ranks by relevance, and both views use the same history and paste-back service.
-- **Launcher extras**: inline calculator (`15% of 80` → ↩ copies, ⌘↩ pastes),
+- **Launcher extras**: inline calculator (`15% of 80` → ↩ pastes, ⌘↩ copies),
   app initials and custom aliases (`sm` matches Sublime Merge), snippets, system
   settings, now playing, and Ask AI stay available in All. **⌘K** opens per-row
   actions. Running apps have indicator dots and Switch to / Quit App actions.
@@ -119,7 +113,7 @@ is the update path.
   while Overboard runs — re-record it in Settings to get the system one back.
 - **Launcher commands**: `:stats` (word/char/line stats), `:pause` / `:resume`
   (toggles clipboard capture; menu-bar indicator), `:clear` (clears history,
-  keeps pins), `:settings`, `:version`. Plus `:` to open the commands palette.
+  keeps pins and secrets), `:settings`, `:version`. Plus `:` to open the commands palette.
 - **System actions**: `lock` / `sleep` / `restart` rows run Lock Screen, Sleep,
   and Restart without leaving the launcher.
 - **Audio output**: switch the system's default output device from a launcher
@@ -133,11 +127,13 @@ is the update path.
   temperature, and more inline, alongside the calculator.
 - **Calendar**: an up-next row above Now Playing, plus `cal` / `today` /
   `tomorrow` listings, with one-key join and Open in Calendar actions.
-- **Backup**: Settings → History exports the library to a folder of NDJSON plus
-  the large payloads it references, and imports one back (skipping clips you
-  already have, by content hash). Detected secrets are left out unless asked
-  for — they're TTL-limited on purpose. `overboard export <dir>` writes the same
-  archive from the shell; restoring is app-only, since it writes to the store.
+- **Backup**: Settings → History exports a versioned whole-library folder:
+  history, payloads, pins, snippets, preferences, quicklinks, aliases, hotkeys,
+  and learned ranking. Exports are unencrypted; detected secrets are excluded
+  by default and require explicit plaintext opt-in. Imports validate limits,
+  paths, references, and checksums before merging content, and can repair
+  missing payloads on a later reimport. OS permission grants are never backed up.
+  Failed replacement leaves an existing good backup intact.
 - **Shortcuts, Siri & Spotlight**: App Intents for Copy Latest Clip, Search
   Clipboard History, Copy Snippet (with a snippet picker), Set Clipboard
   Capture, Show Drawer, and Show Launcher. Clips themselves are never exposed
@@ -145,7 +141,7 @@ is the update path.
 - **Search**: FTS5 full-text with prefix matching, blended with on-device
   semantic search (NLEmbedding) so "money projection" finds "quarterly
   revenue forecast". Filter operators: `kind:image`, `app:claude`,
-  `category:code`. Searchable by link page title when preview fetch is enabled.
+  `category:code`. Previously stored link titles remain searchable.
   All search happens on-device.
 - **Quick Look & edit**: space (or ⌘Y) expands the drawer into a full-content
   preview — scroll long text, see images large, browse with ←/→, view source-page
@@ -167,25 +163,36 @@ is the update path.
   short auto-generated titles and category badges (code, error, address, …),
   and the card menu gains AI transforms — summarize, fix grammar, make
   formal/casual, extract action items.
-- **Paste-back**: synthesized ⌘V into the app you were in, then your previous
-  clipboard is restored. Falls back to copy + HUD without Accessibility.
-- **Paste stack**: ⌘↩ queues items in the drawer; ⌥⌘V pastes them one by one.
+- **Paste-back**: cancellable delivery publishes the selected representations,
+  dispatches ⌘V into the target app, and restores only its own clipboard
+  generation. A dispatched key is not confirmation that the target consumed
+  the paste. Missing Accessibility permission retains a useful copy-only path.
+- **Paste stack**: ⌘⇧↩ queues clips; ⌥⌘V dispatches them one by one. Entries
+  are reserved during delivery and retained on cancellation or failure.
 - **Snippets** (⌘/ in drawer): saved templates with `{date}` `{time}`
   `{datetime}` `{uuid}` `{clipboard}` placeholders, managed from the menu bar.
+  Named arguments (`{{name}}`), defaults (`{{name|friend}}`), and formatted dates
+  (`{{date:yyyy-MM-dd}}`) add a reviewable argument dialog. Context is captured
+  once per invocation; cancelling does not touch the clipboard. Revision-aware
+  saves preserve dirty drafts and report conflicts.
 - **Transforms**: right-click → Paste Transformed (strip tracking params,
   trim, change case).
 - **Privacy**: password managers and concealed/transient pasteboards are
   never captured; detected secrets (AWS keys, JWTs, API tokens, PEM keys,
   card numbers, and credential-bearing links like presigned URLs or magic
-  logins) are masked, unsearchable, kept off the network, and auto-expire;
-  per-app plain-text paste rules for terminals. All data and search stay
-  on-device except the optional link-preview fetch.
+  logins) are masked, unsearchable, and excluded from enrichment and exports
+  by default. Secrets survive automatic age/count cleanup, including after
+  unpinning, until manually deleted. Per-app plain-text paste rules remain
+  available for terminals. Sensitive source markers are checked before reads.
 
   Secret payloads are retained in cleartext in the on-device SQLite store
-  for their short TTL (paste needs the original bytes); the store lives in a
-  `0700` directory and secrets are swept on a ~10-minute leash, but they are
-  not separately encrypted at rest, so a full-disk backup taken inside that
-  window can include them.
+  indefinitely (paste needs the original bytes). The store lives in a `0700`
+  directory, but is not separately encrypted at rest: local filesystem access
+  and full-disk backups can expose payloads. This plaintext model is deliberate.
+  A failed database open stops acquisition and presents recovery options rather
+  than silently substituting an empty library. Schema upgrades preserve a
+  coherent pre-migration SQLite snapshot under `migration-backups`. Previously
+  deleted payloads cannot be recreated without an existing backup.
 
 <p align="center">
   <img src="docs/screenshots/preview.png" width="900" alt="Quick Look preview pane showing a syntax-highlighted Swift snippet">
@@ -199,7 +206,7 @@ is the update path.
 
 <p align="center">
   <img src="docs/screenshots/multiselect.png" width="900" alt="Three cards multi-selected with a Stack: 2 badge in the search bar">
-  <br><em>Multi-select (⇧→) and the paste stack (⌘↩ to queue, ⌥⌘V to paste one by one)</em>
+  <br><em>Multi-select (⇧→) and the paste stack (⌘⇧↩ to queue, ⌥⌘V to paste one by one)</em>
 </p>
 
 <p align="center">

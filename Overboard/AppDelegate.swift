@@ -73,7 +73,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ) { notification in
                 let command = notification.object as? String
                 MainActor.assumeIsolated {
-                    obTrace("debug command received: \(command ?? "nil")")
+                    obTrace("debug command received")
                     Self.handleDebugCommand(command)
                 }
             }

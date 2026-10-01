@@ -12,7 +12,9 @@ public struct QueryRouter: Sendable {
         self.providers = providers
     }
 
-    public func results(for query: String, scope: LauncherScope = .all) async -> [LauncherResult] {
+    public func results(for query: String, scope: LauncherScope = .all,
+                        context: LauncherSearchContext = LauncherSearchContext()) async -> [LauncherResult]
+    {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty || scope != .all else { return [] }
         // Providers run concurrently — Spotlight gathers dominate and would
@@ -20,7 +22,7 @@ public struct QueryRouter: Sendable {
         let providers = self.providers.filter { $0.searchScopes.contains(scope) }
         return await withTaskGroup(of: (Int, [LauncherResult]).self) { group in
             for (index, provider) in providers.enumerated() {
-                group.addTask { await (index, provider.results(for: trimmed)) }
+                group.addTask { await (index, provider.results(for: trimmed, context: context)) }
             }
             var buckets = [[LauncherResult]](repeating: [], count: providers.count)
             for await (index, results) in group {
@@ -49,6 +51,11 @@ public struct ConditionalProvider: LauncherProvider {
     public func results(for query: String) async -> [LauncherResult] {
         guard self.isEnabled() else { return [] }
         return await self.base.results(for: query)
+    }
+
+    public func results(for query: String, context: LauncherSearchContext) async -> [LauncherResult] {
+        guard self.isEnabled() else { return [] }
+        return await self.base.results(for: query, context: context)
     }
 }
 
