@@ -63,6 +63,7 @@ runs:
           -scheme Overboard \
           -configuration Release \
           -derivedDataPath build \
+          -disableAutomaticPackageResolution -onlyUsePackageVersionsFromResolvedFile \
           CODE_SIGN_STYLE=Manual \
           CODE_SIGN_IDENTITY="Developer ID Application" \
           DEVELOPMENT_TEAM=Y9A97FXT63 \

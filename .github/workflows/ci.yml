@@ -82,7 +82,7 @@ jobs:
       # "percentage of pixels that match 0.13" line into something you can
       # actually diff against the checked-in reference.
       - name: Run tests
-        run: swift test --package-path OverboardKit -Xswiftc -warnings-as-errors
+        run: swift test --package-path OverboardKit --disable-automatic-resolution -Xswiftc -warnings-as-errors
         env:
           SNAPSHOT_ARTIFACTS: ${{ runner.temp }}/snapshot-artifacts
 
@@ -106,7 +106,7 @@ jobs:
           {
             echo '### File index benchmark'
             echo '```'
-            swift run --package-path OverboardKit -c release file-index-benchmark
+            swift run --package-path OverboardKit --disable-automatic-resolution -c release file-index-benchmark
             echo '```'
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
@@ -182,6 +182,7 @@ jobs:
             -scheme Overboard \
             -configuration Release \
             -derivedDataPath build \
+            -disableAutomaticPackageResolution -onlyUsePackageVersionsFromResolvedFile \
             CODE_SIGNING_ALLOWED=NO \
             build
 
