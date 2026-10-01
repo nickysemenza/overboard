@@ -1,0 +1,359 @@
+Overboard/AppDelegate.swift
+  s_bbbb00d9107849::t_0a2d4d9cd019f1 76
+Overboard/AppServices+Actions.swift
+  s_bbbb00d9107849::t_732fe587afe553 30-31,34-40,42-57
+Overboard/AppServices+Callbacks.swift
+  s_bbbb00d9107849::t_da94591d4fb85d 12-14,20,27-30,52-55,58,85-89,96,98,109,164-166,177-178,180-181,186,189,243
+Overboard/AppServices+Capture.swift
+  s_bbbb00d9107849::t_698a31872f80be 12-13,16,19,21-25,32-61,82,106,116,126,134-135,137,147,150-152,156,161,178
+Overboard/AppServices+Hotkeys.swift
+  s_bbbb00d9107849::t_cb966d3e3630bf 9-10,14-15,19-20,24-27,30-40,42
+Overboard/AppServices+Init.swift
+  s_bbbb00d9107849::t_34707cb209f323 25,31,36,39,50
+Overboard/AppServices+Lifecycle.swift
+  s_bbbb00d9107849::t_617332d8f686af 1-61
+Overboard/AppServices+Quicklinks.swift
+  s_bbbb00d9107849::t_050ded058e6511 1-62
+Overboard/AppServices+Snippets.swift
+  s_bbbb00d9107849::t_7b3b78883f68b8 1-94
+Overboard/AppServices+Windows.swift
+  s_bbbb00d9107849::t_0e7ed16b90a5b8 10,25,28-57
+Overboard/AppServices.swift
+  s_bbbb00d9107849::t_fa6e3245abfea1 59,62,64,78-81,101-106,111-113,121-122,124-127,140,154,167-174,176-189,196,199,211-212,214-227,233,254
+Overboard/Intents/CopyLatestClipIntent.swift
+  s_bbbb00d9107849::t_fa22547005b776 19,31
+Overboard/Intents/CopySnippetIntent.swift
+  s_bbbb00d9107849::t_cfa8f89fcd0daa 33,43-46
+Overboard/Intents/IntentDependencies.swift
+  s_bbbb00d9107849::t_429d5b2f2d953a 1,18-19,27-30,36-53,58-69
+Overboard/Intents/SearchClipboardIntent.swift
+  s_bbbb00d9107849::t_399eed7590b7f0 23
+Overboard/Intents/SnippetEntity.swift
+  s_bbbb00d9107849::t_440e2b22b2e8e9 24,32,38
+Overboard/OverboardApp.swift
+  s_bbbb00d9107849::t_4f4f3af9312260 9,14-18,95,131-132
+OverboardKit/Benchmarks/FileIndexBenchmark/Main.swift
+  s_bbbb00d9107849::t_95b4e795fd43e3 43-44,70-99,105,107
+OverboardKit/Sources/OverboardCore/Capture/AutoTransform.swift
+  s_bbbb00d9107849::t_ab6c92a7713f82 45-60
+OverboardKit/Sources/OverboardCore/Capture/CaptureAdmission.swift
+  s_bbbb00d9107849::t_9b19029c300aa3 1-20
+OverboardKit/Sources/OverboardCore/Capture/CaptureClassifier.swift
+  s_bbbb00d9107849::t_a0014d7ce7c0ea 33,42-43,48-49,53-54,56,64,86,98-112,114,118,170,173-189
+OverboardKit/Sources/OverboardCore/Capture/ClipEnrichmentPipeline.swift
+  s_bbbb00d9107849::t_649dae7a39eaa2 4,9,30,32,53-58,65,69-73,80-82,101,103-104,119
+OverboardKit/Sources/OverboardCore/Capture/ClipSensitivity.swift
+  s_bbbb00d9107849::t_ef42fae3e082cb 1-48
+OverboardKit/Sources/OverboardCore/Capture/PasteboardSnapshot.swift
+  s_bbbb00d9107849::t_3d20c66c89775a 10,12,15,27,35-36,44
+OverboardKit/Sources/OverboardCore/Capture/TemplateEngine.swift
+  s_bbbb00d9107849::t_c023a7b595af75 3-18,20-25,27-36,38-41,43-49,51-53,55-57,60-65,68-72,75-77,80,82-87,92-103,105,108,111-119,122-131,134-139,141-166,168,170,174-179,181-185,188-197,199-207
+OverboardKit/Sources/OverboardCore/Launcher/LauncherResult.swift
+  s_bbbb00d9107849::t_7603fe5217063d 74,78-81,86-115
+OverboardKit/Sources/OverboardCore/Launcher/QueryRouter.swift
+  s_bbbb00d9107849::t_5c9c0adeaa73d7 15-17,25,55-59
+OverboardKit/Sources/OverboardCore/Launcher/Quicklink.swift
+  s_bbbb00d9107849::t_6c0e1ecf0faf3b 7-21,36-50,52-88
+OverboardKit/Sources/OverboardCore/Models/EnrichmentSettings.swift
+  s_bbbb00d9107849::t_6f984886e3abf1 1-17
+OverboardKit/Sources/OverboardCore/Models/Representation.swift
+  s_bbbb00d9107849::t_0bc47389955ddb 17,25-26,34
+OverboardKit/Sources/OverboardCore/Models/Snippet.swift
+  s_bbbb00d9107849::t_de4017e2248537 37-44
+OverboardKit/Sources/OverboardCore/Search/FileNameIndex+Schema.swift
+  s_bbbb00d9107849::t_137c700dd06cfb 1-74
+OverboardKit/Sources/OverboardCore/Search/FileNameIndex+Search.swift
+  s_bbbb00d9107849::t_8bbf3741a237fb 1-228
+OverboardKit/Sources/OverboardCore/Search/FileNameIndex.swift
+  s_bbbb00d9107849::t_b2293af7dfcb80 15,19,22-23,30,40-46,95,138,143,157-162,173
+OverboardKit/Sources/OverboardCore/Search/IndexedFile.swift
+  s_bbbb00d9107849::t_6f3af808b751d7 1-47
+OverboardKit/Sources/OverboardCore/Store/ArchiveIO.swift
+  s_bbbb00d9107849::t_cc009386240732 1-240
+OverboardKit/Sources/OverboardCore/Store/ArchiveImport.swift
+  s_bbbb00d9107849::t_74660290320b7f 1-189
+OverboardKit/Sources/OverboardCore/Store/ArchiveSensitivity.swift
+  s_bbbb00d9107849::t_d3cd158838173e 1-74
+OverboardKit/Sources/OverboardCore/Store/ArchiveSnapshot.swift
+  s_bbbb00d9107849::t_7b04390d322931 1-145
+OverboardKit/Sources/OverboardCore/Store/ArchiveValidation.swift
+  s_bbbb00d9107849::t_0fe04d5df6cd42 3-8,10-19,21-38,42-62
+OverboardKit/Sources/OverboardCore/Store/ClipArchive.swift
+  s_bbbb00d9107849::t_10f1fa248d36af 50-53,57-125,135,175,197,208,234,250,253-261,267-273,288-289,291-292,295-296,298,300,303-304,306-308
+OverboardKit/Sources/OverboardCore/Store/ClipStore+Archive.swift
+  s_bbbb00d9107849::t_3a2282cae41a90 4-13,16-31,33-34,38-54,56-64,66-69,71-79,81-83,87-90,92-96,98-101
+OverboardKit/Sources/OverboardCore/Store/ClipStore+Cancellation.swift
+  s_bbbb00d9107849::t_ba8c4f1eb00f9a 1-35
+OverboardKit/Sources/OverboardCore/Store/ClipStore+Counters.swift
+  s_bbbb00d9107849::t_7752911a9d4463 1-58
+OverboardKit/Sources/OverboardCore/Store/ClipStore+Enrichment.swift
+  s_bbbb00d9107849::t_8df73bef812030 12-14,16-17,20,22-29,41,43-44,47,60,63-66,71,113,118-119,127,130-133,138,140,148,174-175
+OverboardKit/Sources/OverboardCore/Store/ClipStore+Maintenance.swift
+  s_bbbb00d9107849::t_1fdc684fc07ebc 9,23,34,44-45,53,64-66,75,77,81-83,85,89,114-134,145,149,237
+OverboardKit/Sources/OverboardCore/Store/ClipStore+Materialization.swift
+  s_bbbb00d9107849::t_6d8c32ab7924c9 1-54
+OverboardKit/Sources/OverboardCore/Store/ClipStore+Semantic.swift
+  s_bbbb00d9107849::t_427ee4f12ef7f2 8-9,14,16-20,48,67,92,131
+OverboardKit/Sources/OverboardCore/Store/ClipStore+Sensitivity.swift
+  s_bbbb00d9107849::t_ead3c627bdb538 1-31
+OverboardKit/Sources/OverboardCore/Store/ClipStore+Snippets.swift
+  s_bbbb00d9107849::t_b25bf2bd5f631e 1-80
+OverboardKit/Sources/OverboardCore/Store/ClipStore.swift
+  s_bbbb00d9107849::t_5405d7d082e3c6 25,28-30,90-103,106-110,114-115,134,158-160,163-165,167-170,191-192,196-198,244-245,248,262-270,289,334,339
+OverboardKit/Sources/OverboardCore/Store/Database+Recovery.swift
+  s_bbbb00d9107849::t_34678bed0826a6 1-60
+OverboardKit/Sources/OverboardCore/Store/Database.swift
+  s_bbbb00d9107849::t_1c5a13bbdf7c60 25,236-239
+OverboardKit/Sources/OverboardCore/Store/MaintenanceScheduler.swift
+  s_bbbb00d9107849::t_80439624a9b1a7 4-5,10,22
+OverboardKit/Sources/OverboardCore/Store/PreparedArchive.swift
+  s_bbbb00d9107849::t_c00c78d969cc88 3-27,29-41,44-45,47,49-66,69-83,85-91,93-94,96-98,100-101,103,106-115,119-132,134,137-147,150-156,158-161,165-168,170-173
+OverboardKit/Sources/OverboardMac/Actions/ClipActionExecutor.swift
+  s_bbbb00d9107849::t_41b83880ca651b 61,64,93-104,111-117,119-120,123-124,126
+OverboardKit/Sources/OverboardMac/AppIndex.swift
+  s_bbbb00d9107849::t_c52f7c912be653 17-18,20-24,30-36,39,98-101,116,118-119
+OverboardKit/Sources/OverboardMac/AppPreferences.swift
+  s_bbbb00d9107849::t_34b0c05cacad47 7-18,22-27,30,34,38,40,42,44-48,50-54,56,59-63,65,68,70-74,76-91,94-95,102-106,109-113,115,118,122-126,130-134
+OverboardKit/Sources/OverboardMac/ArchivePreferencesAdapter.swift
+  s_bbbb00d9107849::t_fae5600ea51489 1-153
+OverboardKit/Sources/OverboardMac/BoundedEnrichmentQueue.swift
+  s_bbbb00d9107849::t_adbd205e0150f6 1-82
+OverboardKit/Sources/OverboardMac/BrowserProvenanceRequest.swift
+  s_bbbb00d9107849::t_4876ab7b1e509c 1-59
+OverboardKit/Sources/OverboardMac/BrowserProvenanceService.swift
+  s_bbbb00d9107849::t_8c765dc83a8fe7 67-90,92-93
+OverboardKit/Sources/OverboardMac/CalendarSource.swift
+  s_bbbb00d9107849::t_1b199b6be725bb 30-31,35-42,48-62,92-99,113-119,124,137-139,142-150,153-157,162-208
+OverboardKit/Sources/OverboardMac/ClipboardMonitor.swift
+  s_bbbb00d9107849::t_3e908cd604ccb1 27-28,32-38,43,45-48,53-79,84-86,99,105-117,124,127-128,132-144,150,154-155,159-165,170-172,176-199,201
+OverboardKit/Sources/OverboardMac/FileIndexService+Operations.swift
+  s_bbbb00d9107849::t_693a52bfb03d50 1-39
+OverboardKit/Sources/OverboardMac/FileIndexService+Scan.swift
+  s_bbbb00d9107849::t_6f3242da0ee2f0 20-25,27-28,35-36,40-42,49-50,52-53,59-119,125-126,131-141,148,154,158-160,180-219,224,248-249
+OverboardKit/Sources/OverboardMac/FileIndexService+Watch.swift
+  s_bbbb00d9107849::t_0e0ab7b2bbef2a 7-9,11-13,23,26-32,40-42,47-51,53-78,80-103,105-107,116,118,120-122,150,160-162,164-165
+OverboardKit/Sources/OverboardMac/FileIndexService.swift
+  s_bbbb00d9107849::t_39138eeef3a70c 58,62-64,66-67,73,82-89,103-105,109-113,141-142,148-151,165,169,198,205-207,226-229,231,237-238,240,286-297,337-340
+OverboardKit/Sources/OverboardMac/PastebackService+Clipboard.swift
+  s_bbbb00d9107849::t_0fb155fb53d8af 1-78
+OverboardKit/Sources/OverboardMac/PastebackService+Delivery.swift
+  s_bbbb00d9107849::t_33ca82ff973201 1-175
+OverboardKit/Sources/OverboardMac/PastebackService+Payloads.swift
+  s_bbbb00d9107849::t_2e2f1a3f2df2d7 1-109
+OverboardKit/Sources/OverboardMac/PastebackService.swift
+  s_bbbb00d9107849::t_3e980d7b8bab79 6-14,16-18,20-26,28,30-84,86-93,97,101-104,106-119,121-122,124,127-133,135-137,140-141,144-149,151,154,156-159,164
+OverboardKit/Sources/OverboardMac/SpotifyNowPlayingMonitor.swift
+  s_bbbb00d9107849::t_db68a33ee14b19 22-23,27-30,34,43-60,63-66,79,94,103-106,115,123-125,128-129,132-158,160-168,172-176,180-183
+OverboardKit/Sources/OverboardUI/Chrome/ClipboardBrowserHandoff.swift
+  s_bbbb00d9107849::t_a2bd71d219f71c 1-13
+OverboardKit/Sources/OverboardUI/Chrome/NativePaletteQueryField.swift
+  s_bbbb00d9107849::t_9e9838b9b5160b 1-55
+OverboardKit/Sources/OverboardUI/Chrome/NativePanelKeyRouting.swift
+  s_bbbb00d9107849::t_614b0a486f32ac 1-46
+OverboardKit/Sources/OverboardUI/Chrome/PanelActionMetadata.swift
+  s_bbbb00d9107849::t_953ddfd934ea13 1-45
+OverboardKit/Sources/OverboardUI/Chrome/PanelFooterBar.swift
+  s_bbbb00d9107849::t_a90c3dfec3d6ca 45,51,59,62-69,71-74
+OverboardKit/Sources/OverboardUI/Chrome/SecretBadge.swift
+  s_bbbb00d9107849::t_76e8eb2e05b556 17
+OverboardKit/Sources/OverboardUI/Chrome/SelectedClipQuicklinks.swift
+  s_bbbb00d9107849::t_a54ad9c4f996af 1-16
+OverboardKit/Sources/OverboardUI/DebugTrace.swift
+  s_bbbb00d9107849::t_63f1f5fd134301 1,5-9,12-37
+OverboardKit/Sources/OverboardUI/Emoji/EmojiPickerView.swift
+  s_bbbb00d9107849::t_92f77de7a357fc 10,31-34,55,73-85
+OverboardKit/Sources/OverboardUI/Launcher/LauncherActionPalette.swift
+  s_bbbb00d9107849::t_a9247ca9bb2a86 8-10,14-17,22-23,29-34
+OverboardKit/Sources/OverboardUI/Launcher/LauncherPanelController+Handoff.swift
+  s_bbbb00d9107849::t_1820cc769189ff 1-57
+OverboardKit/Sources/OverboardUI/Launcher/LauncherPanelController+Keys.swift
+  s_bbbb00d9107849::t_07d0209e55a8c0 59-63,68,83-89,92-94,97-99,124-125,139
+OverboardKit/Sources/OverboardUI/Launcher/LauncherPanelController+Panel.swift
+  s_bbbb00d9107849::t_b50a0997e48410 21-29
+OverboardKit/Sources/OverboardUI/Launcher/LauncherPanelController.swift
+  s_bbbb00d9107849::t_f3e68453fe3779 25-26,42-44,267-271,274-275,301,322-324
+OverboardKit/Sources/OverboardUI/Launcher/LauncherRow.swift
+  s_bbbb00d9107849::t_d09996c57a31d4 97,102-108
+OverboardKit/Sources/OverboardUI/Launcher/LauncherView+Parts.swift
+  s_bbbb00d9107849::t_da55b0046001cd 11,30-33,93-95,132
+OverboardKit/Sources/OverboardUI/Launcher/LauncherView.swift
+  s_bbbb00d9107849::t_6452eaa82e9b04 20-22,24-27,30-32,37-40,55,67-73,75,86-88,90
+OverboardKit/Sources/OverboardUI/Launcher/LauncherViewModel+Handoff.swift
+  s_bbbb00d9107849::t_79d80715c95323 1-23
+OverboardKit/Sources/OverboardUI/Launcher/LauncherViewModel+Search.swift
+  s_bbbb00d9107849::t_c436d3a0bf74e7 15,32,34,56,71-72,105,109,111,130,134-144,149-150,153-154,160,176,179-182,187,192-213,227,232-247
+OverboardKit/Sources/OverboardUI/Launcher/LauncherViewModel+SharedActions.swift
+  s_bbbb00d9107849::t_0f8265eb30a6b8 1-110
+OverboardKit/Sources/OverboardUI/Launcher/LauncherViewModel.swift
+  s_bbbb00d9107849::t_4d049e2aeb1370 50,103,119-120,124-125,208-209,221-224,256-257,260,267
+OverboardKit/Sources/OverboardUI/Onboarding/WelcomeView.swift
+  s_bbbb00d9107849::t_0f504db26534d3 19,26-27,32,57-58,80-121
+OverboardKit/Sources/OverboardUI/Overlay/ActionPalette.swift
+  s_bbbb00d9107849::t_25fa9597c9d69e 9,14,19-20,26-27
+OverboardKit/Sources/OverboardUI/Overlay/CommandPaletteView.swift
+  s_bbbb00d9107849::t_ef969b56be3b38 12,27-28,41,58-65,69-71,99,108-117,153
+OverboardKit/Sources/OverboardUI/Overlay/DrawerView+CardStrip.swift
+  s_bbbb00d9107849::t_442c0c48ebda7d 92,98-107,165
+OverboardKit/Sources/OverboardUI/Overlay/DrawerView.swift
+  s_bbbb00d9107849::t_f52ceaf5da84f8 9-10,28-29,53-61,78,90,95,109
+OverboardKit/Sources/OverboardUI/Overlay/DrawerViewModel+Actions.swift
+  s_bbbb00d9107849::t_a2f4e77489d791 6-27,89,110
+OverboardKit/Sources/OverboardUI/Overlay/DrawerViewModel+Palette.swift
+  s_bbbb00d9107849::t_7a5df1b612ac1c 11-12,22-24,26-33,41-42,44,46,56-57,76,82-85,87,97-107,113,116,121-122,130,138,147,150-156,170-172,219-222
+OverboardKit/Sources/OverboardUI/Overlay/DrawerViewModel+Selection.swift
+  s_bbbb00d9107849::t_83ad9b7ef5dce1 6-9
+OverboardKit/Sources/OverboardUI/Overlay/DrawerViewModel.swift
+  s_bbbb00d9107849::t_61d6424f5dec1b 50-51,69-71,159-160,175,209-210,221-233,238-241,252,256-258,271-272,276-277,280-281,287-288,293-311
+OverboardKit/Sources/OverboardUI/Overlay/ItemCardView+Bodies.swift
+  s_bbbb00d9107849::t_e7d2043d5ad087 19
+OverboardKit/Sources/OverboardUI/Overlay/ItemCardView.swift
+  s_bbbb00d9107849::t_d4706c026b7674 126
+OverboardKit/Sources/OverboardUI/Overlay/OverlayController+Keyboard.swift
+  s_bbbb00d9107849::t_45ea8cf6dada96 12-18,82,102-103,114,124,204-206
+OverboardKit/Sources/OverboardUI/Overlay/OverlayController.swift
+  s_bbbb00d9107849::t_99d7935136e759 25-36,45,58-67,118,121-125,180-190,192-194,212,217
+OverboardKit/Sources/OverboardUI/Overlay/PasteStack.swift
+  s_bbbb00d9107849::t_7f58ffaa5ec441 1,10-14,16,29-52,56
+OverboardKit/Sources/OverboardUI/Settings/FileSearchSettingsTab.swift
+  s_bbbb00d9107849::t_8bef871c485482 1,9,23-26,85,92-94,103,107,115,117-118,122-123,127
+OverboardKit/Sources/OverboardUI/Settings/GeneralSettingsTab.swift
+  s_bbbb00d9107849::t_720604c11245fb 71-74,95,101-102
+OverboardKit/Sources/OverboardUI/Settings/HistorySettingsTab+Backup.swift
+  s_bbbb00d9107849::t_a92e78a099730c 3,10-27,42-44,50,67-82,87-90,97,135-140,176-188
+OverboardKit/Sources/OverboardUI/Settings/HistorySettingsTab.swift
+  s_bbbb00d9107849::t_8df5b9f599219b 38,41-48,82
+OverboardKit/Sources/OverboardUI/Settings/LauncherConfigurationDraft.swift
+  s_bbbb00d9107849::t_3510fde6398401 2,4-6,8-15,17-19,21,23-27,29,31-33,35-50,54-70,72-75,77,79,81-85,88-92
+OverboardKit/Sources/OverboardUI/Settings/LauncherConfigurationEditor.swift
+  s_bbbb00d9107849::t_cc1afcc4dfb7e4 1-148
+OverboardKit/Sources/OverboardUI/Settings/SettingsTextListEditor.swift
+  s_bbbb00d9107849::t_4dd14161fade26 21
+OverboardKit/Sources/OverboardUI/Settings/SettingsView.swift
+  s_bbbb00d9107849::t_5914c534ac81ae 72-73,80,84-85,88-90,129
+OverboardKit/Sources/OverboardUI/Settings/TypedSettingsCoordinator.swift
+  s_bbbb00d9107849::t_ffba3e6f9f5e26 1-91
+OverboardKit/Sources/OverboardUI/Snippets/SnippetsManagerView.swift
+  s_bbbb00d9107849::t_15181b40acf114 12-29,32-41,54,60-61,73-84,89-90,92-97,101-106,112-118,126,128,131-135,139-158,162-170,174-185,231-246,279-284,286,290-299,304
+OverboardKit/Tests/OverboardCoreTests/ArchiveLifecycleTests.swift
+  s_bbbb00d9107849::t_f947027d3353f6 1-358
+OverboardKit/Tests/OverboardCoreTests/ArchivePrivacyTests.swift
+  s_bbbb00d9107849::t_3cb1f232d5075b 1-117
+OverboardKit/Tests/OverboardCoreTests/ArchiveRevisionValidationTests.swift
+  s_bbbb00d9107849::t_6c822deac54a74 1-114
+OverboardKit/Tests/OverboardCoreTests/ArchiveTestHarness.swift
+  s_bbbb00d9107849::t_8c53eb8f007e64 1-74
+OverboardKit/Tests/OverboardCoreTests/AttachLinkMetadataTests.swift
+  s_bbbb00d9107849::t_bfe4f01b59cad2 68,108,111,113-114,117
+OverboardKit/Tests/OverboardCoreTests/AutoTransformTests.swift
+  s_bbbb00d9107849::t_51da78736434b9 1,62-78
+OverboardKit/Tests/OverboardCoreTests/CaptureAdmissionTests.swift
+  s_bbbb00d9107849::t_e06625d6b8a16c 1-97
+OverboardKit/Tests/OverboardCoreTests/CaptureClassifierDedupeTests.swift
+  s_bbbb00d9107849::t_aca5f249ad60ab 1-110
+OverboardKit/Tests/OverboardCoreTests/ClipEnrichmentPipelineTests.swift
+  s_bbbb00d9107849::t_3e74774a0fbff3 208,223-225,228,242,264,276-277
+OverboardKit/Tests/OverboardCoreTests/ClipMaterializationTests.swift
+  s_bbbb00d9107849::t_0501c809546f1d 1-83
+OverboardKit/Tests/OverboardCoreTests/DatabaseRecoveryTests.swift
+  s_bbbb00d9107849::t_e0f8918d7a8222 1-61
+OverboardKit/Tests/OverboardCoreTests/EnrichmentCancellationTests.swift
+  s_bbbb00d9107849::t_7d6f0fe2a90864 1-123
+OverboardKit/Tests/OverboardCoreTests/ExportImportTests.swift
+  s_bbbb00d9107849::t_589bd8762a6934 208,222-223
+OverboardKit/Tests/OverboardCoreTests/ItemCounterOverflowTests.swift
+  s_bbbb00d9107849::t_ae0e6b5251b0ca 1-133
+OverboardKit/Tests/OverboardCoreTests/MigrationRecoveryTests.swift
+  s_bbbb00d9107849::t_d21aeeca9047bb 1-70
+OverboardKit/Tests/OverboardCoreTests/PrivacyAITests.swift
+  s_bbbb00d9107849::t_9839c26386d535 144,154,156,169-170,183-184
+OverboardKit/Tests/OverboardCoreTests/QuicklinkTests.swift
+  s_bbbb00d9107849::t_fca083ab07a400 91-132
+OverboardKit/Tests/OverboardCoreTests/SecretRetentionTests.swift
+  s_bbbb00d9107849::t_6e58d0d0db23a6 1-109
+OverboardKit/Tests/OverboardCoreTests/SecureArchiveTests.swift
+  s_bbbb00d9107849::t_3a462c0d00d812 1-350
+OverboardKit/Tests/OverboardCoreTests/SnippetRevisionTests.swift
+  s_bbbb00d9107849::t_78606bf9227a47 5-9,12-23,25,28-35,38-43,46-52,55-72,75-80
+OverboardKit/Tests/OverboardCoreTests/TemplateEngineTests.swift
+  s_bbbb00d9107849::t_6ab45a22eeabc0 1-119
+OverboardKit/Tests/OverboardCoreTests/Wave3FileSearchTests.swift
+  s_bbbb00d9107849::t_a4dc9c198794a7 1-69
+OverboardKit/Tests/OverboardMacTests/ArchivePreferencesAdapterTests.swift
+  s_bbbb00d9107849::t_121c869f78e4d8 1-95
+OverboardKit/Tests/OverboardMacTests/BoundedEnrichmentQueueTests.swift
+  s_bbbb00d9107849::t_b03a1a531fe38d 2-3,6-28,31-50,53-77,80-84,86,88-92,94-99,101,104-106,109-112,114-119,121-122,125-126,129-130,133-136,139-142
+OverboardKit/Tests/OverboardMacTests/BrowserProvenanceLifecycleTests.swift
+  s_bbbb00d9107849::t_b8617fb9ced921 1-48
+OverboardKit/Tests/OverboardMacTests/CalendarLifecycleTests.swift
+  s_bbbb00d9107849::t_5aefb95e601b24 1-137
+OverboardKit/Tests/OverboardMacTests/ClipboardCaptureLifecycleTests.swift
+  s_bbbb00d9107849::t_f35d438ff1f062 1-33
+OverboardKit/Tests/OverboardMacTests/ClipboardMonitorTests.swift
+  s_bbbb00d9107849::t_e2c12e2084de59 1-266
+OverboardKit/Tests/OverboardMacTests/FileIndexLifecycleTests.swift
+  s_bbbb00d9107849::t_aceaa799f1c54a 1-134
+OverboardKit/Tests/OverboardMacTests/LifecycleReadGate.swift
+  s_bbbb00d9107849::t_035d8dc992ac98 1-34
+OverboardKit/Tests/OverboardMacTests/PastebackServiceTests.swift
+  s_bbbb00d9107849::t_b3f5f506b98d68 24-27,38-48,54-55,67,77-78,90,101-102,114,126-127,139,152-153,164,182-183,190,197-225
+OverboardKit/Tests/OverboardMacTests/PastebackSessionTests+Payloads.swift
+  s_bbbb00d9107849::t_a9fc74713ec625 1-65
+OverboardKit/Tests/OverboardMacTests/PastebackSessionTests+Publication.swift
+  s_bbbb00d9107849::t_3fd9ab1eaec60e 1-123
+OverboardKit/Tests/OverboardMacTests/PastebackSessionTests.swift
+  s_bbbb00d9107849::t_fe9f7e0c0c1b67 1-268
+OverboardKit/Tests/OverboardMacTests/SpotifyLifecycleTests.swift
+  s_bbbb00d9107849::t_c4ce34d5759a76 1-91
+OverboardKit/Tests/OverboardMacTests/Wave3FileResourcesTests.swift
+  s_bbbb00d9107849::t_c2e9296df4c0d1 1-119
+OverboardKit/Tests/OverboardUISnapshotTests/BrowserHandoffTests.swift
+  s_bbbb00d9107849::t_2223fb3eac15fb 1-36
+OverboardKit/Tests/OverboardUISnapshotTests/ClipboardWorkflowTests.swift
+  s_bbbb00d9107849::t_6319fbda0ab074 1-74
+OverboardKit/Tests/OverboardUISnapshotTests/DrawerPaletteLayoutTests.swift
+  s_bbbb00d9107849::t_c56c0fe4ea3287 1-32
+OverboardKit/Tests/OverboardUISnapshotTests/EmojiPickerSnapshotTests.swift
+  s_bbbb00d9107849::t_9c12fb4000501e 1,20-51
+OverboardKit/Tests/OverboardUISnapshotTests/ItemCardSnapshotTests.swift
+  s_bbbb00d9107849::t_0d81bec81e156c 58-67
+OverboardKit/Tests/OverboardUISnapshotTests/LauncherConfigurationDraftTests.swift
+  s_bbbb00d9107849::t_013dc1861d3214 1-53
+OverboardKit/Tests/OverboardUISnapshotTests/NativeChromeSnapshotTests.swift
+  s_bbbb00d9107849::t_3ff38d10b20e90 1-30
+OverboardKit/Tests/OverboardUISnapshotTests/NativePaletteFocusTests.swift
+  s_bbbb00d9107849::t_6282b0af76a34d 1-77
+OverboardKit/Tests/OverboardUISnapshotTests/NativePanelKeyRoutingTests.swift
+  s_bbbb00d9107849::t_395cc40b8b8197 1-67
+OverboardKit/Tests/OverboardUISnapshotTests/PanelActionRoutingTests.swift
+  s_bbbb00d9107849::t_26590a91ed0b00 1-123
+OverboardKit/Tests/OverboardUISnapshotTests/PasteStackTests.swift
+  s_bbbb00d9107849::t_0619de9899b481 1-70
+OverboardKit/Tests/OverboardUISnapshotTests/SelectedClipQuicklinkTests.swift
+  s_bbbb00d9107849::t_dffd8fa77838b2 1-65
+OverboardKit/Tests/OverboardUISnapshotTests/SnippetsManagerViewModelTests.swift
+  s_bbbb00d9107849::t_afbb3a927b9068 94-149
+OverboardKit/Tests/OverboardUISnapshotTests/TypedSettingsCoordinatorTests.swift
+  s_bbbb00d9107849::t_591d9fef1c4f76 1-64
+OverboardKit/Tests/OverboardUISnapshotTests/Wave3LauncherSearchTests.swift
+  s_bbbb00d9107849::t_ce6cd7be9c6c4f 1-119
+README.md
+  s_bbbb00d9107849::t_0a84f764ec0109 60-61,65-69,76-77,82,100-102,105,116,130-136,144,166-171,174-177,183-186,189-195,209
+docs/excellence-validation.md
+  s_bbbb00d9107849::t_61104c0dc11ac8 1-158
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "d6c8130d63af86059697afd9e99cdad273cc4157",
+  "prompts": {},
+  "sessions": {
+    "s_bbbb00d9107849": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0f8c4-d24e-7df3-a6ee-2a7daa3f54e5",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "nicky <nicky@nickysemenza.com>"
+    }
+  }
+}
