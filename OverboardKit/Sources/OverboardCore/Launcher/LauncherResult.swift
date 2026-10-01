@@ -71,10 +71,45 @@ public enum LauncherResult: Sendable, Equatable, Identifiable {
 public protocol LauncherProvider: Sendable {
     var searchScopes: Set<LauncherScope> { get }
     func results(for query: String) async -> [LauncherResult]
+    func results(for query: String, context: LauncherSearchContext) async -> [LauncherResult]
 }
 
 public extension LauncherProvider {
+    func results(for query: String, context _: LauncherSearchContext) async -> [LauncherResult] {
+        await self.results(for: query)
+    }
+
     var searchScopes: Set<LauncherScope> {
         Set(LauncherScope.allCases)
+    }
+}
+
+public struct LauncherSearchContext: Sendable {
+    public var usage: [String: Int]
+    public var counts: [String: Int]
+    public var lastUsed: [String: Double]
+    public var now: Date
+
+    public init(
+        usage: [String: Int] = [:],
+        counts: [String: Int] = [:],
+        lastUsed: [String: Double] = [:],
+        now: Date = .now
+    ) {
+        self.usage = usage
+        self.counts = counts
+        self.lastUsed = lastUsed
+        self.now = now
+    }
+
+    public func sorted(
+        _ results: [LauncherResult],
+        query: String,
+        aliases: [String: String] = [:]
+    ) -> [LauncherResult] {
+        let frecency = Dictionary(results.map {
+            ($0.id, LauncherFrecency.score(id: $0.id, counts: self.counts, lastUsed: self.lastUsed, now: self.now))
+        }, uniquingKeysWith: { first, _ in first })
+        return LauncherRanking.sorted(results, query: query, aliases: aliases, usage: self.usage, frecency: frecency)
     }
 }

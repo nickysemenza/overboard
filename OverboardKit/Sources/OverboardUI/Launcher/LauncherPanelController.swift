@@ -22,6 +22,8 @@ public final class LauncherPanelController {
     /// When the launcher was last dismissed; reopening within `resumeWindow`
     /// resumes the previous text, otherwise the bar opens fresh.
     private var lastHiddenAt: Date?
+    var pendingBrowserState: ClipboardBrowserHandoff?
+    var browserRequestGeneration = 0
     static let resumeWindow: TimeInterval = 10
 
     /// The app that was frontmost when the launcher was summoned — i.e.
@@ -37,6 +39,9 @@ public final class LauncherPanelController {
     public var onOpenSystemSetting: (URL) -> Void = { _ in }
     public var onPasteClip: (ClipItem, PasteMode, NSRunningApplication?) -> Void = { _, _, _ in }
     public var onCopyClip: (ClipItem) -> Void = { _ in }
+    public var onAddClipToStack: ((ClipItem) -> Void)?
+    public var onRunClipQuicklink: ((ClipItem, Quicklink) -> Void)?
+    public var onShowDrawer: ((ClipboardBrowserHandoff, NSRunningApplication?) -> Void)?
     public var onPasteSnippet: (Snippet, NSRunningApplication?) -> Void = { _, _ in }
     public var onCopySnippet: (Snippet) -> Void = { _ in }
     public var onRunCommand: (LauncherCommand) -> Void = { _ in }
@@ -259,8 +264,15 @@ public final class LauncherPanelController {
         self.viewModel.moveSelection(delta)
     }
 
+    func updateBrowserTarget(_ target: NSRunningApplication?) {
+        self.targetApp = target ?? self.targetApp
+        self.viewModel.targetAppName = self.targetApp?.localizedName ?? "previous app"
+    }
+
     public func show(scope: LauncherScope? = nil, query: String? = nil, target: NSRunningApplication? = nil) {
         guard !self.isVisible else { return }
+        let finishPresentation = obTracePanelPresentation("launcher.show")
+        defer { finishPresentation() }
         self.targetApp = target ?? NSWorkspace.shared.frontmostApplication
         self.viewModel.targetAppName = self.targetApp?.localizedName ?? "previous app"
         // Reconcile the now-playing snapshot before rows render; if a track
@@ -286,6 +298,7 @@ public final class LauncherPanelController {
         // including the first summon while suggestions are still loading.
         panel.setFrame(self.frame(on: self.screenWithMouse()), display: false)
         panel.makeKeyAndOrderFront(nil)
+        panel.contentView?.layoutSubtreeIfNeeded()
         // Preserved text refocuses select-all by default; drop the caret at the
         // end so the next keystroke appends instead of replacing. The field
         // editor only exists once SwiftUI begins editing, so defer a tick.
@@ -306,6 +319,9 @@ public final class LauncherPanelController {
     }
 
     public func hide() {
+        obTrace("launcher.hide")
+        self.browserRequestGeneration += 1
+        self.pendingBrowserState = nil
         // Every commit also funnels through here, so this captures Enter,
         // Escape, and click-outside alike.
         self.viewModel.closePalette()

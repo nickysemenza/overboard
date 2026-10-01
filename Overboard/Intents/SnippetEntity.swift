@@ -21,6 +21,7 @@ struct SnippetEntity: AppEntity {
 /// data the Snippets manager window uses.
 struct SnippetQuery: EntityStringQuery {
     func entities(for identifiers: [String]) async throws -> [SnippetEntity] {
+        try await IntentDependencies.ensureLibraryAvailable()
         let snippets = try await IntentDependencies.current.store.snippets()
         return snippets
             .filter { identifiers.contains($0.id) }
@@ -28,11 +29,13 @@ struct SnippetQuery: EntityStringQuery {
     }
 
     func entities(matching string: String) async throws -> [SnippetEntity] {
+        try await IntentDependencies.ensureLibraryAvailable()
         let snippets = try await IntentDependencies.current.store.searchSnippets(string)
         return snippets.map { SnippetEntity(id: $0.id, title: $0.title) }
     }
 
     func suggestedEntities() async throws -> [SnippetEntity] {
+        try await IntentDependencies.ensureLibraryAvailable()
         let snippets = try await IntentDependencies.current.store.snippets()
         return snippets.prefix(10).map { SnippetEntity(id: $0.id, title: $0.title) }
     }

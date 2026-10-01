@@ -64,18 +64,33 @@ public nonisolated enum BrowserProvenanceService {
 
         let source = BrowserScript.source(for: dialect, bundleID: bundleID)
 
-        // Race the script against the timeout: whichever finishes first wins.
-        // The loser is cancelled, but the continuation is single-resume-safe so
-        // a late script completion can never resume it twice.
-        let line: String? = await withTaskGroup(of: String?.self) { group in
-            group.addTask { await self.runScript(source, bundleID: bundleID) }
-            group.addTask {
-                try? await Task.sleep(for: timeout)
-                return nil
+        return await self.fetch(timeout: timeout) {
+            await self.runScript(source, bundleID: bundleID)
+        }
+    }
+
+    static func fetch(timeout: Duration,
+                      operation: @escaping @Sendable () async -> String?) async -> SourceProvenance?
+    {
+        let request = BrowserProvenanceRequest()
+        let line = await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                request.install(continuation)
+                guard !Task.isCancelled else {
+                    request.finish(nil)
+                    return
+                }
+                request.register(Task.detached {
+                    do { try await Task.sleep(for: timeout) } catch { return }
+                    request.finish(nil)
+                })
+                request.register(Task.detached {
+                    guard !Task.isCancelled else { return }
+                    await request.finish(operation())
+                })
             }
-            let first = await group.next() ?? nil
-            group.cancelAll()
-            return first
+        } onCancel: {
+            request.finish(nil)
         }
 
         guard let line else { return nil }

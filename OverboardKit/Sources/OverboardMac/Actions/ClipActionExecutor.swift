@@ -58,10 +58,10 @@ public final class ClipActionExecutor {
     public func execute(_ effect: ActionEffect, target: NSRunningApplication?) async {
         switch effect {
         case let .pasteText(text):
-            self.pasteString(text, into: target)
+            await self.pasteStringAndWait(text, into: target)
 
         case let .copyText(text, hud):
-            self.copyString(text, hud: hud)
+            await self.copyStringAndWait(text, hud: hud)
 
         case let .openURLs(urls):
             for url in urls {
@@ -90,24 +90,40 @@ public final class ClipActionExecutor {
     /// doesn't re-enter history, then flashes the HUD. Shared by the action
     /// effects, the launcher's copy callbacks, and the App Intents.
     public func copyString(_ text: String, hud: String) {
-        let pbItem = NSPasteboardItem()
-        pbItem.setString(text, forType: .string)
-        pbItem.setData(Data(), forType: ClipboardMonitor.markerType)
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.writeObjects([pbItem])
-        self.flash(hud)
+        Task { await self.copyStringAndWait(text, hud: hud) }
+    }
+
+    @discardableResult
+    public func copyStringAndWait(_ text: String, hud: String) async -> PastebackService.Outcome {
+        let outcome = await self.pasteback.copyText(text)
+        if outcome == .copied {
+            self.flash(hud)
+        } else if outcome == .failed {
+            self.flash("Couldn't copy this result")
+        }
+        return outcome
     }
 
     /// Pastes arbitrary text into the target app, falling back to copy-only
     /// plus a HUD (and an Accessibility prompt) when the paste can't be
     /// synthesized.
     public func pasteString(_ text: String, into target: NSRunningApplication?) {
+        Task { await self.pasteStringAndWait(text, into: target) }
+    }
+
+    @discardableResult
+    public func pasteStringAndWait(
+        _ text: String, into target: NSRunningApplication?
+    ) async -> PastebackService.Outcome {
         let restore = Defaults[.restoreClipboard]
-        let outcome = self.pasteback.pasteText(text, into: target, restoreClipboard: restore)
-        if outcome == .copiedOnly {
+        let outcome = await self.pasteback.pasteText(text, into: target, restoreClipboard: restore)
+        if outcome == .copied {
             self.flash(PermissionService.copyOnlyPasteMessage())
             PermissionService.promptIfNeeded()
+        } else if outcome == .failed {
+            self.flash("Couldn't paste this result")
         }
+        return outcome
     }
 
     /// Writes the item's PNG payload into Downloads under a timestamped name.

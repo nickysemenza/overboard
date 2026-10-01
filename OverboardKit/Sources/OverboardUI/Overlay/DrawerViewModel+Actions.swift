@@ -3,6 +3,28 @@ import OverboardCore
 // MARK: - Selection movement, commit, pin/delete
 
 public extension DrawerViewModel {
+    func performPanelAction(_ action: PanelActionID) {
+        switch action {
+        case .paste: self.selectCurrent()
+        case .plainPaste:
+            guard let item = self.selectedItem, item.kind == .text || item.kind == .link else { return }
+            self.selectCurrent(mode: .plainText)
+        case .stack: self.addSelectedToStack()
+        case .preview: self.togglePreview()
+        case .copy:
+            switch self.mode {
+            case .history:
+                if let item = self.selectedItem {
+                    self.onCopyClip(item)
+                }
+            case .snippets:
+                if self.snippets.indices.contains(self.selectedIndex) {
+                    self.onCopySnippet(self.snippets[self.selectedIndex])
+                }
+            }
+        }
+    }
+
     func moveSelection(_ delta: Int) {
         guard self.entryCount > 0 else { return }
         self.collapseMultiSelection()
@@ -39,7 +61,6 @@ public extension DrawerViewModel {
     }
 
     /// Queue the selected item onto the paste stack and advance selection so
-    /// repeated ⌘↩ presses queue a run of items.
     func addSelectedToStack() {
         guard self.mode == .history, self.items.indices.contains(self.selectedIndex) else { return }
         self.stack.push(self.items[self.selectedIndex])
@@ -65,7 +86,7 @@ public extension DrawerViewModel {
             do {
                 try await self.store.setPinned(id: item.id, !item.isPinned)
             } catch {
-                self.logger.error("pin toggle failed: \(String(describing: error), privacy: .public)")
+                self.logger.error("pin toggle failed")
             }
             await self.refresh(resetSelection: false, followItemID: item.id)
         }
@@ -86,7 +107,7 @@ public extension DrawerViewModel {
             do {
                 try await self.store.delete(id: item.id)
             } catch {
-                self.logger.error("delete failed: \(String(describing: error), privacy: .public)")
+                self.logger.error("delete failed")
             }
             await self.refresh(resetSelection: false)
         }

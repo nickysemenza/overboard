@@ -18,8 +18,15 @@ extension LauncherPanelController {
             contentRect: NSRect(x: 0, y: 0, width: Metrics.panelWidth, height: Metrics.panelHeight)
         )
         panel.contentView = PanelHosting.container(
-            rootView: LauncherView(viewModel: self.viewModel, store: self.store)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top),
+            rootView: LauncherView(
+                viewModel: self.viewModel, store: self.store,
+                onAddClipToStack: self.onAddClipToStack,
+                onShowDrawer: self.onShowDrawer == nil ? nil : { [weak self] in self?.showDrawerSelection() },
+                onRunClipQuicklink: self.onRunClipQuicklink == nil ? nil : { [weak self] item, quicklink in
+                    self?.runClipQuicklink(item, quicklink: quicklink)
+                }
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top),
             frame: panel.contentLayoutRect
         )
         return panel

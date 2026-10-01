@@ -6,6 +6,7 @@ import GRDB
 public extension ClipStore {
     func markUsed(id: String) async throws {
         try await self.dbWriter.write { db in
+            try Self.checkItemCountersCanAdvance(db, itemID: id, includingUseCount: true)
             try db.execute(
                 sql: """
                 UPDATE item
@@ -19,6 +20,7 @@ public extension ClipStore {
 
     func setPinned(id: String, _ pinned: Bool) async throws {
         try await self.dbWriter.write { db in
+            try Self.checkItemCountersCanAdvance(db, itemID: id)
             try db.execute(
                 sql: "UPDATE item SET isPinned = ?, updatedAt = ?, lamport = lamport + 1 WHERE id = ?",
                 arguments: [pinned, Date(), id]
@@ -29,6 +31,7 @@ public extension ClipStore {
     /// Tombstones an item (kept for future sync) and drops it from the FTS index.
     func delete(id: String) async throws {
         try await self.dbWriter.write { db in
+            try Self.checkItemCountersCanAdvance(db, itemID: id)
             try Self.removeFromFTS(db, itemID: id)
             try db.execute(
                 sql: "UPDATE item SET deletedAt = ?, updatedAt = ?, lamport = lamport + 1 WHERE id = ?",
@@ -38,8 +41,8 @@ public extension ClipStore {
     }
 
     /// Hard-deletes tombstones and trims history beyond `keepingLatest`
-    /// (pinned items are never trimmed), then removes orphaned blobs.
-    func purge(keepingLatest: Int) async throws {
+    /// (pinned and secret items are never trimmed), then removes orphaned blobs.
+    func purge(keepingLatest: Int, olderThan cutoff: Date? = nil) async throws {
         let blobs = self.blobs
         // `writeWithoutTransaction` + an explicit transaction rather than
         // `write`: the on-disk deletion must happen after the rows are gone
@@ -47,7 +50,7 @@ public extension ClipStore {
         // `ingest` can't content-address its way onto a blob that is about to
         // be unlinked.
         try await self.dbWriter.writeWithoutTransaction { db in
-            let candidateHashes = try Self.purgeVictims(db, keepingLatest: keepingLatest)
+            let candidateHashes = try Self.purgeVictims(db, keepingLatest: max(0, keepingLatest), cutoff: cutoff)
             for hash in candidateHashes {
                 try? blobs.delete(hash: hash)
             }
@@ -58,7 +61,9 @@ public extension ClipStore {
     /// live overflow beyond `keepingLatest`), removes them from FTS and the
     /// `item` table, and returns the blob hashes now safe to delete on disk.
     /// Split out to keep `purge` itself within the function-length limit.
-    private static func purgeVictims(_ db: GRDB.Database, keepingLatest: Int) throws -> Set<String> {
+    private static func purgeVictims(
+        _ db: GRDB.Database, keepingLatest: Int, cutoff: Date?
+    ) throws -> Set<String> {
         var candidateHashes: Set<String> = []
         try db.inTransaction {
             let victims = try String.fetchAll(
@@ -67,34 +72,21 @@ public extension ClipStore {
                 SELECT id FROM item WHERE deletedAt IS NOT NULL
                 UNION
                 SELECT id FROM item
-                WHERE deletedAt IS NULL AND isPinned = 0 AND id NOT IN (
+                WHERE deletedAt IS NULL AND isPinned = 0 AND isSecret = 0 AND id NOT IN (
                     SELECT id FROM item
-                    WHERE deletedAt IS NULL AND isPinned = 0
+                    WHERE deletedAt IS NULL AND isPinned = 0 AND isSecret = 0
                     ORDER BY \(Self.frecencyOrderSQL)
                     LIMIT ?
                 )
+                UNION
+                SELECT id FROM item
+                WHERE deletedAt IS NULL AND isPinned = 0 AND isSecret = 0 AND createdAt < ?
                 """,
-                arguments: [keepingLatest]
+                arguments: [keepingLatest, cutoff]
             )
             guard !victims.isEmpty else { return .commit }
 
-            // Batched blob lookup + delete instead of a per-victim round trip:
-            // history can hold thousands of tombstones/overflow rows, and a
-            // purge used to issue two queries per row. Chunked at 500 to stay
-            // under SQLite's default ~999 bound-parameter limit.
-            var hashes: Set<String> = []
-            for chunk in victims.chunked(into: 500) {
-                let placeholders = Self.placeholders(chunk.count)
-                let chunkHashes = try String.fetchAll(
-                    db,
-                    sql: """
-                    SELECT DISTINCT blobHash FROM representation \
-                    WHERE itemID IN (\(placeholders)) AND blobHash IS NOT NULL
-                    """,
-                    arguments: StatementArguments(chunk)
-                )
-                hashes.formUnion(chunkHashes)
-            }
+            let hashes = try Self.purgeBlobHashes(db, itemIDs: victims)
 
             // FTS removal needs each row's own (rowid, searchText) pair for the
             // contentless-delete command, so it stays one call per victim.
@@ -119,6 +111,27 @@ public extension ClipStore {
         }
         return candidateHashes
     }
+
+    /// Batched blob lookup + delete instead of a per-victim round trip:
+    /// history can hold thousands of tombstones/overflow rows, and a
+    /// purge used to issue two queries per row. Chunked at 500 to stay
+    /// under SQLite's default ~999 bound-parameter limit.
+    private static func purgeBlobHashes(_ db: GRDB.Database, itemIDs: [String]) throws -> Set<String> {
+        var hashes: Set<String> = []
+        for chunk in itemIDs.chunked(into: 500) {
+            let placeholders = Self.placeholders(chunk.count)
+            let chunkHashes = try String.fetchAll(
+                db,
+                sql: """
+                SELECT DISTINCT blobHash FROM representation \
+                WHERE itemID IN (\(placeholders)) AND blobHash IS NOT NULL
+                """,
+                arguments: StatementArguments(chunk)
+            )
+            hashes.formUnion(chunkHashes)
+        }
+        return hashes
+    }
 }
 
 extension ClipStore {
@@ -129,11 +142,11 @@ extension ClipStore {
         Array(repeating: "?", count: count).joined(separator: ",")
     }
 
-    private static func removeFromFTS(_ db: GRDB.Database, itemID: String) throws {
+    static func removeFromFTS(_ db: GRDB.Database, itemID: String) throws {
         // Contentless-delete needs the original indexed text.
         let row = try Row.fetchOne(
             db,
-            sql: "SELECT rowid, searchText FROM item WHERE id = ? AND searchText IS NOT NULL",
+            sql: "SELECT rowid, searchText FROM item WHERE id = ? AND searchText IS NOT NULL AND searchText != ''",
             arguments: [itemID]
         )
         if let row {
@@ -220,72 +233,8 @@ private extension ClipStore {
     }
 }
 
-// MARK: - Secret expiry
-
 public extension ClipStore {
-    /// Hard-deletes expired secret items. Secrets are never in FTS or the
-    /// embedding index, so only rows and blobs need cleanup. The delete is real
-    /// rather than a tombstone on purpose — the point of the sweep is to get
-    /// secret cleartext off disk, and a tombstoned row would keep its blobs.
-    ///
-    /// Two carve-outs keep the sweep from destroying data the user asked to
-    /// keep. Pinned items are spared outright: pinning is an explicit "keep
-    /// this", and honouring it costs less than silently deleting a
-    /// false-positive match. And the cutoff runs from the later of capture and
-    /// last use, so the TTL is a leash on *idle* secrets — an item you keep
-    /// pasting stays until ten minutes after you stop.
-    func purgeExpiredSecrets(olderThan cutoff: Date) async throws {
-        let blobs = self.blobs
-        // Same writer-held shape as `purge`: rows first, then the files, all
-        // without letting go of GRDB's single writer.
-        try await self.dbWriter.writeWithoutTransaction { db in
-            var candidateHashes: Set<String> = []
-            try db.inTransaction {
-                let victims = try String.fetchAll(
-                    db,
-                    sql: """
-                    SELECT id FROM item
-                    WHERE isSecret = 1 AND isPinned = 0 AND max(createdAt, lastUsedAt) < ?
-                    """,
-                    arguments: [cutoff]
-                )
-                guard !victims.isEmpty else { return .commit }
-
-                // Same batching as `purge`: one blob lookup and one delete per
-                // 500-id chunk instead of two queries per victim.
-                var hashes: Set<String> = []
-                for chunk in victims.chunked(into: 500) {
-                    let placeholders = Self.placeholders(chunk.count)
-                    let chunkHashes = try String.fetchAll(
-                        db,
-                        sql: """
-                        SELECT DISTINCT blobHash FROM representation \
-                        WHERE itemID IN (\(placeholders)) AND blobHash IS NOT NULL
-                        """,
-                        arguments: StatementArguments(chunk)
-                    )
-                    hashes.formUnion(chunkHashes)
-                }
-                for chunk in victims.chunked(into: 500) {
-                    let placeholders = Self.placeholders(chunk.count)
-                    try db.execute(
-                        sql: "DELETE FROM item WHERE id IN (\(placeholders))",
-                        arguments: StatementArguments(chunk)
-                    )
-                }
-                let stillReferenced = try String.fetchSet(
-                    db,
-                    sql: "SELECT DISTINCT blobHash FROM representation WHERE blobHash IS NOT NULL"
-                )
-                candidateHashes = hashes.subtracting(stillReferenced)
-                return .commit
-            }
-
-            for hash in candidateHashes {
-                try? blobs.delete(hash: hash)
-            }
-        }
-    }
+    func purgeExpiredSecrets(olderThan _: Date) async throws {}
 }
 
 private extension Array {

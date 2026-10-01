@@ -47,16 +47,82 @@ public enum ClipJSONCoding {
 
 // MARK: - On-disk shape
 
-/// The on-disk archive: a directory holding `items.ndjson` (one
-/// ``ClipArchive/Record`` per line) and a `blobs/` folder of the payload files
-/// those records reference by hash.
-///
-/// NDJSON rather than one big JSON array so an export streams out a line at a
-/// time and a single corrupt record costs one clip instead of the whole file —
-/// ``ClipStore/import(from:)`` reports bad lines in its summary and keeps going.
+/// Versioned whole-library archives contain streaming clip and snippet NDJSON,
+/// content-addressed blobs, optional typed app settings and a checksum manifest.
+/// Versioned imports validate everything before changing the database. Archives
+/// without a manifest retain the original malformed-line salvage behavior.
 public enum ClipArchive {
     public static let itemsFileName = "items.ndjson"
     public static let blobsDirectoryName = "blobs"
+    public static let manifestFileName = "manifest.json"
+    public static let snippetsFileName = "snippets.ndjson"
+    public static let settingsFileName = "settings.json"
+    public static let version = 2
+
+    public struct Limits: Sendable {
+        public var archiveBytes: Int
+        public var lineBytes: Int
+        public var blobBytes: Int
+        public var records: Int
+        public var representations: Int
+
+        public init(
+            archiveBytes: Int = 4 * 1024 * 1024 * 1024,
+            lineBytes: Int = 4 * 1024 * 1024,
+            blobBytes: Int = 512 * 1024 * 1024,
+            records: Int = 100_000,
+            representations: Int = 1_000_000
+        ) {
+            self.archiveBytes = archiveBytes
+            self.lineBytes = lineBytes
+            self.blobBytes = blobBytes
+            self.records = records
+            self.representations = representations
+        }
+    }
+
+    public enum SettingValue: Codable, Sendable, Equatable {
+        case boolean(Bool)
+        case integer(Int)
+        case string(String)
+        case strings([String])
+        case counts([String: Int])
+        case timestamps([String: Double])
+    }
+
+    public struct Hotkey: Codable, Sendable, Equatable {
+        public var keyCode: Int?
+        public var modifiers: Int
+
+        public init(keyCode: Int?, modifiers: Int = 0) {
+            self.keyCode = keyCode
+            self.modifiers = modifiers
+        }
+    }
+
+    public struct Settings: Codable, Sendable, Equatable {
+        public var namespace: String
+        public var version: Int
+        public var values: [String: SettingValue]
+        public var hotkeys: [String: Hotkey]
+
+        public init(namespace: String, version: Int, values: [String: SettingValue], hotkeys: [String: Hotkey] = [:]) {
+            self.namespace = namespace
+            self.version = version
+            self.values = values
+            self.hotkeys = hotkeys
+        }
+    }
+
+    struct Manifest: Codable, Sendable {
+        var version: Int
+        var itemCount: Int
+        var snippetCount: Int
+        var itemsChecksum: String
+        var snippetsChecksum: String
+        var settingsChecksum: String?
+        var blobs: [String: Int]
+    }
 
     /// One pasteboard flavor of an archived clip. Exactly one of `data`
     /// (inline, base64 via `Data`'s Codable conformance) and `blob` (a hash
@@ -66,6 +132,7 @@ public enum ClipArchive {
         public var data: Data?
         public var blob: String?
         public var byteSize: Int
+        public var itemIndex: Int?
     }
 
     /// One clip, losslessly. Field names match the CLI's `--json` projection
@@ -105,6 +172,7 @@ public enum ClipArchive {
         public var faviconData: Data?
         public var previewImageData: Data?
         public var representations: [Rep]
+        public var lamport: Int64?
 
         public init(item: ClipItem, searchText: String?, representations: [Representation]) {
             self.id = item.id
@@ -126,6 +194,7 @@ public enum ClipArchive {
             self.createdAt = item.createdAt
             self.lastUsedAt = item.lastUsedAt
             self.updatedAt = item.updatedAt
+            self.lamport = item.lamport
             self.charCount = item.charCount
             self.lineCount = item.lineCount
             self.pixelWidth = item.pixelWidth
@@ -136,7 +205,7 @@ public enum ClipArchive {
             self.faviconData = item.faviconData
             self.previewImageData = item.previewImageData
             self.representations = representations.map {
-                Rep(uti: $0.uti, data: $0.data, blob: $0.blobHash, byteSize: $0.byteSize)
+                Rep(uti: $0.uti, data: $0.data, blob: $0.blobHash, byteSize: $0.byteSize, itemIndex: $0.itemIndex)
             }
         }
 
@@ -162,6 +231,7 @@ public enum ClipArchive {
                 createdAt: self.createdAt,
                 lastUsedAt: self.lastUsedAt,
                 updatedAt: self.updatedAt,
+                lamport: self.lamport ?? 0,
                 charCount: self.charCount,
                 lineCount: self.lineCount,
                 pixelWidth: self.pixelWidth,
@@ -177,14 +247,30 @@ public enum ClipArchive {
         }
     }
 
-    public enum Failure: Error, CustomStringConvertible, Equatable {
+    public enum Failure: Error, CustomStringConvertible, LocalizedError, Equatable {
         /// The chosen folder holds no `items.ndjson`.
         case notAnArchive(URL)
+        case unsafePath(String)
+        case invalid(String)
+        case checksum(String)
+        case limit(String)
+        case unsupportedVersion(Int)
+
+        public var errorDescription: String? {
+            self.description
+        }
 
         public var description: String {
             switch self {
             case let .notAnArchive(url):
                 "No \(ClipArchive.itemsFileName) in \(url.lastPathComponent) — pick a folder written by Export History."
+            case let .unsafePath(path):
+                "Unsafe archive path: \(path). " + "Symbolic links and non-regular files are not allowed."
+            case let .invalid(reason): "Invalid archive: \(reason)."
+            case let .checksum(path): "Archive checksum mismatch: \(path)."
+            case let .limit(reason): "Archive exceeds the safety limit: \(reason)."
+            case let .unsupportedVersion(version):
+                "Unsupported archive version \(version). " + "Keep this archive for a newer app."
             }
         }
     }
@@ -199,23 +285,25 @@ public struct ExportSummary: Sendable, Equatable {
     /// UI can say the backup is deliberately incomplete rather than silently
     /// dropping rows.
     public let secretsExcluded: Int
-    /// Blob-backed payloads that could not be copied: the file was already
-    /// gone (the same condition `maintenanceSweep` reports as a missing blob)
-    /// or it vanished mid-export, which the hourly purge can do because the
-    /// actor is released between pages. Not fatal — the row is still written
-    /// and the archive is still importable — but the caller must say so.
+    /// Missing blob-backed payloads remain referenced so a later restore can
+    /// repair them. Corrupt or unsafe payloads abort publication instead.
     public let blobsMissing: Int
+    public let snippetCount: Int
+    public let includesSettings: Bool
 }
 
-/// What an import found. Nothing here is fatal: an archive with unreadable
-/// lines or missing blob files still restores everything it can.
+/// What a validated import restored. Legacy archives can salvage malformed
+/// lines; versioned archives reject malformed records before changing the store.
 public struct ImportSummary: Sendable, Equatable {
-    public let imported: Int
+    public var imported: Int
     /// Records whose `contentHash` already matched a live item.
-    public let duplicatesSkipped: Int
+    public var duplicatesSkipped: Int
     /// One message per line that couldn't be read, e.g. "line 7: …".
     public let malformedLines: [String]
-    /// Representations whose blob file wasn't in the archive; the item is still
-    /// imported, minus that flavor.
+    /// Unique blob files absent from the archive. Their representation references
+    /// are retained so importing a complete archive later can repair them.
     public let missingBlobs: Int
+    public var representationsRepaired: Int = 0
+    public var snippetsImported: Int = 0
+    public var settings: ClipArchive.Settings?
 }

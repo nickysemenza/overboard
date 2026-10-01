@@ -16,7 +16,6 @@ struct GeneralSettingsTab: View {
     @Default(.launcherCalendarEvents) private var launcherCalendarEvents
     @Default(.launcherAppAliases) private var launcherAppAliases
     @Default(.launcherQuicklinks) private var launcherQuicklinks
-    @Default(.richLinkPreviews) private var richLinkPreviews
 
     /// Second half of the "Source" row's tooltip — split out so the ternary
     /// doesn't nest quoted strings inside a string interpolation.
@@ -69,20 +68,10 @@ struct GeneralSettingsTab: View {
             }
 
             Section {
-                LabeledContent("App aliases") {
-                    SettingsTextListEditor(
-                        text: self.$launcherAppAliases,
-                        height: 60,
-                        accessibilityLabel: "App aliases, one alias per line"
-                    )
-                }
-                LabeledContent("Quicklinks") {
-                    SettingsTextListEditor(
-                        text: self.$launcherQuicklinks,
-                        height: 60,
-                        accessibilityLabel: "Quicklinks, one keyword per line"
-                    )
-                }
+                Text("App aliases").font(.headline)
+                LauncherConfigurationEditor(appliedText: self.$launcherAppAliases, kind: .aliases)
+                Text("Quicklinks").font(.headline)
+                LauncherConfigurationEditor(appliedText: self.$launcherQuicklinks, kind: .quicklinks)
             } header: {
                 Text("Aliases and quicklinks")
             } footer: {
@@ -103,16 +92,14 @@ struct GeneralSettingsTab: View {
             }
 
             Section {
-                Toggle("Fetch link titles and icons", isOn: self.$richLinkPreviews)
+                Text("Link previews use stored metadata and local assets only.")
             } header: {
                 Text("Link previews")
             } footer: {
                 Text(
                     """
-                    Connects to the URLs you copy to fetch each page’s title, description, \
-                    favicon, and preview image, rendered on link cards. Requests come only from \
-                    your Mac; nothing is sent anywhere else. Turn this off to keep Overboard fully \
-                    offline.
+                    Overboard does not contact copied URLs in the background. Opening a link, \
+                    web search, or quicklink is an explicit action you control.
                     """
                 )
             }

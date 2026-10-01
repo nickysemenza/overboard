@@ -69,20 +69,25 @@ public final class SettingsNavigation {
 /// (which can't use a SwiftUI dialog since it runs outside a view) can't drift.
 public enum ClearHistoryPrompt {
     public static let title = "Clear Clipboard History?"
-    public static let message = "All unpinned items will be deleted. Pinned items are kept. This can't be undone."
+    public static let message = "Unpinned items will be deleted. Pinned items and detected secrets are kept. "
+        + "This can't be undone."
     public static let confirm = "Clear History"
 }
 
 public struct SettingsView: View {
     private let store: ClipStore
     @Bindable private var navigation: SettingsNavigation
+    private let coordinator: TypedSettingsCoordinator
 
     public init(
         store: ClipStore,
-        navigation: SettingsNavigation = SettingsNavigation()
+        navigation: SettingsNavigation = SettingsNavigation(),
+        coordinator: TypedSettingsCoordinator? = nil
     ) {
         self.store = store
-        self.navigation = navigation
+        let coordinator = coordinator ?? TypedSettingsCoordinator(navigation: navigation)
+        self.coordinator = coordinator
+        self.navigation = coordinator.navigation
     }
 
     public var body: some View {
@@ -121,7 +126,7 @@ public struct SettingsView: View {
             HistorySettingsTab(store: self.store)
                 .navigationTitle(tab.title)
         case .files:
-            FileSearchSettingsTab()
+            FileSearchSettingsTab(coordinator: self.coordinator)
                 .navigationTitle(tab.title)
         case .apps:
             AppsSettingsTab()

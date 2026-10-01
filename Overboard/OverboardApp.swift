@@ -6,10 +6,16 @@ import SwiftUI
 struct OverboardApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.openSettings) private var openSettings
     private let captureState = AppServices.shared.captureState
 
     var body: some Scene {
         MenuBarExtra {
+            if AppServices.shared.libraryRecovery != nil {
+                Text("Library unavailable — capture stopped")
+                Button("Library Recovery…") { AppServices.shared.presentLibraryRecovery() }
+                Divider()
+            }
             SummonMenuItem(
                 title: "Show Launcher",
                 shortcutDescription: HotkeyService.toggleLauncherShortcutDescription
@@ -86,6 +92,7 @@ struct OverboardApp: App {
             // `AppServices.openWindowByID`.
             .onAppear {
                 AppServices.shared.openWindowByID = { self.openWindow(id: $0) }
+                AppServices.shared.settingsCoordinator.installPresentation { self.openSettings() }
             }
         }
 
@@ -121,7 +128,8 @@ struct OverboardApp: App {
         Settings {
             SettingsView(
                 store: AppServices.shared.store,
-                navigation: AppServices.shared.settingsNavigation
+                navigation: AppServices.shared.settingsNavigation,
+                coordinator: AppServices.shared.settingsCoordinator
             )
         }
         .windowResizability(.contentSize)

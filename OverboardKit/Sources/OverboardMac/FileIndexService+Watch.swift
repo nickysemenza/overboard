@@ -4,12 +4,13 @@ import OverboardCore
 
 /// FSEvents watching and the debounced incremental refresh it drives.
 extension FileIndexService {
-    func scheduleRefresh() {
-        guard !self.isIndexing else { return }
-        self.refreshTask?.cancel()
+    func scheduleRefresh(delay: Duration = .seconds(3)) {
+        guard !self.isIndexing, !self.isStopped, self.refreshTask == nil else { return }
+        let lifecycle = self.lifecycleGeneration
         self.refreshTask = Task {
-            try? await Task.sleep(for: .seconds(3))
-            guard !Task.isCancelled, let index = self.index else { return }
+            try? await Task.sleep(for: delay)
+            guard !Task.isCancelled, !self.isStopped, self.lifecycleGeneration == lifecycle,
+                  let index = self.index else { return }
             await self.performRefresh(index: index)
         }
     }
@@ -19,12 +20,16 @@ extension FileIndexService {
     /// `scheduleRefresh()`.
     private func performRefresh(index: FileNameIndex) async {
         let directories = self.consumeDirtyDirectories()
+        let lifecycle = self.lifecycleGeneration
         self.isIndexing = true
         defer {
-            self.isIndexing = false
-            self.signalReconcile()
-            if !Task.isCancelled, !self.dirtyPaths.isEmpty {
-                self.scheduleRefresh()
+            if self.lifecycleGeneration == lifecycle, !self.isStopped {
+                self.isIndexing = false
+                self.refreshTask = nil
+                self.signalReconcile()
+                if !Task.isCancelled, !self.dirtyPaths.isEmpty {
+                    self.scheduleRefresh(delay: .zero)
+                }
             }
         }
         for directory in directories {
@@ -32,29 +37,74 @@ extension FileIndexService {
             guard await self.refreshDirectory(directory, index: index) else { return }
         }
         guard !Task.isCancelled else { return }
-        self.fileCount = await (try? index.count()) ?? self.fileCount
+        let fileCount = await (try? index.count()) ?? self.fileCount
+        guard !Task.isCancelled, self.lifecycleGeneration == lifecycle, !self.isStopped else { return }
+        self.fileCount = fileCount
         self.status = Self.statusMessage(fileCount: self.fileCount, hasIssues: !self.issues.isEmpty)
         self.onChange()
     }
 
-    /// Reduces the raw dirty paths to their containing directories, collapsing
-    /// any directory whose parent is already in the set — a rescan of the
-    /// parent covers it.
-    private func consumeDirtyDirectories() -> [URL] {
-        let changed = self.dirtyPaths.sorted { $0.count < $1.count }
-        self.dirtyPaths.removeAll()
-        var directories: [URL] = []
+    /// Drains a bounded oldest-first batch without promoting files to parent scans.
+    func consumeDirtyDirectories() -> [URL] {
+        let changed = self.dirtyPaths.sorted {
+            self.dirtyOrder[$0, default: 0] < self.dirtyOrder[$1, default: 0]
+        }.prefix(32)
         for path in changed {
-            let url = URL(fileURLWithPath: path)
-            let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
-            let directory = isDirectory ? url : url.deletingLastPathComponent()
-            if !directories
-                .contains(where: { directory.path == $0.path || directory.path.hasPrefix($0.path + "/") })
-            {
-                directories.append(directory)
-            }
+            self.dirtyPaths.remove(path)
+            self.dirtySubtrees.remove(path)
+            self.dirtyOrder.removeValue(forKey: path)
         }
-        return directories
+        return changed.map { URL(fileURLWithPath: $0) }
+    }
+
+    func enqueueChange(_ rawPath: String, subtree: Bool = false) {
+        guard !self.isStopped else { return }
+        let path = URL(fileURLWithPath: rawPath).standardized.path.precomposedStringWithCanonicalMapping
+        let url = URL(fileURLWithPath: path)
+        guard let root = FileMetadataScanner.owner(of: url, roots: self.activeRoots, exclusions: self.activeExclusions)
+        else { return }
+        if self.dirtySubtrees.contains(where: {
+            (path == $0 || path.hasPrefix($0 + "/")) &&
+                FileMetadataScanner.owner(of: URL(fileURLWithPath: $0), roots: self.activeRoots,
+                                          exclusions: self.activeExclusions)?.path == root.path
+        }) {
+            return
+        }
+        if self.dirtyPaths.count >= 512 {
+            for activeRoot in self.activeRoots where self.dirtyPaths.contains(where: {
+                FileMetadataScanner.owner(of: URL(fileURLWithPath: $0), roots: self.activeRoots,
+                                          exclusions: self.activeExclusions)?.path == activeRoot.path
+            }) {
+                self.coalesceSubtree(activeRoot.path, owner: activeRoot)
+            }
+            self.coalesceSubtree(root.path, owner: root)
+        } else if subtree {
+            self.coalesceSubtree(path, owner: root)
+        } else {
+            self.insertDirty(path)
+        }
+    }
+
+    private func insertDirty(_ path: String) {
+        if self.dirtyPaths.insert(path).inserted {
+            self.dirtyOrder[path] = self.nextDirtyOrder
+            self.nextDirtyOrder += 1
+        }
+    }
+
+    private func coalesceSubtree(_ path: String, owner: URL) {
+        var order = self.nextDirtyOrder
+        for existing in self.dirtyPaths where existing == path || existing.hasPrefix(path + "/") {
+            guard FileMetadataScanner.owner(of: URL(fileURLWithPath: existing), roots: self.activeRoots,
+                                            exclusions: self.activeExclusions)?.path == owner.path else { continue }
+            order = min(order, self.dirtyOrder[existing, default: order])
+            self.dirtyPaths.remove(existing)
+            self.dirtySubtrees.remove(existing)
+            self.dirtyOrder.removeValue(forKey: existing)
+        }
+        self.insertDirty(path)
+        self.dirtyOrder[path] = order
+        self.dirtySubtrees.insert(path)
     }
 
     /// Scans one dirty directory under whichever active root claims it.
@@ -63,19 +113,13 @@ extension FileIndexService {
     /// and `false` to abort the whole refresh, matching the original
     /// early-return behavior when the worker is cancelled or throws.
     private func refreshDirectory(_ directory: URL, index: FileNameIndex) async -> Bool {
-        guard let root = self.activeRoots
-            .filter({ FileMetadataScanner.shouldInclude(directory, root: $0, exclusions: self.activeExclusions) })
-            .max(by: { $0.path.count < $1.path.count })
-        else { return true }
+        let roots = self.activeRoots
         let exclusions = self.activeExclusions
+        let refresh = self.operations.refresh
         let worker = Task.detached(priority: .utility) {
-            try await FileMetadataScanner.scan(
-                root: root,
-                exclusions: exclusions,
-                generation: UUID().uuidString,
-                index: index,
-                under: directory
-            )
+            try await refresh(FileIndexRefreshRequest(
+                path: directory, roots: roots, exclusions: exclusions, index: index
+            ))
         }
         do {
             let failures = try await withTaskCancellationHandler { try await worker.value } onCancel: {
@@ -103,6 +147,7 @@ extension FileIndexService {
             // index/clipboard databases and excluded build trees to avoid loops.
             MainActor.assumeIsolated {
                 let service = Unmanaged<FileIndexService>.fromOpaque(pointer).takeUnretainedValue()
+                guard !service.isStopped else { return }
                 let changed = unsafeBitCast(paths, to: NSArray.self).compactMap { $0 as? String }
                 let missed = (0 ..< count)
                     .contains {
@@ -112,14 +157,12 @@ extension FileIndexService {
                                 kFSEventStreamEventFlagEventIdsWrapped) != 0
                     }
                 if missed {
-                    service.dirtyPaths.formUnion(service.activeRoots.map(\.path))
+                    for root in service.activeRoots {
+                        service.enqueueChange(root.path, subtree: true)
+                    }
                 }
-                for path in changed where service.activeRoots.contains(where: { FileMetadataScanner.shouldInclude(
-                    URL(fileURLWithPath: path),
-                    root: $0,
-                    exclusions: service.activeExclusions
-                ) }) {
-                    service.dirtyPaths.insert(path)
+                for (offset, path) in changed.enumerated() {
+                    service.enqueueChange(path, subtree: flags[offset] & UInt32(kFSEventStreamEventFlagItemIsDir) != 0)
                 }
                 if !service.dirtyPaths.isEmpty {
                     service.scheduleRefresh()

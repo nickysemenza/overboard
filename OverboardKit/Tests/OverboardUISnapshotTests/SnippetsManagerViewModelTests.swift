@@ -91,4 +91,60 @@ struct SnippetsManagerViewModelTests {
         let saved = try await store.snippets().first { $0.id == snippet.id }
         #expect(saved?.title == "Untitled")
     }
+
+    @Test func conflictedDraftAndVisibleErrorSurviveReloadAndSelectionChanges() async throws {
+        let store = try self.makeStore()
+        let first = try await store.saveSnippet(Snippet(title: "First", body: "one"))
+        let second = try await store.saveSnippet(Snippet(title: "Second", body: "two"))
+        let viewModel = SnippetsManagerViewModel(store: store)
+        await viewModel.load()
+        viewModel.selectSnippet(first.id)
+        viewModel.draftBody = "local edit"
+        var elsewhere = first
+        elsewhere.body = "external edit"
+        try await store.saveSnippet(elsewhere, expectedRevision: first.lamport)
+        viewModel.saveDraft()
+        await viewModel.pendingSaveTask?.value
+        #expect(viewModel.saveError != nil)
+        #expect(viewModel.isDirty)
+        #expect(viewModel.draftBody == "local edit")
+        await viewModel.load()
+        #expect(viewModel.draftBody == "local edit")
+        viewModel.selectSnippet(second.id)
+        await viewModel.pendingSaveTask?.value
+        viewModel.selectSnippet(first.id)
+        #expect(viewModel.draftBody == "local edit")
+        #expect(viewModel.saveError != nil)
+        #expect(try await store.snippets().first(where: { $0.id == first.id })?.body == "external edit")
+    }
+
+    @Test func emptyTitleDraftIsPreservedWhenSwitchingBack() async throws {
+        let store = try self.makeStore()
+        let first = try await store.saveSnippet(Snippet(title: "First", body: "one"))
+        let second = try await store.saveSnippet(Snippet(title: "Second", body: "two"))
+        let viewModel = SnippetsManagerViewModel(store: store)
+        await viewModel.load()
+        viewModel.selectSnippet(first.id)
+        viewModel.draftTitle = ""
+        viewModel.draftBody = "unfinished"
+        viewModel.selectSnippet(second.id)
+        viewModel.selectSnippet(first.id)
+        #expect(viewModel.draftTitle.isEmpty)
+        #expect(viewModel.draftBody == "unfinished")
+        #expect(viewModel.isDirty)
+    }
+
+    @Test func insertingATokenEditsOnlyTheDraftAndPreviewKeepsUUIDVisible() async throws {
+        let store = try self.makeStore()
+        let snippet = try await store.saveSnippet(Snippet(title: "Template", body: "Hello "))
+        let viewModel = SnippetsManagerViewModel(store: store)
+        await viewModel.load()
+        viewModel.selectSnippet(snippet.id)
+        viewModel.insertToken("{{name|world}}")
+        viewModel.insertToken("{uuid}")
+        #expect(viewModel.draftBody == "Hello {{name|world}}{uuid}")
+        #expect(viewModel.previewText == "Hello world{uuid}")
+        #expect(viewModel.isDirty)
+        #expect(try await store.snippets().first?.body == "Hello ")
+    }
 }

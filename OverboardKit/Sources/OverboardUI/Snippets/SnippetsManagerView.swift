@@ -9,8 +9,36 @@ final class SnippetsManagerViewModel {
     var draftTitle: String = ""
     var draftBody: String = ""
     var filter: String = ""
+    private var operationError: String?
+    private var draftErrors: [String: String] = [:]
+    var saveError: String? {
+        self.selectedID.flatMap { self.draftErrors[$0] }
+            ?? self.draftErrors.sorted { $0.key < $1.key }.first?.value
+            ?? self.operationError
+    }
+
+    private(set) var savingIDs: Set<String> = []
+
+    private struct Draft {
+        var baseline: Snippet
+        var title: String
+        var body: String
+    }
+
+    private var drafts: [String: Draft] = [:]
+    private var draftBaseline: Snippet?
 
     private let store: ClipStore
+    private let previewContext = TemplateEngine.Context()
+
+    var previewText: String {
+        TemplateEngine.preview(self.draftBody, context: self.previewContext)
+    }
+
+    func insertToken(_ token: String) {
+        guard self.selectedID != nil else { return }
+        self.draftBody.append(token)
+    }
 
     /// The in-flight (or most recently finished) persist triggered by
     /// `saveDraft()` or the switch-triggered auto-save. Not used by any UI
@@ -23,14 +51,14 @@ final class SnippetsManagerViewModel {
     }
 
     var selected: Snippet? {
-        self.snippets.first { $0.id == self.selectedID }
+        self.snippets.first { $0.id == self.selectedID } ?? self.draftBaseline
     }
 
     /// Whether the draft has edits the selected snippet doesn't have yet.
     /// False once nothing is selected — there's nothing to compare against.
     var isDirty: Bool {
-        guard let selected else { return false }
-        return self.draftTitle != selected.title || self.draftBody != selected.body
+        guard let baseline = self.draftBaseline else { return false }
+        return self.draftTitle != baseline.title || self.draftBody != baseline.body
     }
 
     /// Snippets matching `filter` by title, case-insensitively. Selection is
@@ -42,33 +70,52 @@ final class SnippetsManagerViewModel {
     }
 
     func load() async {
-        self.snippets = await (try? self.store.snippets()) ?? []
-        if self.selectedID == nil {
-            self.selectSnippet(self.snippets.first?.id)
+        do {
+            self.snippets = try await self.store.snippets()
+            self.operationError = nil
+            if self.selectedID == nil {
+                self.selectSnippet(self.snippets.first?.id)
+            } else if !self.isDirty, let latest = self.snippets.first(where: { $0.id == self.selectedID }) {
+                self.draftBaseline = latest
+                self.draftTitle = latest.title
+                self.draftBody = latest.body
+            }
+        } catch {
+            self.operationError = error.localizedDescription
         }
     }
 
     /// Selects a different snippet. This is a personal editor with no
-    /// explicit "discard changes?" prompt, so silently dropping a dirty draft
-    /// on switch would be more surprising than saving it — auto-save the
-    /// outgoing draft first, unless its title is empty (that would create a
-    /// junk blank-titled snippet; those edits are simply dropped instead).
+    /// explicit "discard changes?" prompt, so dirty drafts survive selection
+    /// changes while non-empty titles are auto-saved against their revision.
     func selectSnippet(_ id: String?) {
-        if self.isDirty, let previous = self.selected, !self.draftTitle.isEmpty {
-            self.persist(id: previous.id, title: self.draftTitle, body: self.draftBody)
+        guard id != self.selectedID else { return }
+        if let baseline = self.draftBaseline {
+            self.drafts[baseline.id] = Draft(baseline: baseline, title: self.draftTitle, body: self.draftBody)
+            if self.isDirty, !self.draftTitle.isEmpty {
+                self.persist(baseline: baseline, title: self.draftTitle, body: self.draftBody)
+            }
         }
         self.selectedID = id
         let snippet = self.snippets.first { $0.id == id }
-        self.draftTitle = snippet?.title ?? ""
-        self.draftBody = snippet?.body ?? ""
+        let draft = id.flatMap { self.drafts[$0] }.flatMap {
+            $0.title != $0.baseline.title || $0.body != $0.baseline.body ? $0 : nil
+        }
+        self.draftBaseline = draft?.baseline ?? snippet
+        self.draftTitle = draft?.title ?? snippet?.title ?? ""
+        self.draftBody = draft?.body ?? snippet?.body ?? ""
     }
 
     func addSnippet() {
         let snippet = Snippet(title: "New Snippet", body: "")
         Task {
-            try? await self.store.saveSnippet(snippet)
-            await self.load()
-            self.selectSnippet(snippet.id)
+            do {
+                try await self.store.saveSnippet(snippet)
+                await self.load()
+                self.selectSnippet(snippet.id)
+            } catch {
+                self.operationError = error.localizedDescription
+            }
         }
     }
 
@@ -76,27 +123,66 @@ final class SnippetsManagerViewModel {
     /// this always applies — an empty title falls back to "Untitled" rather
     /// than silently discarding the edit, since the user asked for it directly.
     func saveDraft() {
-        guard let selected else { return }
+        guard let baseline = self.draftBaseline else { return }
         let title = self.draftTitle.isEmpty ? "Untitled" : self.draftTitle
-        self.persist(id: selected.id, title: title, body: self.draftBody)
+        self.persist(baseline: baseline, title: title, body: self.draftBody)
     }
 
-    private func persist(id: String, title: String, body: String) {
-        guard var snippet = self.snippets.first(where: { $0.id == id }) else { return }
+    private func persist(baseline: Snippet, title: String, body: String) {
+        let id = baseline.id
+        guard !self.savingIDs.contains(id) else { return }
+        self.savingIDs.insert(id)
+        var snippet = baseline
         snippet.title = title
         snippet.body = body
         self.pendingSaveTask = Task {
-            try? await self.store.saveSnippet(snippet)
-            await self.load()
+            defer { self.savingIDs.remove(id) }
+            do {
+                let saved = try await self.store.saveSnippet(snippet, expectedRevision: baseline.lamport)
+                if var draft = self.drafts[id] {
+                    draft.baseline = saved
+                    self.drafts[id] = draft
+                }
+                if self.selectedID == id {
+                    self.draftBaseline = saved
+                    if self.draftBody == body, self.draftTitle == title || self.draftTitle.isEmpty {
+                        self.draftTitle = saved.title
+                        self.draftBody = saved.body
+                        self.drafts[id] = nil
+                    }
+                }
+                self.draftErrors[id] = nil
+                self.snippets = try await self.store.snippets()
+            } catch {
+                self.draftErrors[id] = "Could not save \(baseline.title): \(error.localizedDescription)"
+            }
         }
+    }
+
+    func reloadSelected() {
+        guard let latest = self.snippets.first(where: { $0.id == self.selectedID }) else { return }
+        self.drafts[latest.id] = nil
+        self.draftBaseline = latest
+        self.draftTitle = latest.title
+        self.draftBody = latest.body
+        self.draftErrors[latest.id] = nil
     }
 
     func deleteSelected() {
         guard let id = self.selectedID else { return }
         Task {
-            try? await self.store.deleteSnippet(id: id)
-            self.selectedID = nil
-            await self.load()
+            do {
+                try await self.store.deleteSnippet(id: id)
+                self.drafts[id] = nil
+                self.draftErrors[id] = nil
+                if self.selectedID == id {
+                    self.draftBaseline = nil
+                    self.selectedID = nil
+                }
+                await self.load()
+            } catch {
+                self.operationError = error.localizedDescription
+            }
         }
     }
 }
@@ -142,6 +228,22 @@ public struct SnippetsManagerView: View {
             NSApp.activate(ignoringOtherApps: true)
             await self.viewModel.load()
         }
+        .safeAreaInset(edge: .bottom) {
+            if let error = self.viewModel.saveError {
+                HStack {
+                    Text(error).foregroundStyle(.red)
+                    Spacer()
+                    Button("Reload Latest") {
+                        Task {
+                            await self.viewModel.load()
+                            self.viewModel.reloadSelected()
+                        }
+                    }
+                }
+                .font(.caption)
+                .padding(10)
+            }
+        }
     }
 
     private var snippetList: some View {
@@ -174,15 +276,32 @@ public struct SnippetsManagerView: View {
                 .scrollContentBackground(.hidden)
                 .background(.background.opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
 
+                Text(self.viewModel.previewText)
+                    .font(.caption.monospaced())
+                    .lineLimit(3)
+                    .textSelection(.enabled)
+                    .accessibilityLabel("Template preview")
+
                 HStack {
-                    Text("Placeholders: {date} {time} {datetime} {uuid} {clipboard}")
+                    Text("Tokens: {date} {time} {datetime} {uuid} {clipboard} · {{name|default}} · {{date:yyyy-MM-dd}}")
                         .font(.caption)
                         .contrastAwareForeground(.tertiary)
                     Spacer()
+                    Menu("Insert Token") {
+                        ForEach(
+                            [
+                                "{date}", "{time}", "{datetime}", "{uuid}", "{clipboard}",
+                                "{{name}}", "{{name|default}}", "{{date:yyyy-MM-dd}}",
+                            ], id: \.self
+                        ) { token in
+                            Button(token) { self.viewModel.insertToken(token) }
+                        }
+                    }
                     Button("Save") {
                         self.viewModel.saveDraft()
                     }
                     .keyboardShortcut("s")
+                    .disabled(self.viewModel.selectedID.map { self.viewModel.savingIDs.contains($0) } ?? true)
                 }
             }
             .padding(12)

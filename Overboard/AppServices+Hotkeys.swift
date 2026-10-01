@@ -6,29 +6,40 @@ import OverboardUI
 extension AppServices {
     func registerHotkeys() {
         HotkeyService.onToggleDrawer { [weak self] in
-            self?.overlay.toggle()
+            guard let self, self.isStarted else { return }
+            self.overlay.toggle()
         }
 
         HotkeyService.onToggleLauncher { [weak self] in
-            self?.launcher.toggle()
+            guard let self, self.isStarted else { return }
+            self.launcher.toggle()
         }
 
         HotkeyService.onToggleEmojiPicker { [weak self] in
-            self?.emojiPicker.toggle()
+            guard let self, self.isStarted else { return }
+            self.emojiPicker.toggle()
         }
 
         HotkeyService.onPasteNextFromStack { [weak self] in
-            guard let self else { return }
-            guard let item = self.stack.popNext() else {
-                HUDController.shared.flash("Paste stack is empty")
+            guard let self, self.isStarted else { return }
+            guard let reservation = self.stack.reserveNext() else {
+                HUDController.shared
+                    .flash(self.stack.count == 0 ? "Paste stack is empty" : "Stack delivery is in progress")
                 return
             }
-            let remaining = self.stack.count
-            self.pasteItem(item, mode: .full, into: NSWorkspace.shared.frontmostApplication) {
-                if remaining > 0 {
-                    HUDController.shared.flash("Pasted from stack — \(remaining) left")
+            self.pasteItem(
+                reservation.item, mode: .full, into: NSWorkspace.shared.frontmostApplication,
+                onCompletion: { [weak self] outcome in
+                    guard let self else { return }
+                    if outcome == .dispatched {
+                        if self.stack.commit(reservation), self.stack.count > 0 {
+                            HUDController.shared.flash("Dispatched from stack — \(self.stack.count) left")
+                        }
+                    } else {
+                        self.stack.rollback(reservation)
+                    }
                 }
-            }
+            )
         }
     }
 }

@@ -8,6 +8,8 @@ import OverboardCore
 /// applicability matrix), these just replay the same `DrawerViewModel`
 /// methods `OverlayController+Keyboard.swift` calls for their key.
 enum DrawerCommand: String, CaseIterable {
+    case paste
+    case copy
     case pastePlain
     case preview
     case edit
@@ -17,14 +19,18 @@ enum DrawerCommand: String, CaseIterable {
     case switchToSnippets
 
     var systemImage: String {
+        if let sharedAction {
+            return sharedAction.metadata.systemImage
+        }
         switch self {
-        case .pastePlain: "textformat"
-        case .preview: "eye"
-        case .edit: "pencil"
-        case .addToStack: "square.stack.3d.up"
-        case .togglePin: "pin"
-        case .delete: "trash"
-        case .switchToSnippets: "text.badge.star"
+        case .paste, .copy: return "doc.on.clipboard"
+        case .pastePlain: return "textformat"
+        case .preview: return "eye"
+        case .edit: return "pencil"
+        case .addToStack: return "square.stack.3d.up"
+        case .togglePin: return "pin"
+        case .delete: return "trash"
+        case .switchToSnippets: return "text.badge.star"
         }
     }
 
@@ -32,10 +38,12 @@ enum DrawerCommand: String, CaseIterable {
     /// `OverlayController+Keyboard.swift` handles for this command.
     var keycap: String {
         switch self {
+        case .paste: "↩"
+        case .copy: "⌘↩"
         case .pastePlain: "⇧↩"
-        case .preview: "Space"
+        case .preview: "⌘Y"
         case .edit: "⌘E"
-        case .addToStack: "⌘↩"
+        case .addToStack: "⌘⇧↩"
         case .togglePin: "⌘P"
         case .delete: "⌘⌫"
         case .switchToSnippets: "⌘/"
@@ -45,6 +53,8 @@ enum DrawerCommand: String, CaseIterable {
     /// `isPinned` only changes `.togglePin`'s title; every other case ignores it.
     func title(isPinned: Bool) -> String {
         switch self {
+        case .paste: PanelActionID.paste.metadata.label
+        case .copy: PanelActionID.copy.metadata.label
         case .pastePlain: String(localized: "Paste as Plain Text", bundle: .module)
         case .preview: String(localized: "Preview", bundle: .module)
         case .edit: String(localized: "Edit", bundle: .module)
@@ -63,13 +73,18 @@ enum DrawerCommand: String, CaseIterable {
     /// Whether this command applies to the current selection — only `.edit`
     /// has a content requirement (mirrors `DrawerViewModel.beginEdit`'s guard).
     func isApplicable(to selectedItem: ClipItem?) -> Bool {
-        guard self == .edit else { return true }
+        guard self == .edit || self == .pastePlain else { return true }
         guard let selectedItem else { return false }
         return selectedItem.kind == .text || selectedItem.kind == .link
     }
 
     func run(on viewModel: DrawerViewModel) {
+        if let sharedAction {
+            viewModel.performPanelAction(sharedAction)
+            return
+        }
         switch self {
+        case .paste, .copy: break
         case .pastePlain: viewModel.selectCurrent(mode: .plainText)
         case .preview: viewModel.togglePreview()
         case .edit: viewModel.beginEdit()
@@ -79,19 +94,32 @@ enum DrawerCommand: String, CaseIterable {
         case .switchToSnippets: viewModel.toggleMode()
         }
     }
+
+    var sharedAction: PanelActionID? {
+        switch self {
+        case .paste: .paste
+        case .copy: .copy
+        case .pastePlain: .plainPaste
+        case .addToStack: .stack
+        case .preview: .preview
+        default: nil
+        }
+    }
 }
 
 /// One row in the drawer's ⌘K palette: either a content `ClipAction` or a
 /// `DrawerCommand` — the two vocabularies `filteredPaletteActions` merges so
 /// the palette can list "everything you can do to the selection" in one list.
-enum DrawerPaletteEntry: Identifiable, Hashable {
+enum DrawerPaletteEntry: Identifiable, Equatable {
     case clip(ClipAction)
     case command(DrawerCommand)
+    case clipQuicklink(Quicklink)
 
     var id: String {
         switch self {
         case let .clip(action): "clip-\(action.id)"
-        case let .command(command): "command-\(command.rawValue)"
+        case let .command(command): command.sharedAction?.rawValue ?? "command-\(command.rawValue)"
+        case let .clipQuicklink(quicklink): "clipboardQuicklink:\(quicklink.keyword)"
         }
     }
 
@@ -99,6 +127,7 @@ enum DrawerPaletteEntry: Identifiable, Hashable {
         switch self {
         case let .clip(action): action.systemImage
         case let .command(command): command.systemImage
+        case .clipQuicklink: "link"
         }
     }
 
@@ -106,7 +135,7 @@ enum DrawerPaletteEntry: Identifiable, Hashable {
     /// positional-shortcut convention (see `CommandPaletteItem.hint`).
     var hint: String? {
         switch self {
-        case .clip: nil
+        case .clip, .clipQuicklink: nil
         case let .command(command): command.keycap
         }
     }
@@ -115,7 +144,15 @@ enum DrawerPaletteEntry: Identifiable, Hashable {
         switch self {
         case let .clip(action): action.label
         case let .command(command): command.title(isPinned: isPinned)
+        case let .clipQuicklink(quicklink): SelectedClipQuicklinks.label(for: quicklink)
         }
+    }
+
+    var detail: String? {
+        if case let .clipQuicklink(quicklink) = self {
+            return quicklink.template
+        }
+        return nil
     }
 }
 
@@ -130,7 +167,9 @@ public extension DrawerViewModel {
         let commandEntries = DrawerCommand.allCases
             .filter { $0.isApplicable(to: self.selectedItem) }
             .map(DrawerPaletteEntry.command)
-        let all = clipEntries + commandEntries
+        let quicklinkEntries = self.onRunClipQuicklink == nil ? [] :
+            SelectedClipQuicklinks.available(for: self.selectedItem).map(DrawerPaletteEntry.clipQuicklink)
+        let all = clipEntries + commandEntries + quicklinkEntries
         let needle = self.paletteQuery.trimmingCharacters(in: .whitespaces).lowercased()
         guard !needle.isEmpty else { return all }
         let isPinned = self.selectedItem?.isPinned ?? false
@@ -177,6 +216,10 @@ public extension DrawerViewModel {
         switch entries[chosen] {
         case let .clip(action): self.runAction(action)
         case let .command(command): command.run(on: self)
+        case let .clipQuicklink(quicklink):
+            if let item = self.selectedItem {
+                self.onRunClipQuicklink?(item, quicklink)
+            }
         }
     }
 }

@@ -14,16 +14,29 @@ public final class AppIndex {
     private var cache: [Entry] = []
     private var lastScan: Date?
     private let maxCacheAge: TimeInterval = 300
+    private var scanTask: Task<[Entry], Never>?
+    private let scanner: @Sendable () async -> [Entry]
 
-    public init() {}
+    public init(scanner: (@Sendable () async -> [Entry])? = nil) {
+        self.scanner = scanner ?? {
+            await Task.detached(priority: .utility) { AppIndex.scan() }.value
+        }
+    }
 
     public func entries() async -> [Entry] {
         if let lastScan, Date.now.timeIntervalSince(lastScan) < self.maxCacheAge {
             return self.cache
         }
-        let scanned = await Task.detached(priority: .utility) { Self.scan() }.value
+        if let scanTask {
+            return await scanTask.value
+        }
+        let scanner = self.scanner
+        let worker = Task { await scanner() }
+        self.scanTask = worker
+        let scanned = await worker.value
         self.cache = scanned
         self.lastScan = .now
+        self.scanTask = nil
         return scanned
     }
 
@@ -82,6 +95,10 @@ public struct AppSearchProvider: LauncherProvider {
     }
 
     public func results(for query: String) async -> [LauncherResult] {
+        await self.results(for: query, context: LauncherSearchContext())
+    }
+
+    public func results(for query: String, context: LauncherSearchContext) async -> [LauncherResult] {
         // ":"/">"-prefixed queries are commands — don't surface apps for them.
         guard !LauncherQuery.isCommandLike(query) else { return [] }
         guard !query.isEmpty else {
@@ -96,8 +113,9 @@ public struct AppSearchProvider: LauncherProvider {
             query: query,
             names: entries.map(\.name),
             aliases: self.aliases(),
-            limit: self.limit
+            limit: entries.count
         )
-        return ranked.map { .app(name: entries[$0].name, url: entries[$0].url) }
+        let rows = ranked.map { LauncherResult.app(name: entries[$0].name, url: entries[$0].url) }
+        return Array(context.sorted(rows, query: query, aliases: self.aliases()).prefix(self.limit))
     }
 }

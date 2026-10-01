@@ -21,6 +21,10 @@ struct PastebackServiceTests {
         Set(item.types)
     }
 
+    private func board() -> NSPasteboard {
+        NSPasteboard(name: .init("overboard-build-tests-\(UUID().uuidString)"))
+    }
+
     // MARK: - UTI mapping
 
     @Test func pasteboardTypeMapping() {
@@ -31,12 +35,24 @@ struct PastebackServiceTests {
         #expect(PastebackService.pasteboardType(for: WellKnownUTI.color)
             == NSPasteboard.PasteboardType(WellKnownUTI.color))
         #expect(PastebackService.pasteboardType(for: WellKnownUTI.fileURLs) == nil)
-        #expect(PastebackService.pasteboardType(for: "public.unknown") == nil)
+        #expect(PastebackService.pasteboardType(for: "public.unknown") == .init("public.unknown"))
+        #expect(PastebackService.pasteboardType(for: ClipboardMonitor.markerType.rawValue) == nil)
+    }
+
+    @Test func outcomeProvidesConservativePublicationSuccessGate() {
+        #expect(PastebackService.Outcome.dispatched.didPublish)
+        #expect(PastebackService.Outcome.copied.didPublish)
+        #expect(!PastebackService.Outcome.cancelled.didPublish)
+        #expect(!PastebackService.Outcome.failed.didPublish)
+        #expect(PastebackService.Outcome.pasted == .dispatched)
+        #expect(PastebackService.Outcome.copiedOnly == .copied)
     }
 
     // MARK: - Build round-trips
 
     @Test func richTextCarriesAllFlavorsAndMarker() async throws {
+        let board = self.board()
+        defer { board.releaseGlobally() }
         let store = try self.makeStore()
         let snapshot = PasteboardSnapshot(
             reps: [
@@ -48,7 +64,7 @@ struct PastebackServiceTests {
             sourceAppName: "TextEdit"
         )
         let item = try #require(await store.ingest(snapshot))
-        let service = PastebackService(store: store)
+        let service = PastebackService(store: store, pasteboard: board)
 
         let pbItems = try await service.buildPasteboardItems(for: item, mode: .full)
         #expect(pbItems.count == 1)
@@ -58,6 +74,8 @@ struct PastebackServiceTests {
     }
 
     @Test func plainTextModeDropsRichFlavors() async throws {
+        let board = self.board()
+        defer { board.releaseGlobally() }
         let store = try self.makeStore()
         let snapshot = PasteboardSnapshot(
             reps: [
@@ -69,7 +87,7 @@ struct PastebackServiceTests {
             sourceAppName: "TextEdit"
         )
         let item = try #require(await store.ingest(snapshot))
-        let service = PastebackService(store: store)
+        let service = PastebackService(store: store, pasteboard: board)
 
         let pbItems = try await service.buildPasteboardItems(for: item, mode: .plainText)
         let flavors = self.types(pbItems[0])
@@ -80,6 +98,8 @@ struct PastebackServiceTests {
     }
 
     @Test func fileURLsFanOutToOneItemEach() async throws {
+        let board = self.board()
+        defer { board.releaseGlobally() }
         let store = try self.makeStore()
         let urls = ["/tmp/a.txt", "/tmp/b.txt"].map { URL(fileURLWithPath: $0).absoluteString }
         let snapshot = try PasteboardSnapshot(
@@ -91,7 +111,7 @@ struct PastebackServiceTests {
             sourceAppName: "Finder"
         )
         let item = try #require(await store.ingest(snapshot))
-        let service = PastebackService(store: store)
+        let service = PastebackService(store: store, pasteboard: board)
 
         let pbItems = try await service.buildPasteboardItems(for: item, mode: .full)
         #expect(pbItems.count == 2) // one pasteboard item per file URL
@@ -103,6 +123,8 @@ struct PastebackServiceTests {
     // MARK: - Marker invariant
 
     @Test func markerWrittenIsOneTheMonitorSkips() async throws {
+        let board = self.board()
+        defer { board.releaseGlobally() }
         // The exact-match invariant: PastebackService tags writes with
         // ClipboardMonitor.markerType, and the monitor's skip set contains it —
         // a mismatch would loop every paste-back back into history.
@@ -114,7 +136,7 @@ struct PastebackServiceTests {
             sourceBundleID: nil,
             sourceAppName: nil
         )))
-        let pbItems = try await PastebackService(store: store)
+        let pbItems = try await PastebackService(store: store, pasteboard: board)
             .buildPasteboardItems(for: item, mode: .full)
         #expect(self.types(pbItems[0]).contains(ClipboardMonitor.markerType))
     }
@@ -127,6 +149,8 @@ struct PastebackServiceTests {
     /// checks `types`, and a provider call for the marker would read as a paste
     /// that never happened).
     @Test func probedItemsPreserveFlavorsAndBytes() async throws {
+        let board = self.board()
+        defer { board.releaseGlobally() }
         let store = try self.makeStore()
         let snapshot = PasteboardSnapshot(
             reps: [
@@ -137,7 +161,7 @@ struct PastebackServiceTests {
             sourceAppName: "TextEdit"
         )
         let item = try #require(await store.ingest(snapshot))
-        let service = PastebackService(store: store)
+        let service = PastebackService(store: store, pasteboard: board)
         let eager = try await service.buildPasteboardItems(for: item, mode: .full)
 
         let (probed, probe) = PastebackService.probed(eager)
@@ -155,17 +179,48 @@ struct PastebackServiceTests {
     /// The marker must not be what trips the probe, or every paste would look
     /// consumed the instant the monitor glanced at the pasteboard.
     @Test func markerReadDoesNotCountAsConsumption() async throws {
+        let board = self.board()
+        defer { board.releaseGlobally() }
         let store = try self.makeStore()
         let item = try #require(await store.ingest(PasteboardSnapshot(
             reps: [.init(uti: WellKnownUTI.plainText, data: Data("x".utf8))],
             sourceBundleID: nil,
             sourceAppName: nil
         )))
-        let service = PastebackService(store: store)
+        let service = PastebackService(store: store, pasteboard: board)
         let eager = try await service.buildPasteboardItems(for: item, mode: .full)
         let (probed, probe) = PastebackService.probed(eager)
 
         #expect(probed[0].data(forType: ClipboardMonitor.markerType) == Data())
         #expect(!probe.wasRead)
+    }
+
+    @Test func probeBindsRepeatedFlavorToEachItem() {
+        let originals = ["file:///tmp/first.txt", "file:///tmp/second.txt"].map { url in
+            let item = NSPasteboardItem()
+            item.setString(url, forType: .fileURL)
+            return item
+        }
+        let (items, probe) = PastebackService.probed(originals)
+        #expect(items[1].string(forType: .fileURL) == "file:///tmp/second.txt")
+        #expect(items[0].string(forType: .fileURL) == "file:///tmp/first.txt")
+        #expect(probe.wasRead)
+    }
+
+    @Test func namedPasteboardPreservesDistinctProbedFileURLs() {
+        let board = NSPasteboard(name: .init("overboard-probe-tests-\(UUID().uuidString)"))
+        defer { board.releaseGlobally() }
+        let urls = ["file:///tmp/first.txt", "file:///tmp/second.txt"]
+        let originals = urls.map { url in
+            let item = NSPasteboardItem()
+            item.setString(url, forType: .fileURL)
+            return item
+        }
+        let (items, probe) = PastebackService.probed(originals)
+        board.clearContents()
+        #expect(board.writeObjects(items))
+        #expect(board.pasteboardItems?[1].string(forType: .fileURL) == urls[1])
+        #expect(board.pasteboardItems?[0].string(forType: .fileURL) == urls[0])
+        #expect(probe.wasRead)
     }
 }

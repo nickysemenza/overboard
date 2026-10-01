@@ -65,8 +65,7 @@ struct AttachLinkMetadataTests {
         let store = try makeStore()
         let item = try #require(try await store.ingest(self.linkSnapshot("https://example.com/x")))
 
-        // Before any attempt, the link needs metadata.
-        #expect(try await store.linksNeedingMetadata(limit: 10).map(\.id) == [item.id])
+        #expect(try await store.linksNeedingMetadata(limit: 10).isEmpty)
 
         // Failed fetch → empty-title sentinel.
         try await store.attachLinkMetadata(
@@ -106,18 +105,15 @@ struct AttachLinkMetadataTests {
         ))
 
         let needing = try await store.linksNeedingMetadata(limit: 10)
-        #expect(needing.count == 1)
-        #expect(needing.first?.kind == .link)
+        #expect(needing.isEmpty)
     }
 
-    @Test func backfillDrainsInNewestFirstOrder() async throws {
+    @Test func backfillNeverQueuesLinks() async throws {
         let store = try makeStore()
-        let older = try #require(try await store.ingest(self.linkSnapshot("https://example.com/older")))
-        // Ensure distinct createdAt ordering.
-        try await Task.sleep(nanoseconds: 10_000_000)
-        let newer = try #require(try await store.ingest(self.linkSnapshot("https://example.com/newer")))
+        try await store.ingest(self.linkSnapshot("https://example.com/older"))
+        try await store.ingest(self.linkSnapshot("https://example.com/newer"))
 
         let ordered = try await store.linksNeedingMetadata(limit: 10)
-        #expect(ordered.map(\.id) == [newer.id, older.id])
+        #expect(ordered.isEmpty)
     }
 }

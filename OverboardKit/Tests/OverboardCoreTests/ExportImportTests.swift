@@ -205,7 +205,7 @@ struct ExportImportTests {
         #expect(hits.first?.previewText == "quarterly revenue projection")
     }
 
-    /// One unreadable line costs one clip; the rest of the archive still restores.
+    /// Legacy archives salvage unreadable lines; versioned archives verify checksums.
     @Test func malformedLinesAreReportedNotFatal() async throws {
         let source = try Harness()
         let destination = try Harness()
@@ -219,6 +219,8 @@ struct ExportImportTests {
         try await source.store.export(to: source.exportDirectory)
 
         let itemsURL = source.exportDirectory.appendingPathComponent(ClipArchive.itemsFileName)
+        let manifestURL = source.exportDirectory.appendingPathComponent(ClipArchive.manifestFileName)
+        try FileManager.default.removeItem(at: manifestURL)
         var lines = try String(contentsOf: itemsURL, encoding: .utf8)
             .split(separator: "\n", omittingEmptySubsequences: true)
             .map(String.init)

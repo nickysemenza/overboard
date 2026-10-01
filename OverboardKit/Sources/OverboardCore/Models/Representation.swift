@@ -14,6 +14,7 @@ public struct Representation: Codable, Sendable, Equatable, Identifiable {
     public var data: Data?
     public var blobHash: String?
     public var byteSize: Int
+    public var itemIndex: Int?
 
     public init(
         id: String = UUID().uuidString,
@@ -21,7 +22,8 @@ public struct Representation: Codable, Sendable, Equatable, Identifiable {
         uti: String,
         data: Data?,
         blobHash: String?,
-        byteSize: Int
+        byteSize: Int,
+        itemIndex: Int? = nil
     ) {
         self.id = id
         self.itemID = itemID
@@ -29,6 +31,7 @@ public struct Representation: Codable, Sendable, Equatable, Identifiable {
         self.data = data
         self.blobHash = blobHash
         self.byteSize = byteSize
+        self.itemIndex = itemIndex
     }
 }
 

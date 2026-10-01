@@ -9,42 +9,54 @@ import OverboardUI
 /// the on-disk database.
 extension AppServices {
     func startCapturePipeline() {
+        guard self.libraryRecovery == nil, !self.captureState.isPaused else { return }
+        self.enrichmentQueue.start()
         self.monitor.excludedBundleIDs = { Preferences.currentExclusions() }
         self.monitor.start()
+        guard self.ingestTask == nil else { return }
 
-        let store = store
-        let enrichment = self.enrichment
         let snapshots = self.monitor.snapshots
-        self.ingestTask = Task(priority: .utility) { [logger] in
+        self.ingestTask = Task(priority: .utility) {
             for await snapshot in snapshots {
-                do {
-                    var snapshot = Self.applyingAutoTransforms(to: snapshot)
-                    // Browser copies carry back-to-source provenance: ask the
-                    // browser for its front-tab URL/title before storing. Bounded
-                    // by the fetch's own ~500ms timeout, and only round-trips at
-                    // all when the source app is a scriptable browser.
-                    if let bundleID = snapshot.sourceBundleID,
-                       BrowserScript.dialect(forBundleID: bundleID) != nil,
-                       let provenance = await BrowserProvenanceService.fetch(bundleID: bundleID)
-                    {
-                        snapshot.sourceURL = provenance.url
-                        snapshot.sourceTitle = provenance.title
-                    }
-                    if let item = try await store.ingest(snapshot) {
-                        self.signal.bump()
-                        // Fire-and-forget so a slow OCR/LLM pass never delays
-                        // capturing the next copy.
-                        Task.detached(priority: .utility) {
-                            await enrichment.enrich(item: item, snapshot: snapshot)
-                        }
-                    }
-                } catch {
-                    logger.error("ingest failed: \(String(describing: error), privacy: .public)")
-                }
+                guard !Task.isCancelled else { return }
+                let task = Task { await self.capture(snapshot) }
+                self.activeCaptureTask = task
+                await task.value
+                self.activeCaptureTask = nil
             }
         }
 
         self.maintenance.start()
+    }
+
+    private func capture(_ original: PasteboardSnapshot) async {
+        guard !self.captureState.isPaused else { return }
+        let generation = self.captureGeneration
+        do {
+            try original.admission?.check()
+            let snapshot = await Self.applyingLocalProvenance(to: Self.applyingAutoTransforms(to: original))
+            guard !Task.isCancelled, self.captureGeneration == generation else { return }
+            guard let item = try await self.store.ingest(snapshot),
+                  !Task.isCancelled, self.captureGeneration == generation
+            else { return }
+            self.signal.bump()
+            self.enrichmentQueue.enqueue(item: item, snapshot: snapshot)
+        } catch is CancellationError {
+            return
+        } catch {
+            self.logger.error("Clipboard ingest failed")
+        }
+    }
+
+    private static func applyingLocalProvenance(to original: PasteboardSnapshot) async -> PasteboardSnapshot {
+        guard let bundleID = original.sourceBundleID,
+              BrowserScript.dialect(forBundleID: bundleID) != nil,
+              let provenance = await BrowserProvenanceService.fetch(bundleID: bundleID)
+        else { return original }
+        var snapshot = original
+        snapshot.sourceURL = provenance.url
+        snapshot.sourceTitle = provenance.title
+        return snapshot
     }
 
     /// The recurring background chores, as data. `MaintenanceScheduler` owns
@@ -52,14 +64,11 @@ extension AppServices {
     /// says whether it wants another.
     nonisolated static func maintenanceJobs(
         store: ClipStore,
-        enrichment: ClipEnrichmentPipeline,
         logger: Logger
     ) -> [MaintenanceJob] {
         [
             self.purgeJob(store: store, logger: logger),
             self.maintenanceSweepJob(store: store, logger: logger),
-            self.linkBackfillJob(store: store, enrichment: enrichment, logger: logger),
-            self.secretSweepJob(store: store),
         ]
     }
 
@@ -70,7 +79,7 @@ extension AppServices {
             do {
                 try await store.purge(keepingLatest: max(limit, 100))
             } catch {
-                logger.error("purge failed: \(String(describing: error), privacy: .public)")
+                logger.error("History purge failed")
             }
             return .repeatLater
         }
@@ -94,50 +103,7 @@ extension AppServices {
                     """)
                 }
             } catch {
-                logger.error("maintenance sweep failed: \(String(describing: error), privacy: .public)")
-            }
-            return .repeatLater
-        }
-    }
-
-    /// Backfill rich-link metadata for existing links, once per launch.
-    /// Starts 60s after launch (let capture/OCR settle first), then drains
-    /// the queue in small batches with a pause between fetches to stay a
-    /// polite network citizen. Stops when no links remain; picks up again
-    /// next launch.
-    private nonisolated static func linkBackfillJob(
-        store: ClipStore,
-        enrichment: ClipEnrichmentPipeline,
-        logger: Logger
-    ) -> MaintenanceJob {
-        MaintenanceJob(name: "link backfill", interval: .zero, initialDelay: .seconds(60)) {
-            guard Defaults[.richLinkPreviews] else { return .finished }
-            let links: [ClipItem]
-            do {
-                links = try await store.linksNeedingMetadata(limit: 25)
-            } catch {
-                logger.error("link backfill query failed: \(String(describing: error), privacy: .public)")
-                return .finished
-            }
-            guard !links.isEmpty else { return .finished }
-            for link in links {
-                if Task.isCancelled {
-                    return .finished
-                }
-                await enrichment.fetchLinkMetadata(for: link)
-                try? await Task.sleep(for: .seconds(1))
-            }
-            return .repeatLater
-        }
-    }
-
-    /// Detected secrets expire on a short leash, swept every minute.
-    private nonisolated static func secretSweepJob(store: ClipStore) -> MaintenanceJob {
-        MaintenanceJob(name: "secret sweep", interval: .seconds(60)) {
-            let ttlMinutes = Defaults[.secretTTLMinutes]
-            if ttlMinutes > 0 {
-                let cutoff = Date().addingTimeInterval(-Double(ttlMinutes) * 60)
-                try? await store.purgeExpiredSecrets(olderThan: cutoff)
+                logger.error("Library maintenance failed")
             }
             return .repeatLater
         }
@@ -147,7 +113,7 @@ extension AppServices {
     /// on change, and reconcile a fresh snapshot each time the launcher opens.
     func startSpotifyMonitor() {
         self.spotify.onChange = { [weak self] in
-            guard let self, self.launcher.isVisible else { return }
+            guard let self, self.isStarted, self.launcher.isVisible else { return }
             self.launcher.refreshRows()
         }
         self.spotify.start()
@@ -157,7 +123,7 @@ extension AppServices {
     /// change, and reconcile a fresh snapshot each time the launcher opens.
     func startCalendarSource() {
         self.calendar.onChange = { [weak self] in
-            guard let self, self.launcher.isVisible else { return }
+            guard let self, self.isStarted, self.launcher.isVisible else { return }
             self.launcher.refreshRows()
         }
         self.calendar.start()
@@ -165,21 +131,10 @@ extension AppServices {
 
     /// Applies the user's auto-transform-on-copy rules to a snapshot's
     /// plain-text representation before it's stored, so e.g. tracking params are
-    /// stripped from browser URLs at capture. Rich (RTF/HTML) reps are left
-    /// alone; only the plain-text flavor — which is what the transforms target
-    /// and what these rules exist to normalize — is rewritten. No matching rule
-    /// (the common case) returns the snapshot untouched.
+    /// stripped from browser URLs at capture. No matching rule returns the
+    /// snapshot untouched.
     nonisolated static func applyingAutoTransforms(to snapshot: PasteboardSnapshot) -> PasteboardSnapshot {
-        let rules = Preferences.currentAutoTransformRules()
-        guard !rules.isEmpty,
-              let index = snapshot.reps.firstIndex(where: { $0.uti == WellKnownUTI.plainText }),
-              let text = String(data: snapshot.reps[index].data, encoding: .utf8),
-              let transformed = AutoTransform.apply(to: text, bundleID: snapshot.sourceBundleID, rules: rules)
-        else { return snapshot }
-
-        var adjusted = snapshot
-        adjusted.reps[index].data = Data(transformed.utf8)
-        return adjusted
+        AutoTransform.apply(to: snapshot, rules: Preferences.currentAutoTransformRules())
     }
 
     // MARK: - Capture pause / resume
@@ -189,18 +144,21 @@ extension AppServices {
     /// the command list (`:pause` vs `:resume`) stay in sync. No-op in demo
     /// mode, where the monitor is never started.
     func setCapturePaused(_ paused: Bool) {
-        guard !Self.isDemo, self.captureState.isPaused != paused else { return }
+        guard !Self.isDemo, self.libraryRecovery == nil, self.captureState.isPaused != paused else { return }
         self.captureState.setPaused(paused)
         if paused {
+            self.captureGeneration += 1
+            self.activeCaptureTask?.cancel()
+            self.enrichmentQueue.stop()
             self.monitor.stop()
             HUDController.shared.flash("Clipboard capture paused")
         } else {
-            self.monitor.start()
+            self.startCapturePipeline()
             HUDController.shared.flash("Clipboard capture resumed")
         }
     }
 
-    /// `:clear` — confirm, then wipe all history (pinned items survive `purge`).
+    /// `:clear` — confirm, then purge unpinned, non-sensitive history.
     /// The launcher panel has already hidden itself by the time `onRunCommand`
     /// fires, so the modal alert isn't stacked over the non-activating launcher.
     func confirmAndClearHistory() {
@@ -217,7 +175,7 @@ extension AppServices {
                 try await self.store.purge(keepingLatest: 0)
                 HUDController.shared.flash("Clipboard history cleared")
             } catch {
-                self.logger.error("clear history failed: \(String(describing: error), privacy: .public)")
+                self.logger.error("History clear failed")
                 HUDController.shared.flash("Couldn't clear history")
             }
         }

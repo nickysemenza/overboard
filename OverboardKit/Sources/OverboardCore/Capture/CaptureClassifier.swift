@@ -30,10 +30,7 @@ public enum CaptureClassifier {
     public static func classify(_ snapshot: PasteboardSnapshot) -> Classified? {
         guard !snapshot.reps.isEmpty else { return nil }
 
-        let byUTI = Dictionary(
-            snapshot.reps.map { ($0.uti, $0.data) },
-            uniquingKeysWith: { first, _ in first }
-        )
+        let byUTI = self.classificationPayloads(snapshot.reps)
         let plainText = byUTI[WellKnownUTI.plainText].flatMap { String(data: $0, encoding: .utf8) }
         let kind = kind(byUTI: byUTI, plainText: plainText)
 
@@ -42,20 +39,21 @@ public enum CaptureClassifier {
             else { return nil }
         }
 
-        guard let primary = primaryData(for: kind, byUTI: byUTI) else { return nil }
+        guard self.primaryData(for: kind, byUTI: byUTI) != nil else { return nil }
+        let contentHash = self.hash(kind: kind, representations: snapshot.reps)
         let totalBytes = snapshot.reps.reduce(0) { $0 + $1.data.count }
 
         // Secrets keep their payload (paste still works) but get a masked
         // preview and are never indexed for search. The retained payload is
-        // stored in cleartext for its TTL — bounded by the 0700 store directory
-        // and the short expiry sweep, not encrypted at rest.
+        // stored in cleartext until manual deletion, protected by the 0700
+        // store directory, not encrypted at rest.
         //
         // Two sources: a secret pattern anywhere in copied text, or a `.link`
         // whose URL carries a credential/token (presigned S3, magic-login, OAuth
-        // fragment). Flagging the link secret also keeps it off the network — the
-        // fetch paths skip `isSecret` items — so a single-use link isn't consumed.
+        // fragment). Link metadata uses only local information, so capture
+        // never consumes a single-use link.
         if kind == .text, let text = plainText, let secret = SecretDetector.detect(in: text) {
-            return self.secretClassified(kind: kind, primary: primary, label: secret.label, bytes: totalBytes)
+            return self.secretClassified(kind: kind, contentHash: contentHash, label: secret.label, bytes: totalBytes)
         }
         if kind == .link, let text = plainText,
            let url = URL(string: text.trimmingCharacters(in: .whitespacesAndNewlines)),
@@ -63,7 +61,7 @@ public enum CaptureClassifier {
         {
             return self.secretClassified(
                 kind: kind,
-                primary: primary,
+                contentHash: contentHash,
                 label: "Link with credentials",
                 bytes: totalBytes
             )
@@ -85,7 +83,7 @@ public enum CaptureClassifier {
 
         return Classified(
             kind: kind,
-            contentHash: self.hash(kind: kind, primary: primary),
+            contentHash: contentHash,
             previewText: self.previewText(for: kind, pixelSize: pixelSize, byUTI: byUTI, plainText: plainText),
             searchText: self.searchText(for: kind, byUTI: byUTI, plainText: plainText),
             byteSize: totalBytes,
@@ -97,12 +95,27 @@ public enum CaptureClassifier {
         )
     }
 
+    private static func classificationPayloads(_ representations: [PasteboardSnapshot.Rep]) -> [String: Data] {
+        var byUTI = Dictionary(
+            representations.map { ($0.uti, $0.data) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        let fileReps = representations.filter { $0.uti == WellKnownUTI.fileURLs }
+        if fileReps.count > 1,
+           let urls = try? fileReps.flatMap({ try JSONDecoder().decode([String].self, from: $0.data) }),
+           let data = try? JSONEncoder().encode(urls)
+        {
+            byUTI[WellKnownUTI.fileURLs] = data
+        }
+        return byUTI
+    }
+
     private static func secretClassified(
-        kind: ItemKind, primary: Data, label: String, bytes: Int
+        kind: ItemKind, contentHash: String, label: String, bytes: Int
     ) -> Classified {
         Classified(
             kind: kind,
-            contentHash: self.hash(kind: kind, primary: primary),
+            contentHash: contentHash,
             previewText: "Secret — \(label)",
             searchText: nil,
             byteSize: bytes,
@@ -141,9 +154,6 @@ public enum CaptureClassifier {
 
     // MARK: - Hash
 
-    /// The content hash is computed over the kind plus the "primary"
-    /// representation only, so the same text copied from two apps (which may
-    /// attach different RTF/HTML flavors) still dedupes.
     private static func primaryData(for kind: ItemKind, byUTI: [String: Data]) -> Data? {
         switch kind {
         case .text, .link:
@@ -157,10 +167,26 @@ public enum CaptureClassifier {
         }
     }
 
-    private static func hash(kind: ItemKind, primary: Data) -> String {
+    private static func hash(kind: ItemKind, representations: [PasteboardSnapshot.Rep]) -> String {
         var hasher = SHA256()
         hasher.update(data: Data((kind.rawValue + ":").utf8))
-        hasher.update(data: primary)
+        let ordered = representations.sorted { first, second in
+            if (first.itemIndex ?? 0) != (second.itemIndex ?? 0) {
+                return (first.itemIndex ?? 0) < (second.itemIndex ?? 0)
+            }
+            return first.uti == second.uti
+                ? first.data.lexicographicallyPrecedes(second.data)
+                : first.uti < second.uti
+        }
+        for representation in ordered {
+            var itemIndex = Int64(representation.itemIndex ?? 0).bigEndian
+            withUnsafeBytes(of: &itemIndex) { hasher.update(data: Data($0)) }
+            for bytes in [Data(representation.uti.utf8), representation.data] {
+                var length = UInt64(bytes.count).bigEndian
+                withUnsafeBytes(of: &length) { hasher.update(data: Data($0)) }
+                hasher.update(data: bytes)
+            }
+        }
         return hasher.finalize().map { String(format: "%02x", $0) }.joined()
     }
 

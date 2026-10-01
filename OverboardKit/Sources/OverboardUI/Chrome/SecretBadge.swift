@@ -14,6 +14,7 @@ struct SecretBadge: View {
             Text("Secret")
         }
         .font(.caption2.weight(.semibold))
+        .fixedSize(horizontal: true, vertical: false)
         .foregroundStyle(.white)
         .padding(.horizontal, 5)
         .padding(.vertical, 1.5)

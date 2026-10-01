@@ -1,31 +1,12 @@
 import Foundation
 
-/// Post-ingest enrichment for a freshly captured clip: OCR for images, rich
-/// metadata for links, then an on-device LLM title + category + summary for
-/// anything with enough text. Runs off the ingest loop; every step is
-/// best-effort and failures are swallowed — a clip is perfectly usable
-/// unenriched.
-///
-/// The three outside-world steps (OCR, link fetch, LLM labeling) and the one
-/// user setting (rich link previews) that gates the fetch are injected, so the
-/// ordering and the guards — which is what actually goes wrong here — can be
-/// tested without a network, Apple Intelligence, or the Vision framework.
 public struct ClipEnrichmentPipeline: Sendable {
-    /// User settings this pipeline consults. Read fresh on every run through
-    /// `settings`, so toggling it in Settings takes effect immediately.
-    public struct Settings: Sendable {
-        /// Fetch page title/description/favicon/preview for copied links.
-        public var richLinkPreviews: Bool
-
-        public init(richLinkPreviews: Bool) {
-            self.richLinkPreviews = richLinkPreviews
-        }
-    }
+    public typealias Settings = EnrichmentSettings
 
     public typealias SettingsProvider = @Sendable () -> Settings
     /// PNG bytes in, recognized text out (nil when nothing was read).
     public typealias TextRecognizer = @Sendable (Data) async -> String?
-    /// One link fetch; nil on any failure.
+    /// Legacy adapter accepted for compatibility; never invoked.
     public typealias LinkFetcher = @Sendable (URL) async -> LinkMetadata?
     /// LLM labeling; nil when unavailable or the request failed.
     public typealias TextEnricher = @Sendable (String) async -> ClipEnricher.Enrichment?
@@ -38,25 +19,17 @@ public struct ClipEnrichmentPipeline: Sendable {
     /// doesn't already show, so labeling isn't attempted.
     public static let labelingMinimumLength = 80
 
-    /// One long-lived link fetcher, reused for every preview. A per-fetch
-    /// `LinkMetadataFetcher()` builds a delegate-backed `URLSession` that retains
-    /// itself (and its `RedirectGuard`) until invalidated — which a value type
-    /// can't do in `deinit` — so constructing one per link leaked a session each
-    /// time. Sharing one session (safe for concurrent tasks) removes the leak.
-    public static let linkFetcher = LinkMetadataFetcher()
-
     private let store: ClipStore
     private let settings: SettingsProvider
     private let recognizeText: TextRecognizer
-    private let fetchLink: LinkFetcher
     private let enrichText: TextEnricher
     private let enrichImage: ImageEnricher?
 
     public init(
         store: ClipStore,
-        settings: @escaping SettingsProvider,
+        settings: @escaping SettingsProvider = { Settings() },
         recognizeText: @escaping TextRecognizer = { await ImageTextRecognizer.recognizeText(in: $0) },
-        fetchLink: @escaping LinkFetcher = { await ClipEnrichmentPipeline.linkFetcher.fetch($0) },
+        fetchLink _: @escaping LinkFetcher = { _ in nil },
         enrichText: @escaping TextEnricher = { text in
             guard ClipEnricher.isAvailable else { return nil }
             return try? await ClipEnricher.enrich(text: text)
@@ -66,7 +39,6 @@ public struct ClipEnrichmentPipeline: Sendable {
         self.store = store
         self.settings = settings
         self.recognizeText = recognizeText
-        self.fetchLink = fetchLink
         self.enrichText = enrichText
         self.enrichImage = enrichImage
     }
@@ -78,24 +50,36 @@ public struct ClipEnrichmentPipeline: Sendable {
     @concurrent
     public func enrich(item: ClipItem, snapshot: PasteboardSnapshot) async {
         // Only fresh, non-secret items; bumped duplicates are already enriched.
-        guard item.useCount == 1, !item.isSecret else { return }
+        guard !Task.isCancelled, item.useCount == 1, !item.isSecret,
+              ClipSensitivity.label(for: snapshot.reps) == nil,
+              await (try? self.store.isEnrichmentEligible(itemID: item.id)) == true,
+              !Task.isCancelled
+        else { return }
+        let settings = self.settings()
 
         var textForLabeling: String?
 
         if item.kind == .image,
            let png = snapshot.reps.first(where: { $0.uti == WellKnownUTI.png })?.data
         {
+            guard settings.ocrEnabled else { return }
             // Attach even empty results so textless images are marked as
             // OCR-attempted (searchText '' vs NULL).
             let recognized = await self.recognizeText(png) ?? ""
-            try? await self.store.attachRecognizedText(itemID: item.id, text: recognized)
+            guard !Task.isCancelled,
+                  await (try? self.store.attachRecognizedText(itemID: item.id, text: recognized)) == true,
+                  !Task.isCancelled
+            else { return }
+            guard settings.labelingEnabled else { return }
 
             if let enrichImage = self.enrichImage {
                 // macOS 27: the vision-capable model labels the image
                 // directly, with any OCR text passed along as a hint. Unlike
                 // the text-only path below, this runs even when OCR found
                 // nothing — pixels alone are enough for a title.
-                guard let enrichment = await enrichImage(png, recognized.isEmpty ? nil : recognized)
+                guard !Task.isCancelled,
+                      let enrichment = await enrichImage(png, recognized.isEmpty ? nil : recognized),
+                      !Task.isCancelled
                 else { return }
                 let summary = recognized.count >= ClipEnricher.summaryWorthwhileLength ? enrichment.summary : nil
                 try? await self.store.attachEnrichment(
@@ -112,13 +96,12 @@ public struct ClipEnrichmentPipeline: Sendable {
             textForLabeling = snapshot.reps
                 .first { $0.uti == WellKnownUTI.plainText }
                 .flatMap { String(data: $0.data, encoding: .utf8) }
-        } else if item.kind == .link, self.settings().richLinkPreviews {
-            await self.fetchLinkMetadata(for: item)
         }
 
-        guard let text = textForLabeling,
+        guard !Task.isCancelled, settings.labelingEnabled, let text = textForLabeling,
               text.count >= Self.labelingMinimumLength,
-              let enrichment = await self.enrichText(text)
+              ClipSensitivity.label(for: text) == nil,
+              let enrichment = await self.enrichText(text), !Task.isCancelled
         else { return }
 
         // Short clips show fully on the card; a summary only earns its
@@ -133,29 +116,5 @@ public struct ClipEnrichmentPipeline: Sendable {
         )
     }
 
-    /// Fetches rich-link metadata for one `.link` item and attaches it (or the
-    /// empty-title sentinel on failure, so it's marked attempted and won't be
-    /// retried by backfill). Guards on fetchability; nil-URL / unfetchable links
-    /// still get the sentinel. Shared by post-ingest enrichment and backfill.
-    @concurrent
-    public func fetchLinkMetadata(for item: ClipItem) async {
-        guard let preview = item.previewText,
-              let url = URL(string: preview.trimmingCharacters(in: .whitespacesAndNewlines)),
-              LinkMetadataFetcher.isFetchable(url)
-        else {
-            // Not fetchable → record the sentinel so we don't re-check every pass.
-            try? await self.store.attachLinkMetadata(
-                itemID: item.id, title: "", description: nil, faviconPNG: nil, previewImagePNG: nil
-            )
-            return
-        }
-        let metadata = await self.fetchLink(url)
-        try? await self.store.attachLinkMetadata(
-            itemID: item.id,
-            title: metadata?.title ?? "",
-            description: metadata?.description,
-            faviconPNG: metadata?.faviconPNG,
-            previewImagePNG: metadata?.previewImagePNG
-        )
-    }
+    public func fetchLinkMetadata(for _: ClipItem) async {}
 }

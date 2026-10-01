@@ -1,4 +1,3 @@
-import AsyncAlgorithms
 import Foundation
 import Observation
 import os
@@ -48,7 +47,7 @@ public final class LauncherViewModel {
     }
 
     public var showsPreview: Bool {
-        self.scope == .clipboard || self.isPreviewVisible
+        self.isPreviewVisible
     }
 
     public var primaryActionLabel: String? {
@@ -101,6 +100,7 @@ public final class LauncherViewModel {
     }
 
     public func startObserving() {
+        self.searchIsActive = true
         guard let clipboardStore else { return }
         self.observationTask?.cancel()
         self.observationTask = Task { [weak self] in
@@ -116,9 +116,13 @@ public final class LauncherViewModel {
     }
 
     public func stopObserving() {
+        self.searchIsActive = false
+        self.searchGeneration += 1
         self.observationTask?.cancel()
         self.observationTask = nil
         self.searchTask?.cancel()
+        self.secondaryTask?.cancel()
+        self.secondaryTask = nil
         // A cancelled task never reaches `finishSearch`, so release anything
         // parked in `settle()` and don't leave the spinner flag stuck on a
         // hidden panel; `prepareForShow` re-arms it on the next summon.
@@ -201,6 +205,8 @@ public final class LauncherViewModel {
     /// Bumped by every `scheduleSearch` call; lets a cancelled task's deferred
     /// cleanup recognize it's stale instead of clobbering a newer task's state.
     var searchGeneration = 0
+    var searchIsActive = true
+    var activeSearchContext = LauncherSearchContext()
     /// True between a keystroke and the first `setResults` for that query.
     /// The previous list stays on screen for continuity, but it belongs to an
     /// older query, so `perform` must not act on it — ↩ pressed in that window
@@ -212,16 +218,10 @@ public final class LauncherViewModel {
     /// instant router call.
     var lastInstantResults: [LauncherResult] = []
 
-    /// Keystrokes that need a secondary pass funnel through here; one
-    /// long-lived consumer debounces them so fast typing doesn't fan out to
-    /// FTS/clipboard queries on every character. House pattern: see
-    /// `DrawerViewModel`'s `searchChannel` — including the detail that the
-    /// send runs on its own short-lived `Task`, never on `searchTask`:
-    /// `AsyncChannel.send` drops the value when its task is cancelled, and a
-    /// send parked behind a busy consumer would otherwise vanish on the next
-    /// keystroke (or on `stopObserving`), leaving `isSearching` stuck.
-    let secondaryChannel = AsyncChannel<Void>()
-    private var secondaryDebounceTask: Task<Void, Never>?
+    /// A generation-owned debounce and provider task, cancelled on query changes
+    /// and hide so a slow predecessor cannot block the latest search.
+    var secondaryTask: Task<Void, Never>?
+    let secondaryDebounceInterval: Duration
 
     /// FTS match excerpts for the clip rows currently on screen, keyed by
     /// item id. Computed once per search pass (batched into a single store
@@ -253,23 +253,18 @@ public final class LauncherViewModel {
         // tests/previews don't light it up; AppServices injects the real gate.
         askAIProvider: AskAIProvider = AskAIProvider(isAvailable: { false }),
         // Zero in tests that need the secondary pass to land immediately.
-        secondaryDebounceInterval: Duration = .milliseconds(120)
+        secondaryDebounceInterval: Duration = .milliseconds(120),
+        defaultClipboard: Bool = false
     ) {
         self.clipboardStore = clipboardStore
+        self.scope = defaultClipboard ? .clipboard : .all
         self.history = Self.normalizedHistory(Defaults[.launcherSearchHistory])
         self.instantRouter = QueryRouter(
             providers: [commandProvider, CalculatorProvider()] + instantProviders
                 + [WebSearchProvider(), askAIProvider]
         )
         self.secondaryProviders = secondaryProviders
-        let channel = self.secondaryChannel
-        let interval = secondaryDebounceInterval
-        self.secondaryDebounceTask = Task { [weak self] in
-            for await _ in channel.debounce(for: interval) {
-                guard let self else { return }
-                await self.runSecondaryPass()
-            }
-        }
+        self.secondaryDebounceInterval = secondaryDebounceInterval
     }
 
     // MARK: - ⌘K action palette

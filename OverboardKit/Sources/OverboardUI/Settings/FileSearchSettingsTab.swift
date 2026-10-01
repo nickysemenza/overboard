@@ -1,3 +1,4 @@
+import Defaults
 import OverboardMac
 import SwiftUI
 
@@ -5,6 +6,7 @@ struct FileSearchSettingsTab: View {
     @State private var roots = ""
     @State private var exclusions = ""
     private let service = FileIndexService.shared
+    var coordinator = TypedSettingsCoordinator()
 
     /// The persisted (last-applied) included-folders text, for dirty checking.
     private var persistedRootsText: String {
@@ -16,6 +18,10 @@ struct FileSearchSettingsTab: View {
     /// hasn't committed yet.
     private var isDirty: Bool {
         self.roots != self.persistedRootsText || self.exclusions != Defaults[.fileSearchExclusions]
+    }
+
+    private var validationIssues: [String] {
+        FileSearchConfigurationValidation.issues(rootsText: self.roots, exclusions: self.exclusions)
     }
 
     var body: some View {
@@ -76,11 +82,15 @@ struct FileSearchSettingsTab: View {
                     Button("Apply & Rebuild Index") {
                         self.apply()
                     }
+                    .disabled(!self.validationIssues.isEmpty)
                     if self.isDirty {
                         Text("Unsaved changes")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+                }
+                ForEach(self.validationIssues, id: \.self) { message in
+                    Label(message, systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(.red)
                 }
             }
         }
@@ -90,9 +100,11 @@ struct FileSearchSettingsTab: View {
         }
         .onChange(of: self.roots) { _, newValue in
             Defaults[.fileSearchRootsDraft] = newValue
+            Defaults[FileSearchDraftKeys.roots] = newValue == self.persistedRootsText ? nil : newValue
         }
         .onChange(of: self.exclusions) { _, newValue in
             Defaults[.fileSearchExclusionsDraft] = newValue
+            Defaults[FileSearchDraftKeys.exclusions] = newValue == Defaults[.fileSearchExclusions] ? nil : newValue
         }
     }
 
@@ -100,19 +112,18 @@ struct FileSearchSettingsTab: View {
     /// launch) if there is one, else the persisted, applied value.
     private func loadDraftOrPersisted() {
         let draftRoots = Defaults[.fileSearchRootsDraft]
-        self.roots = draftRoots.isEmpty ? self.persistedRootsText : draftRoots
+        self.roots = Defaults[FileSearchDraftKeys.roots] ?? (draftRoots.isEmpty ? self.persistedRootsText : draftRoots)
         let draftExclusions = Defaults[.fileSearchExclusionsDraft]
-        self.exclusions = draftExclusions.isEmpty ? Defaults[.fileSearchExclusions] : draftExclusions
+        self.exclusions = Defaults[FileSearchDraftKeys.exclusions]
+            ?? (draftExclusions.isEmpty ? Defaults[.fileSearchExclusions] : draftExclusions)
     }
 
     private func apply() {
-        Defaults[.fileSearchRoots] = self.roots.split(whereSeparator: \.isNewline)
+        guard self.validationIssues.isEmpty else { return }
+        let roots = self.roots.split(whereSeparator: \.isNewline)
             .map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
-        Defaults[.fileSearchExclusions] = self.exclusions
         // Drafts are now identical to the persisted values — clear them so a
         // stale draft never masks a future out-of-band change to the roots.
-        Defaults[.fileSearchRootsDraft] = ""
-        Defaults[.fileSearchExclusionsDraft] = ""
-        self.service.rebuild()
+        self.coordinator.applyFileSearchConfiguration(.init(roots: roots, exclusions: self.exclusions))
     }
 }

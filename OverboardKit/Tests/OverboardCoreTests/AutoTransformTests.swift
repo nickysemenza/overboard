@@ -1,3 +1,4 @@
+import Foundation
 @testable import OverboardCore
 import Testing
 
@@ -57,5 +58,22 @@ struct AutoTransformTests {
         ]
         let out = AutoTransform.apply(to: "  hello  ", bundleID: "com.apple.Terminal", rules: rules)
         #expect(out == "HELLO")
+    }
+
+    @Test func transformsEachItemWithoutRemovingUnchangedRichCompanions() {
+        let snapshot = PasteboardSnapshot(reps: [
+            .init(uti: WellKnownUTI.plainText, data: Data("  first  ".utf8), itemIndex: 0),
+            .init(uti: WellKnownUTI.html, data: Data("<b>  first  </b>".utf8), itemIndex: 0),
+            .init(uti: WellKnownUTI.plainText, data: Data("second".utf8), itemIndex: 1),
+            .init(uti: WellKnownUTI.rtf, data: Data("unchanged rich bytes".utf8), itemIndex: 1),
+            .init(uti: WellKnownUTI.plainText, data: Data(" third ".utf8), itemIndex: 2),
+        ], sourceBundleID: "com.apple.Terminal", sourceAppName: nil)
+        let result = AutoTransform.apply(to: snapshot, rules: [
+            .init(bundleID: "com.apple.Terminal", transform: .trimWhitespace),
+        ])
+        #expect(result.reps.count == 4)
+        #expect(result.reps.first?.data == Data("first".utf8))
+        #expect(result.reps.contains(snapshot.reps[3]))
+        #expect(result.reps.last?.data == Data("third".utf8))
     }
 }

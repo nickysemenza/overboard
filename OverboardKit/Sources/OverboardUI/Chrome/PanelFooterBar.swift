@@ -5,8 +5,6 @@ import SwiftUI
 /// Reserved Footer Rule keeps it outside scrolling content, and § Buttons puts
 /// the primary action in primary foreground with the rest secondary.
 struct PanelFooterBar: View {
-    /// One footer action. `handler` is nil for a bar that only *advertises* a
-    /// keyboard commit (the emoji picker) rather than offering a click target.
     struct Action {
         var label: String
         /// Keycap drawn after the label; `nil` uses the ↩ return glyph instead.
@@ -44,15 +42,13 @@ struct PanelFooterBar: View {
                 .font(.caption)
             Spacer(minLength: 12)
             if let primary {
-                self.label(primary, emphasized: true)
-                self.keycap(primary)
+                self.action(primary, emphasized: true)
                 if self.secondary != nil {
                     Divider().frame(height: 12)
                 }
             }
             if let secondary {
-                self.label(secondary, emphasized: false)
-                self.keycap(secondary)
+                self.action(secondary, emphasized: false)
             }
         }
         .foregroundStyle(.secondary)
@@ -60,12 +56,22 @@ struct PanelFooterBar: View {
         .frame(height: Self.height)
     }
 
-    private func label(_ action: Action, emphasized: Bool) -> some View {
+    private func action(_ action: Action, emphasized: Bool) -> some View {
         Group {
             if let handler = action.handler {
-                Button(action.label, action: handler).buttonStyle(.plain)
+                Button(action: handler) {
+                    HStack(spacing: 8) {
+                        Text(action.label)
+                        self.keycap(action)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
             } else {
-                Text(action.label)
+                HStack(spacing: 8) {
+                    Text(action.label)
+                    self.keycap(action)
+                }
             }
         }
         .font(emphasized ? .caption.weight(.medium) : .caption)

@@ -6,22 +6,25 @@ import SwiftUI
 /// `ClipAction`s onto the shared `CommandPaletteView` chrome.
 struct ActionPalette: View {
     @Bindable var viewModel: DrawerViewModel
+    var maximumHeight: CGFloat = 320
 
     var body: some View {
         let isPinned = self.viewModel.selectedItem?.isPinned ?? false
         CommandPaletteView(
-            items: self.viewModel.filteredPaletteActions.map { entry in
+            items: self.viewModel.filteredPaletteActions.enumerated().map { index, entry in
                 CommandPaletteItem(
                     id: entry.id,
                     label: entry.label(isPinned: isPinned),
                     systemImage: entry.systemImage,
-                    hint: entry.hint
+                    hint: entry.hint ?? (index == self.viewModel.paletteIndex ? "↩" : nil),
+                    detail: entry.detail
                 )
             },
             query: self.$viewModel.paletteQuery,
             index: self.$viewModel.paletteIndex,
             emptyMessage: "No matching actions for this selection",
-            onRun: { self.viewModel.runPaletteAction(at: $0) }
+            onRun: { self.viewModel.runPaletteAction(at: $0) },
+            maximumHeight: self.maximumHeight
         )
     }
 }

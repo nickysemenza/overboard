@@ -16,6 +16,7 @@ struct CopyLatestClipIntent: AppIntent {
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<String> {
         let deps = IntentDependencies.current
+        try deps.checkLibrary()
         // `recent` is the same frecency-ordered listing the drawer shows;
         // `firstUsable` skips secrets so a credential never reaches
         // Shortcuts/Siri.
@@ -27,7 +28,7 @@ struct CopyLatestClipIntent: AppIntent {
         // Reuse the exact copy path the launcher's ⌘↩ uses, so the clipboard
         // monitor's marker/skip logic is respected and the item's use count
         // is bumped consistently.
-        try await deps.pasteback.copy(item)
+        guard await deps.pasteback.copy(item) == .copied else { throw IntentDeliveryError.failed }
         let text = try? await deps.store.plainText(for: item.id)
         return .result(value: ClipLookup.resultText(plainText: text))
     }

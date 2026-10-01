@@ -1,3 +1,4 @@
+import AppKit
 import OverboardCore
 import OverboardMac
 @testable import OverboardUI
@@ -15,6 +16,38 @@ struct EmojiPickerSnapshotTests {
             as: snapshotImageStrategy,
             record: snapshotRecordingMode
         )
+    }
+
+    @Test func searchHeaderRemainsStableAcrossMountedLayoutPasses() async throws {
+        _ = NSApplication.shared
+        let model = Fixtures.emojiPickerViewModel()
+        let view = EmojiPickerView(viewModel: model)
+        let host = snapshotHost(view, width: 400, height: 460)
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 400, height: 460),
+            styleMask: .borderless, backing: .buffered, defer: false
+        )
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        defer { window.close() }
+        let field = try #require(self.textFields(in: host).first)
+        #expect(window.makeFirstResponder(field))
+        let originalFrame = field.convert(field.bounds, to: host)
+        #expect(originalFrame.minY == 26)
+        #expect(originalFrame.height == 20)
+        for query in ["fire", "", "pizza", ""] {
+            model.query = query
+            field.invalidateIntrinsicContentSize()
+            host.needsLayout = true
+            host.layoutSubtreeIfNeeded()
+            try await Task.sleep(for: .milliseconds(25))
+            host.layoutSubtreeIfNeeded()
+            #expect(field.convert(field.bounds, to: host) == originalFrame)
+        }
+    }
+
+    private func textFields(in view: NSView) -> [NSTextField] {
+        (view as? NSTextField).map { [$0] } ?? view.subviews.flatMap { self.textFields(in: $0) }
     }
 }
 

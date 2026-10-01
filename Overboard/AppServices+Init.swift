@@ -22,21 +22,21 @@ extension AppServices {
     /// presenting a modal alert or calling `NSApp.terminate` before that
     /// callback returns can preempt AppKit's own launch bookkeeping — so the
     /// alert is deferred rather than shown here.
-    static func openStore(logger: Logger) -> ClipStore {
+    static func openStore(logger: Logger) -> (store: ClipStore, recovery: String?) {
         do {
             if isDemo {
                 let queue = try OverboardDatabase.openInMemory()
                 let directory = FileManager.default.temporaryDirectory
                     .appendingPathComponent("overboard-demo-\(UUID().uuidString)", isDirectory: true)
-                return try ClipStore(dbWriter: queue, blobs: BlobStore(directory: directory))
+                return try (ClipStore(dbWriter: queue, blobs: BlobStore(directory: directory)), nil)
             } else {
                 let directory = try OverboardDatabase.defaultDirectory()
                 let pool = try OverboardDatabase.open(at: directory)
                 let blobs = try BlobStore(directory: directory.appendingPathComponent("blobs", isDirectory: true))
-                return ClipStore(dbWriter: pool, blobs: blobs)
+                return (ClipStore(dbWriter: pool, blobs: blobs), nil)
             }
         } catch {
-            logger.error("Failed to open Overboard database: \(String(describing: error), privacy: .public)")
+            logger.error("Library unavailable; acquisition stopped")
             let fallbackDirectory = FileManager.default.temporaryDirectory
                 .appendingPathComponent("overboard-fallback-\(UUID().uuidString)", isDirectory: true)
             guard let queue = try? OverboardDatabase.openInMemory(),
@@ -47,11 +47,7 @@ extension AppServices {
                 // way or another for `self` to exist at all.
                 fatalError("Failed to open Overboard database, and the in-memory fallback also failed: \(error)")
             }
-            let openError = error
-            DispatchQueue.main.async {
-                Self.presentDatabaseOpenFailureAlert(openError)
-            }
-            return ClipStore(dbWriter: queue, blobs: blobs)
+            return (ClipStore(dbWriter: queue, blobs: blobs), error.localizedDescription)
         }
     }
 

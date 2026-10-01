@@ -8,6 +8,7 @@ import SwiftUI
 struct LauncherSearchBar: View {
     @Bindable var viewModel: LauncherViewModel
     var fieldFocused: FocusState<Bool>.Binding
+    var onShowDrawer: (() -> Void)?
     /// Gates the search-bar spinner behind a short delay so it doesn't
     /// flicker on every keystroke — `isSearching` is true through the whole
     /// 120 ms debounce window (stream 2a), not just while a request is
@@ -26,6 +27,10 @@ struct LauncherSearchBar: View {
             accessibilityLabel: String(localized: "Search \(self.viewModel.scope.rawValue)", bundle: .module),
             focus: self.fieldFocused
         ) {
+            if self.viewModel.scope == .clipboard, let onShowDrawer {
+                Button("Show Drawer", systemImage: "rectangle.bottomthird.inset.filled", action: onShowDrawer)
+                    .buttonStyle(.plain).font(.caption).help("Continue with this selection in the drawer")
+            }
             if self.showSpinner {
                 ProgressView().controlSize(.small)
             }
@@ -85,7 +90,9 @@ struct LauncherFooterBar: View {
     var body: some View {
         PanelFooterBar(
             primary: self.viewModel.primaryAction.map { action in
-                .init(label: self.viewModel.primaryActionLabel ?? action.label) { self.viewModel.commit() }
+                let label = self.viewModel.selectedActions.contains(.paste)
+                    ? "Paste to \(self.viewModel.targetAppName)" : self.viewModel.primaryActionLabel ?? action.label
+                return .init(label: label) { self.viewModel.performPanelCommit(.paste) }
             },
             secondary: .actions { self.viewModel.togglePalette() }
         )
@@ -122,7 +129,7 @@ struct LauncherResultList: View {
                             excerpt: excerpt,
                             actions: self.viewModel.actions(for: result),
                             onSelect: { self.viewModel.select(at: index) },
-                            onCommit: { self.viewModel.select(at: index); self.viewModel.commit() },
+                            onCommit: { self.viewModel.select(at: index); self.viewModel.performPanelCommit(.paste) },
                             onPerformAction: { action in
                                 self.viewModel.select(at: index)
                                 self.viewModel.perform(action)

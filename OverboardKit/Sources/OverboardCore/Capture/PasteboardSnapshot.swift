@@ -7,10 +7,12 @@ public struct PasteboardSnapshot: Sendable, Equatable {
     public struct Rep: Sendable, Equatable {
         public var uti: String
         public var data: Data
+        public var itemIndex: Int?
 
-        public init(uti: String, data: Data) {
+        public init(uti: String, data: Data, itemIndex: Int? = nil) {
             self.uti = uti
             self.data = data
+            self.itemIndex = itemIndex
         }
     }
 
@@ -22,6 +24,7 @@ public struct PasteboardSnapshot: Sendable, Equatable {
     public var sourceURL: String?
     public var sourceTitle: String?
     public var capturedAt: Date
+    public var admission: CaptureAdmission?
 
     public init(
         reps: [Rep],
@@ -29,7 +32,8 @@ public struct PasteboardSnapshot: Sendable, Equatable {
         sourceAppName: String?,
         sourceURL: String? = nil,
         sourceTitle: String? = nil,
-        capturedAt: Date = Date()
+        capturedAt: Date = Date(),
+        admission: CaptureAdmission? = nil
     ) {
         self.reps = reps
         self.sourceBundleID = sourceBundleID
@@ -37,6 +41,7 @@ public struct PasteboardSnapshot: Sendable, Equatable {
         self.sourceURL = sourceURL
         self.sourceTitle = sourceTitle
         self.capturedAt = capturedAt
+        self.admission = admission
     }
 }
 

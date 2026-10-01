@@ -1,11 +1,30 @@
 import AppKit
 import OverboardCore
+import OverboardMac
 import SwiftUI
 
 // MARK: - Backup
 
 extension HistorySettingsTab {
     func exportHistory() {
+        let warning = NSAlert()
+        warning.messageText = String(localized: "Export an unencrypted library backup?")
+        warning
+            .informativeText =
+            String(
+                localized: """
+                This folder contains readable clipboard payloads, pins, snippets, preferences, quicklinks, \
+                aliases, shortcuts and learned ranking. It is not encrypted. Detected secrets are excluded \
+                unless you explicitly include them. Store it somewhere private. \
+                macOS permission grants are never exported.
+                """
+            )
+        warning.addButton(withTitle: String(localized: "Export Without Detected Secrets"))
+        warning.addButton(withTitle: String(localized: "Cancel"))
+        warning.addButton(withTitle: String(localized: "Include Detected Secrets in Plaintext"))
+        let response = warning.runModal()
+        guard response != .alertSecondButtonReturn else { return }
+        let includeSecrets = response == .alertThirdButtonReturn
         // AppKit panels rather than `.fileExporter`: the archive is a folder we
         // write ourselves (JSON + blob files), not a single document SwiftUI
         // can hand off.
@@ -20,13 +39,15 @@ extension HistorySettingsTab {
         Task {
             defer { self.isArchiving = false }
             do {
-                let summary = try await self.store.export(to: url)
+                let summary = try await self.store.export(
+                    to: url, includeSecrets: includeSecrets, settings: ArchivePreferencesAdapter.capture()
+                )
                 self.archiveOutcome = ArchiveOutcome(
                     title: String(localized: "Export Complete"),
                     message: Self.exportMessage(for: summary)
                 )
             } catch {
-                settingsLogger.error("export failed: \(String(describing: error), privacy: .public)")
+                settingsLogger.error("library archive export failed")
                 self.archiveOutcome = ArchiveOutcome(
                     title: String(localized: "Export Failed"), message: error.localizedDescription
                 )
@@ -43,18 +64,37 @@ extension HistorySettingsTab {
         panel.allowsMultipleSelection = false
         guard panel.runModal() == .OK, let url = panel.url else { return }
 
+        let confirmation = NSAlert()
+        confirmation.messageText = String(localized: "Import library and app settings?")
+        confirmation
+            .informativeText =
+            String(
+                localized: """
+                Clips and snippets are merged without deleting existing content. Archived preferences, \
+                quicklinks, aliases, shortcuts and learned ranking replace matching app settings. \
+                Missing payloads can be repaired by importing a complete copy later. \
+                macOS permissions are not restored.
+                """
+            )
+        confirmation.addButton(withTitle: String(localized: "Import"))
+        confirmation.addButton(withTitle: String(localized: "Cancel"))
+        guard confirmation.runModal() == .alertFirstButtonReturn else { return }
+
         self.isArchiving = true
         Task {
             defer { self.isArchiving = false }
             do {
-                let summary = try await self.store.import(from: url)
+                let summary = try await self.store.import(
+                    from: url, validateSettings: ArchivePreferencesAdapter.validate
+                )
+                try ArchivePreferencesAdapter.apply(summary.settings)
                 self.archiveOutcome = ArchiveOutcome(
                     title: String(localized: "Import Complete"),
                     message: Self.importMessage(for: summary)
                 )
                 await self.refresh()
             } catch {
-                settingsLogger.error("import failed: \(String(describing: error), privacy: .public)")
+                settingsLogger.error("library archive import failed")
                 self.archiveOutcome = ArchiveOutcome(
                     title: String(localized: "Import Failed"),
                     // "Pick a folder written by Export History" is the whole
@@ -92,6 +132,12 @@ extension HistorySettingsTab {
                 """
             )
         }
+        message += " " + String(localized: "Included \(summary.snippetCount) snippets.")
+        if summary
+            .includesSettings
+        {
+            message += " " + String(localized: "App settings included; macOS permissions excluded.")
+        }
         return message
     }
 
@@ -126,6 +172,19 @@ extension HistorySettingsTab {
                 from the archive.
                 """
             ))
+        }
+        if summary.representationsRepaired > 0 {
+            parts.append(String(localized: "Repaired \(summary.representationsRepaired) representations."))
+        }
+        if summary
+            .snippetsImported > 0
+        {
+            parts.append(String(localized: "Added \(summary.snippetsImported) snippets."))
+        }
+        if summary
+            .settings != nil
+        {
+            parts.append(String(localized: "App settings restored; macOS permissions unchanged."))
         }
         return parts.joined(separator: " ")
     }

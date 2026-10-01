@@ -22,12 +22,12 @@ import os
 /// method suspends, actor atomicity no longer separates blob writes from blob
 /// deletions. GRDB's single writer does that instead — **every blob-file
 /// mutation happens inside a `dbWriter` write block** (`ingest`, `purge`,
-/// `purgeExpiredSecrets`, `reconcileOrphanBlobs`, `insertImported`), so a fresh blob can never be
+/// `reconcileOrphanBlobs`, `insertImported`), so a fresh blob can never be
 /// reclaimed as an orphan between its file appearing and its row landing.
 ///
-/// The actor's own body holds only `ingest`, payload access, snippets, and
-/// change observation; queries, mutations/maintenance, semantic search,
-/// enrichment, and archive export/import each live in their own
+/// The actor's own body holds only `ingest`, payload access, and
+/// change observation; snippets, queries, mutations/maintenance, semantic
+/// search, enrichment, and archive export/import each live in their own
 /// `ClipStore+Topic.swift` extension in this directory (all still part of
 /// this type — extensions aren't a visibility boundary within the module,
 /// just a file-size one).
@@ -87,14 +87,32 @@ public actor ClipStore {
     /// Returns the stored (or bumped) item, or nil if the snapshot was skipped.
     @discardableResult
     public func ingest(_ snapshot: PasteboardSnapshot) async throws -> ClipItem? {
-        guard let classified = CaptureClassifier.classify(snapshot) else { return nil }
+        try Task.checkCancellation()
+        try snapshot.admission?.check()
+        guard var classified = CaptureClassifier.classify(snapshot) else { return nil }
+        if let label = ClipSensitivity.label(for: snapshot.reps) {
+            classified.isSecret = true
+            classified.previewText = ClipSensitivity.maskedPreview(label: label)
+            classified.searchText = nil
+            classified.charCount = nil
+            classified.lineCount = nil
+            classified.pixelWidth = nil
+            classified.pixelHeight = nil
+            classified.fileCount = nil
+        }
+        let classification = classified
 
         let blobs = self.blobs
-        let stored: (item: ClipItem, isNew: Bool)? = try await self.dbWriter.write { db in
-            try Self.ingestWrite(db, snapshot: snapshot, classified: classified, blobs: blobs)
+        let stored: (item: ClipItem, isNew: Bool)? = try await self.writeCancellable { db in
+            try snapshot.admission?.check()
+            let result = try Self.ingestWrite(db, snapshot: snapshot, classified: classification, blobs: blobs)
+            try snapshot.admission?.check()
+            return result
         }
 
         guard let stored else { return nil }
+        try Task.checkCancellation()
+        try snapshot.admission?.check()
         if stored.isNew, !classified.isSecret,
            classified.kind == .text || classified.kind == .link,
            let searchText = classified.searchText
@@ -113,6 +131,7 @@ public actor ClipStore {
         let data: Data?
         let blobHash: String?
         let byteSize: Int
+        let itemIndex: Int?
     }
 
     /// `ingest`'s write-block body, split out to keep `ingest` itself within
@@ -136,11 +155,19 @@ public actor ClipStore {
             .fetchOne(db)
         {
             var bumped = existing
-            bumped.useCount += 1
+            bumped.useCount = try Int(Self.nextItemCounter(
+                after: Int64(existing.useCount), itemID: existing.id, counter: .useCount
+            ))
             bumped.lastUsedAt = now
             bumped.updatedAt = now
-            bumped.lamport += 1
+            bumped.lamport = try Self.nextItemCounter(
+                after: existing.lamport, itemID: existing.id, counter: .revision
+            )
             try bumped.update(db)
+            if classified.isSecret, !existing.isSecret {
+                try Self.protectSensitiveItem(db, itemID: bumped.id, label: "Sensitive content")
+                bumped = try ClipItem.fetchOne(db, key: bumped.id) ?? bumped
+            }
             return (bumped, false)
         }
 
@@ -161,11 +188,14 @@ public actor ClipStore {
                     uti: rep.uti,
                     data: rep.data,
                     blobHash: nil,
-                    byteSize: rep.data.count
+                    byteSize: rep.data.count,
+                    itemIndex: rep.itemIndex
                 ))
             } else {
                 let hash = try blobs.store(rep.data)
-                reps.append(PendingRepresentation(uti: rep.uti, data: nil, blobHash: hash, byteSize: rep.data.count))
+                reps.append(PendingRepresentation(
+                    uti: rep.uti, data: nil, blobHash: hash, byteSize: rep.data.count, itemIndex: rep.itemIndex
+                ))
             }
         }
         return reps
@@ -211,10 +241,11 @@ public actor ClipStore {
                 uti: rep.uti,
                 data: rep.data,
                 blobHash: rep.blobHash,
-                byteSize: rep.byteSize
+                byteSize: rep.byteSize,
+                itemIndex: rep.itemIndex
             ).insert(db)
         }
-        return item
+        return try ClipItem.fetchOne(db, key: item.id) ?? item
     }
 
     /// The one INSERT that puts an item row *and* its FTS entry in place.
@@ -228,6 +259,15 @@ public actor ClipStore {
     /// `ClipStore+Archive.swift`'s `insertImported` can reach it.
     static func insertIndexed(_ db: GRDB.Database, item: ClipItem, searchText: String?) throws {
         try item.insert(db)
+        if item.isSecret || searchText.flatMap({ ClipSensitivity.label(for: $0) }) != nil {
+            try protectSensitiveItem(
+                db, itemID: item.id,
+                label: searchText.flatMap { ClipSensitivity.label(for: $0) }
+                    ?? item.previewText.flatMap { $0.hasPrefix("Secret — ") ? String($0.dropFirst(9)) : nil }
+                    ?? "Sensitive content"
+            )
+            return
+        }
         guard let searchText else { return }
         let rowid = db.lastInsertedRowID
         try db.execute(
@@ -246,6 +286,7 @@ public actor ClipStore {
         try await self.dbWriter.read { db in
             try Representation
                 .filter(sql: "itemID = ?", arguments: [itemID])
+                .order(sql: "itemIndex ASC, rowid ASC")
                 .fetchAll(db)
         }
     }
@@ -287,62 +328,15 @@ public actor ClipStore {
         return strings.compactMap { URL(string: $0)?.path }
     }
 
-    // MARK: - Snippets
-
-    public func snippets() async throws -> [Snippet] {
-        try await self.dbWriter.read { db in
-            try Snippet
-                .filter(sql: "deletedAt IS NULL")
-                .order(sql: "title COLLATE NOCASE")
-                .fetchAll(db)
-        }
-    }
-
-    public func searchSnippets(_ query: String) async throws -> [Snippet] {
-        let trimmed = query.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { return try await self.snippets() }
-        return try await self.dbWriter.read { db in
-            try Snippet
-                .filter(
-                    sql: "deletedAt IS NULL AND (title LIKE ? OR body LIKE ?)",
-                    arguments: ["%\(trimmed)%", "%\(trimmed)%"]
-                )
-                .order(sql: "title COLLATE NOCASE")
-                .fetchAll(db)
-        }
-    }
-
-    public func saveSnippet(_ snippet: Snippet) async throws {
-        var updated = snippet
-        updated.updatedAt = Date()
-        updated.lamport += 1
-        let record = updated
-        try await self.dbWriter.write { db in
-            try record.save(db)
-        }
-    }
-
-    public func deleteSnippet(id: String) async throws {
-        try await self.dbWriter.write { db in
-            try db.execute(
-                sql: "UPDATE snippet SET deletedAt = ?, updatedAt = ?, lamport = lamport + 1 WHERE id = ?",
-                arguments: [Date(), Date(), id]
-            )
-        }
-    }
-
     // MARK: - Observation
 
     /// Emits whenever any item or snippet changes (insert, enrichment, pin,
-    /// delete, …). The value is a cheap change-counter — observers re-run
+    /// delete, …). The value is a revision fingerprint — observers re-run
     /// their own query on each emission.
     public nonisolated func observeChangeToken() -> AsyncValueObservation<Int64> {
         ValueObservation
             .tracking { db in
-                try Int64.fetchOne(db, sql: """
-                SELECT (SELECT IFNULL(SUM(lamport), 0) + COUNT(*) FROM item)
-                     + (SELECT IFNULL(SUM(lamport), 0) + COUNT(*) FROM snippet)
-                """) ?? 0
+                try Self.itemChangeToken(in: db)
             }
             .values(in: self.dbWriter)
     }

@@ -1,3 +1,4 @@
+import Foundation
 import OverboardCore
 import OverboardMac
 
@@ -14,7 +15,8 @@ struct IntentDependencies {
     var pasteback: PastebackService
     /// Marker-tagged copy + HUD — the same path the launcher's ⌘↩ takes, so a
     /// shortcut's copy doesn't re-enter history.
-    var copyString: (String, String) -> Void
+    var copyString: (String, String) async throws -> Void
+    var checkLibrary: () throws -> Void = {}
     var showLauncher: () -> Void
     var showDrawer: () -> Void
     var setCapturePaused: (Bool) -> Void
@@ -22,15 +24,46 @@ struct IntentDependencies {
     /// Swappable seam; the running app's composition root by default.
     static var current: IntentDependencies = .live()
 
+    static func ensureLibraryAvailable() throws {
+        try self.current.checkLibrary()
+    }
+
     private static func live() -> IntentDependencies {
         let services = AppServices.shared
         return IntentDependencies(
             store: services.store,
             pasteback: services.pasteback,
-            copyString: { services.copyString($0, hud: $1) },
-            showLauncher: { services.launcher.show() },
-            showDrawer: { services.overlay.show() },
+            copyString: { text, hud in
+                switch await services.actions.copyStringAndWait(text, hud: hud) {
+                case .copied: return
+                case .cancelled: throw CancellationError()
+                case .dispatched, .failed: throw IntentDeliveryError.failed
+                }
+            },
+            checkLibrary: {
+                guard services.libraryRecovery == nil else { throw IntentDeliveryError.libraryUnavailable }
+            },
+            showLauncher: {
+                guard services.isStarted else { return }
+                services.launcher.show()
+            },
+            showDrawer: {
+                guard services.isStarted else { return }
+                services.overlay.show()
+            },
             setCapturePaused: { services.setCapturePaused($0) }
         )
+    }
+}
+
+enum IntentDeliveryError: LocalizedError {
+    case failed
+    case libraryUnavailable
+
+    var errorDescription: String? {
+        switch self {
+        case .failed: "Clipboard publication did not complete. Try again."
+        case .libraryUnavailable: "The Overboard library needs recovery. Open Overboard for recovery options."
+        }
     }
 }

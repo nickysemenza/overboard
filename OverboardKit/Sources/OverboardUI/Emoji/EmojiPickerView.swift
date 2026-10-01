@@ -7,6 +7,7 @@ import SwiftUI
 public struct EmojiPickerView: View {
     @Bindable var viewModel: EmojiPickerViewModel
     @FocusState private var fieldFocused: Bool
+    @ScaledMetric(relativeTo: .title3) private var searchBarHeight: CGFloat = 20
     /// The mouse-hovered cell, tracked separately from `viewModel.selectedIndex`
     /// so resting the pointer over the grid can no longer steal the keyboard
     /// selection — only a click (or ↩) commits.
@@ -27,8 +28,10 @@ public struct EmojiPickerView: View {
             }
             Divider()
             PanelFooterBar(
-                primary: .init(label: String(localized: "Paste", bundle: .module)),
-                secondary: .init(label: String(localized: "Copy", bundle: .module), keycap: "⌘↩")
+                primary: .init(label: PanelActionID.paste.metadata.label) { self.viewModel.commit(copyOnly: false) },
+                secondary: .init(label: PanelActionID.copy.metadata.label, keycap: "⌘↩") {
+                    self.viewModel.commit(copyOnly: true)
+                }
             )
         }
         .padding(14)
@@ -49,6 +52,7 @@ public struct EmojiPickerView: View {
             text: self.$viewModel.query,
             focus: self.$fieldFocused
         )
+        .frame(height: self.searchBarHeight)
     }
 
     private var grid: some View {
@@ -66,11 +70,19 @@ public struct EmojiPickerView: View {
                                 // (out of range) when a query collapsed ten
                                 // sections into one.
                                 let flatIndex = section.start + offset
-                                EmojiCell(
-                                    emoji: emoji,
-                                    isSelected: flatIndex == self.viewModel.selectedIndex,
-                                    isHovered: flatIndex == self.hoveredIndex
-                                )
+                                Button {
+                                    self.viewModel.selectedIndex = flatIndex
+                                    self.viewModel.commit(copyOnly: false)
+                                } label: {
+                                    EmojiCell(
+                                        emoji: emoji,
+                                        isSelected: flatIndex == self.viewModel.selectedIndex,
+                                        isHovered: flatIndex == self.hoveredIndex
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel(emoji.name)
+                                .accessibilityAddTraits(flatIndex == self.viewModel.selectedIndex ? .isSelected : [])
                                 .id(EmojiPickerViewModel.cellID(section: sectionIndex, character: emoji.character))
                                 .onHover { hovering in
                                     if hovering {
@@ -78,10 +90,6 @@ public struct EmojiPickerView: View {
                                     } else if self.hoveredIndex == flatIndex {
                                         self.hoveredIndex = nil
                                     }
-                                }
-                                .onTapGesture {
-                                    self.viewModel.selectedIndex = flatIndex
-                                    self.viewModel.commit(copyOnly: false)
                                 }
                             }
                         }

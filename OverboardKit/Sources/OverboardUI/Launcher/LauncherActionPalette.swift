@@ -5,21 +5,33 @@ import SwiftUI
 /// row, projected onto the shared `CommandPaletteView` chrome.
 struct LauncherActionPalette: View {
     @Bindable var viewModel: LauncherViewModel
+    var onAddClipToStack: ((ClipItem) -> Void)?
+    var onRunClipQuicklink: ((ClipItem, Quicklink) -> Void)?
+    var maximumHeight: CGFloat = 320
 
     var body: some View {
         CommandPaletteView(
-            items: self.viewModel.filteredPaletteActions.enumerated().map { index, action in
+            items: self.viewModel.filteredPaletteEntries(
+                includeStack: self.onAddClipToStack != nil, includeClipQuicklinks: self.onRunClipQuicklink != nil
+            )
+            .enumerated().map { index, action in
                 CommandPaletteItem(
                     id: action.id,
                     label: action.label,
                     systemImage: action.systemImage,
-                    hint: LauncherActions.hint(at: index)
+                    hint: index == self.viewModel.paletteIndex ? "↩" : nil,
+                    detail: action.detail
                 )
             },
             query: self.$viewModel.paletteQuery,
             index: self.$viewModel.paletteIndex,
             emptyMessage: "No actions for this result",
-            onRun: { self.viewModel.runPaletteAction(at: $0) }
+            onRun: {
+                self.viewModel.runPaletteEntry(
+                    at: $0, onAddClipToStack: self.onAddClipToStack, onRunClipQuicklink: self.onRunClipQuicklink
+                )
+            },
+            maximumHeight: self.maximumHeight
         )
     }
 }

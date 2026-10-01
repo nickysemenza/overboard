@@ -56,11 +56,12 @@ final class AppServices {
     let captureState = CaptureState()
 
     let store: ClipStore
+    let libraryRecovery: String?
     let monitor: ClipboardMonitor
     let pasteback: PastebackService
-    /// Post-ingest OCR / link / LLM enrichment, shared by the ingest loop and
-    /// the link-backfill job.
+    /// Post-ingest local OCR and on-device model enrichment.
     let enrichment: ClipEnrichmentPipeline
+    let enrichmentQueue: BoundedEnrichmentQueue
     /// Side effects for `ClipAction`, plus the shared copy/paste helpers the
     /// launcher callbacks and the App Intents (via `copyString`) go through.
     let actions: ClipActionExecutor
@@ -74,6 +75,10 @@ final class AppServices {
     /// Shared Settings tab selection so `openSettings(tab:)` can deep-link
     /// into a specific tab of the once-built `Settings` scene.
     let settingsNavigation = SettingsNavigation()
+    lazy var settingsCoordinator = TypedSettingsCoordinator(
+        navigation: self.settingsNavigation,
+        onFileSearchConfigurationChanged: { [weak self] in self?.applyFileSearchConfiguration($0) }
+    )
     let runningApps = RunningApps()
     let stack = PasteStack()
 
@@ -93,30 +98,33 @@ final class AppServices {
     var pendingWindowID: String?
 
     var ingestTask: Task<Void, Never>?
-    /// Purge, secret expiry, blob/VACUUM sweep, and link backfill, as one
-    /// start/stop unit.
+    var activeCaptureTask: Task<Void, Never>?
+    var captureGeneration = 0
+    var preferenceTask: Task<Void, Never>?
+    var archivePreferencesObserver: NSObjectProtocol?
+    var isStarted = false
+    /// Retention and blob/VACUUM maintenance as one start/stop unit.
     let maintenance: MaintenanceScheduler
     let logger = Logger(subsystem: "com.nickysemenza.overboard", category: "app")
 
     private init() {
-        self.store = Self.openStore(logger: self.logger)
+        let opened = Self.openStore(logger: self.logger)
+        self.store = opened.store
+        self.libraryRecovery = opened.recovery
         self.monitor = ClipboardMonitor()
         self.pasteback = PastebackService(store: self.store)
         // macOS 27: the vision-capable on-device model can title an image
         // clip straight from its pixels. Nil on earlier systems, where the
         // pipeline falls back to its OCR-text-only labeling path.
-        var enrichImage: ClipEnrichmentPipeline.ImageEnricher?
-        if #available(macOS 27, *) {
-            enrichImage = { data, hint in
-                guard ClipEnricher.isAvailable else { return nil }
-                return try? await ClipEnricher.enrich(image: data, recognizedText: hint)
-            }
-        }
         self.enrichment = ClipEnrichmentPipeline(
             store: self.store,
-            settings: { ClipEnrichmentPipeline.Settings(richLinkPreviews: Defaults[.richLinkPreviews]) },
-            enrichImage: enrichImage
+            settings: { ClipEnrichmentPipeline.Settings() },
+            enrichImage: Self.imageEnricher()
         )
+        let enrichment = self.enrichment
+        self.enrichmentQueue = BoundedEnrichmentQueue { item, snapshot in
+            await enrichment.enrich(item: item, snapshot: snapshot)
+        }
         let stack = self.stack
         self.actions = ClipActionExecutor(
             store: self.store,
@@ -129,7 +137,7 @@ final class AppServices {
             }
         )
         self.maintenance = MaintenanceScheduler(
-            jobs: Self.maintenanceJobs(store: self.store, enrichment: self.enrichment, logger: self.logger)
+            jobs: Self.maintenanceJobs(store: self.store, logger: self.logger)
         )
         self.overlay = OverlayController(store: self.store, stack: self.stack)
         let spotify = SpotifyNowPlayingMonitor()
@@ -143,6 +151,7 @@ final class AppServices {
             calendar: calendar,
             pausedSnapshot: self.captureState.snapshot
         )
+        launcherViewModel.scope = .clipboard
         self.launcherViewModel = launcherViewModel
         self.launcher = LauncherPanelController(store: self.store, viewModel: launcherViewModel)
 
@@ -155,23 +164,41 @@ final class AppServices {
         self.emojiPicker = EmojiPanelController(viewModel: emojiViewModel)
     }
 
+    private static func imageEnricher() -> ClipEnrichmentPipeline.ImageEnricher? {
+        guard #available(macOS 27, *) else { return nil }
+        return { data, hint in
+            guard ClipEnricher.isAvailable else { return nil }
+            return try? await ClipEnricher.enrich(image: data, recognizedText: hint)
+        }
+    }
+
     func start() {
+        guard !self.isStarted else { return }
+        self.isStarted = true
+        self.installOverlayCallbacks()
+        self.pasteback.beforePublication = { [weak self] in
+            guard let self, self.libraryRecovery == nil, !Self.isDemo, !self.captureState.isPaused else { return }
+            self.monitor.flushPendingCapture()
+        }
+        self.installLauncherCallbacks()
+        self.installEmojiCallbacks()
+        guard self.libraryRecovery == nil else {
+            self.captureState.setPaused(true)
+            self.presentLibraryRecovery()
+            return
+        }
         if Self.isDemo {
             // No monitor, purge, secret sweep, or hotkeys: nothing real may be
             // captured, and global hotkeys would fight a concurrently running
             // daily-driver instance.
             Task { await DemoSeed.populate(self.store) }
         } else {
-            FileIndexService.shared.start()
+            self.reconcileEnabledSources()
             self.startCapturePipeline()
             self.registerHotkeys()
-            self.startSpotifyMonitor()
-            self.startCalendarSource()
+            self.observeSourcePreferences()
         }
 
-        self.installOverlayCallbacks()
-        self.installLauncherCallbacks()
-        self.installEmojiCallbacks()
         // Decode the emoji dataset off-main now so the first ⌃⌘Space is instant.
         self.emojiViewModel.warm()
     }
@@ -181,12 +208,29 @@ final class AppServices {
     /// chance to hand the user's real clipboard back before the process
     /// exits. Called from `AppDelegate.applicationWillTerminate`.
     func stop() {
+        self.isStarted = false
+        self.captureGeneration += 1
         self.ingestTask?.cancel()
+        self.ingestTask = nil
+        self.activeCaptureTask?.cancel()
+        self.activeCaptureTask = nil
+        self.launcher.hide()
+        self.overlay.hide()
+        self.emojiPicker.hide()
+        self.enrichmentQueue.stop()
+        self.preferenceTask?.cancel()
+        self.preferenceTask = nil
+        if let archivePreferencesObserver {
+            NotificationCenter.default.removeObserver(archivePreferencesObserver)
+            self.archivePreferencesObserver = nil
+        }
+        self.pasteback.cancel()
         self.maintenance.stop()
         if !Self.isDemo {
             self.monitor.stop()
             FileIndexService.shared.stop()
             self.calendar.stop()
+            self.spotify.stop()
         }
 
         // `applicationWillTerminate` is synchronous, so the async drain below
@@ -207,5 +251,6 @@ final class AppServices {
         while semaphore.wait(timeout: .now()) == .timedOut, Date() < deadline {
             RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))
         }
+        AppPreferenceStorage.cleanUpDemo()
     }
 }

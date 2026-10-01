@@ -22,9 +22,7 @@ public enum OverboardDatabase {
     }
 
     public static func open(at directory: URL) throws -> DatabasePool {
-        let pool = try DatabasePool(path: directory.appendingPathComponent("overboard.sqlite").path)
-        try Migrations.migrator.migrate(pool)
-        return pool
+        try openRecoverably(at: directory).database
     }
 
     /// In-memory database for tests.
@@ -233,6 +231,10 @@ enum Migrations {
             CREATE INDEX item_live_kind
               ON item(kind, lastUsedAt DESC) WHERE deletedAt IS NULL;
             """)
+        }
+
+        migrator.registerMigration("v7-representation-item-index") { db in
+            try db.execute(sql: "ALTER TABLE representation ADD COLUMN itemIndex INTEGER")
         }
 
         return migrator

@@ -55,6 +55,16 @@ struct ItemCardSnapshotTests {
         assertSnapshot(of: self.host(item, index: 4), as: snapshotImageStrategy, record: snapshotRecordingMode)
     }
 
+    @Test func secretLargestDynamicType() {
+        let item = Fixtures.item(preview: "AWS access key", isSecret: true)
+        let view = ItemCardView(item: item, index: 7, isSelected: false, store: self.store)
+            .environment(\.dynamicTypeSize, .xxxLarge)
+        assertSnapshot(
+            of: snapshotImage(view, width: 300, height: 300), as: snapshotImageStrategy,
+            record: snapshotRecordingMode
+        )
+    }
+
     /// A card the frecency blend lifted above a newer item (see
     /// `ClipStore.frecencyOrderSQL` and `DrawerViewModel.stripEntries`):
     /// the up arrow before ×N, and the use count itself, both need to render.
