@@ -23,7 +23,7 @@ public enum ClipJSONCoding {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .custom { date, encoder in
             var container = encoder.singleValueContainer()
-            try container.encode(Self.fractionalISO8601.format(date))
+            try container.encode(Self.archiveDateFormatter.string(from: date))
         }
         encoder.outputFormatting = [.sortedKeys]
         return encoder
@@ -43,6 +43,15 @@ public enum ClipJSONCoding {
     /// millisecond-preserving equivalent — and, unlike `ISO8601DateFormatter`,
     /// `Sendable`, so it can be a shared static.
     private static let fractionalISO8601 = Date.ISO8601FormatStyle(includingFractionalSeconds: true)
+
+    private static let archiveDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'"
+        return formatter
+    }()
 }
 
 // MARK: - On-disk shape

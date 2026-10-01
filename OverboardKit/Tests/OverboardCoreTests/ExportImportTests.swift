@@ -132,12 +132,7 @@ struct ExportImportTests {
         let restored = try #require(await destination.store.recent().first)
         #expect(restored.isPinned)
         #expect(restored.useCount == original.useCount)
-        // The archive keeps millisecond precision (see `ClipJSONCoding.archiveEncoder`)
-        // and formatting truncates rather than rounds, so a round trip can lose up to
-        // one whole millisecond. The extra microsecond absorbs Double noise at Date's
-        // magnitude (its ULP is ~2e-7 s), which once pushed the delta to 0.0010000467.
-        let millisecond: TimeInterval = 0.001
-        #expect(restored.lastUsedAt.timeIntervalSince(original.lastUsedAt).magnitude <= millisecond + 1e-6)
+        #expect(restored.lastUsedAt == original.lastUsedAt)
     }
 
     @Test func secretsAreExcludedByDefaultAndIncludedOnRequest() async throws {

@@ -57,7 +57,6 @@ private struct ArchivePreparation {
     private var sizes: [String: Int] = [:]
     private var representationCount = 0
     private let decoder = ClipJSONCoding.archiveDecoder()
-    private let encoder = ClipJSONCoding.archiveEncoder()
 
     init(source: URL, directory: URL, limits: ClipArchive.Limits, manifest: ClipArchive.Manifest?) {
         self.source = source
@@ -74,9 +73,7 @@ private struct ArchivePreparation {
                 guard let record = try self.decodeRecord(line, number: number) else { return }
                 try ArchiveValidation.record(record)
                 try self.prepareRepresentations(record.representations)
-                var normalized = try self.encoder.encode(record)
-                normalized.append(0x0A)
-                try output.write(contentsOf: normalized)
+                try output.write(contentsOf: line + Data([0x0A]))
             }
         self.totalBytes += digest.bytes
         return digest
