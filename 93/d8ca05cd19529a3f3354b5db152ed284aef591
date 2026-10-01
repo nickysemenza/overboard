@@ -1,0 +1,29 @@
+.github/actions/build-signed/action.yml
+  s_bbbb00d9107849::t_cde7da24d77051 66
+.github/workflows/ci.yml
+  s_bbbb00d9107849::t_ea134c20897ac8 85,109,185
+.github/workflows/release.yml
+  s_bbbb00d9107849::t_9f8e08387bab7f 33-37,39,54
+.github/workflows/validate.yml
+  s_bbbb00d9107849::t_d0715c9d980124 1-51
+Overboard.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+  s_bbbb00d9107849::t_cf9581fa677372 2,9-10,18-19,54-55,72-73
+OverboardKit/Package.resolved
+  s_bbbb00d9107849::t_cb51eee319583a 85-93
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "93d8ca05cd19529a3f3354b5db152ed284aef591",
+  "prompts": {},
+  "sessions": {
+    "s_bbbb00d9107849": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0f8c4-d24e-7df3-a6ee-2a7daa3f54e5",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "nicky <nicky@nickysemenza.com>"
+    }
+  }
+}
