@@ -1,0 +1,25 @@
+OverboardKit/Sources/OverboardCore/Store/ClipArchive.swift
+  s_bbbb00d9107849::t_c477296c952cd5 26,46-54
+OverboardKit/Sources/OverboardCore/Store/PreparedArchive.swift
+  s_bbbb00d9107849::t_969d0b6666750d 76
+OverboardKit/Tests/OverboardCoreTests/ArchiveTimestampTests.swift
+  s_bbbb00d9107849::t_cb45b952f0d0b7 1-56
+OverboardKit/Tests/OverboardCoreTests/ExportImportTests.swift
+  s_bbbb00d9107849::t_9906fb81137a8a 135
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "182fd450e01f38d2368641f9e654f784ac5c832b",
+  "prompts": {},
+  "sessions": {
+    "s_bbbb00d9107849": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0f8c4-d24e-7df3-a6ee-2a7daa3f54e5",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "nicky <nicky@nickysemenza.com>"
+    }
+  }
+}
