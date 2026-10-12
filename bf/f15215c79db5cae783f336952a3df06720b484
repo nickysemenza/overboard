@@ -1,0 +1,29 @@
+.github/workflows/ci.yml
+  s_370b2beccb3796::t_aa08eaf381d02f 53-61
+OverboardKit/Package.resolved
+  s_2fca63d7dd1e1e::t_a7d1850b4facef 85-93
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "bff15215c79db5cae783f336952a3df06720b484",
+  "prompts": {},
+  "sessions": {
+    "s_2fca63d7dd1e1e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1314c-305c-7cf1-8c05-146ea91b6f09",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "nicky <nicky@nickysemenza.com>"
+    },
+    "s_370b2beccb3796": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a13106-b6a3-7b03-88d3-ea7963c95208",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "nicky <nicky@nickysemenza.com>"
+    }
+  }
+}
