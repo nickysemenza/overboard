@@ -50,6 +50,15 @@ jobs:
       # gives us Swift 6.4 / macOS 27 SDK symbols to compile against.
       - run: xcodebuild -version
 
+      # A restored build workspace can mask a stale dependency graph. Validate
+      # the committed lockfile in a fresh workspace before restoring that cache,
+      # matching the release workflow's frozen dependency resolution.
+      - name: Validate dependency lockfile
+        run: >-
+          swift package --package-path OverboardKit
+          --scratch-path "$RUNNER_TEMP/overboard-lockfile-validation"
+          --manifest-cache none --disable-automatic-resolution resolve
+
       # The cache key includes the selected toolchain: .swiftmodules from one
       # Swift version don't load in the next, and the xcode-27 image swaps
       # Xcode point releases underneath us without any change in this repo.
