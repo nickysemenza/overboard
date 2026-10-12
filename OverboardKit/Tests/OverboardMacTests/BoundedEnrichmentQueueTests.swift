@@ -5,6 +5,31 @@ import Testing
 
 @MainActor
 struct BoundedEnrichmentQueueTests {
+    @Test func startingEmptyQueueDoesNotScheduleWorker() {
+        let queue = BoundedEnrichmentQueue { _, _ in }
+        queue.start()
+        #expect(queue.task == nil)
+        queue.stop()
+    }
+
+    @Test func drainingQueueLeavesNoWorkerAndAcceptsLaterWork() async {
+        let recorder = EnrichmentQueueRecorder()
+        let queue = BoundedEnrichmentQueue { _, _ in await recorder.published() }
+        let snapshot = PasteboardSnapshot(reps: [], sourceBundleID: nil, sourceAppName: nil)
+        queue.start()
+        queue.enqueue(item: self.item(), snapshot: snapshot)
+        await queue.task?.value
+        #expect(queue.task == nil)
+        #expect(queue.pendingCount == 0)
+        #expect(queue.retainedBytes == 0)
+        #expect(await recorder.publications == 1)
+        queue.enqueue(item: self.item(), snapshot: snapshot)
+        await queue.task?.value
+        #expect(queue.task == nil)
+        #expect(await recorder.publications == 2)
+        queue.stop()
+    }
+
     @Test func disabledQueueRejectsWorkAndBoundsPendingBytesAndCount() {
         let queue = BoundedEnrichmentQueue(capacity: 2, byteLimit: 8) { _, _ in }
         let snapshot = PasteboardSnapshot(
