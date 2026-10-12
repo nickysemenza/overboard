@@ -14,7 +14,7 @@ public final class BoundedEnrichmentQueue {
     private let byteLimit: Int
     private let process: @Sendable (ClipItem, PasteboardSnapshot) async -> Void
     private var pending: [Work] = []
-    private var task: Task<Void, Never>?
+    private(set) var task: Task<Void, Never>?
     private var generation = 0
     private var activeBytes = 0
     public private(set) var isRunning = false
@@ -63,7 +63,9 @@ public final class BoundedEnrichmentQueue {
     }
 
     private func runIfNeeded() {
-        guard self.task == nil, self.isRunning else { return }
+        // Completion calls this again to pick up work queued during a restart.
+        // An empty queue must stay idle rather than spawn another empty task.
+        guard self.task == nil, self.isRunning, !self.pending.isEmpty else { return }
         let generation = self.generation
         self.task = Task(priority: .utility) { [weak self] in
             guard let self else { return }
