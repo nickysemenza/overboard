@@ -39,7 +39,7 @@ let package = Package(
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.0.0"),
         .package(url: "https://github.com/sindresorhus/KeyboardShortcuts", from: "3.1.0"),
         .package(url: "https://github.com/raspu/Highlightr", from: "2.1.0"),
-        .package(url: "https://github.com/sindresorhus/Defaults", from: "9.0.0"),
+        .package(url: "https://github.com/sindresorhus/Defaults", from: "9.0.9"),
         .package(url: "https://github.com/apple/swift-async-algorithms", from: "1.0.0"),
         .package(url: "https://github.com/gonzalezreal/swift-markdown-ui", from: "2.4.0"),
         .package(url: "https://github.com/apple/swift-collections.git", .upToNextMinor(from: "1.7.2")),
