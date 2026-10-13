@@ -36,7 +36,7 @@ let package = Package(
         .executable(name: "file-index-benchmark", targets: ["FileIndexBenchmark"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.0.0"),
+        .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.11.1"),
         .package(url: "https://github.com/sindresorhus/KeyboardShortcuts", from: "3.1.0"),
         .package(url: "https://github.com/raspu/Highlightr", from: "2.1.0"),
         .package(url: "https://github.com/sindresorhus/Defaults", from: "9.0.9"),
