@@ -26,7 +26,7 @@ brew install --cask nickysemenza/tap/overboard
 
 The cask lives in [nickysemenza/homebrew-tap](https://github.com/nickysemenza/homebrew-tap)
 and downloads the same signed and notarized zip as the Releases page;
-every merge to `main` publishes a prerelease (versioned like
+every merge to `main` publishes a release (versioned like
 `0.10.1-13-gabc1234`, the last release tag plus the commit) and bumps the
 cask, so `brew upgrade` tracks `main`. If you installed back when this repo was its own tap, switch
 once with `brew untap nickysemenza/overboard` before installing from the
