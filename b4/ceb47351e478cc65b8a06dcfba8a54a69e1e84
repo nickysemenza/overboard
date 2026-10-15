@@ -1,0 +1,59 @@
+OverboardKit/Sources/OverboardCore/Launcher/FileSearchInfo.swift
+  s_b8d051b5e42fa5::t_61bee4766843b7 12-18,24-27,33-35
+OverboardKit/Sources/OverboardCore/Launcher/LauncherResult.swift
+  s_b8d051b5e42fa5::t_a8a4106d32932c 88,90-94,98-101,105,108-109,112-113,117-154,162
+OverboardKit/Sources/OverboardCore/Launcher/LauncherScore.swift
+  s_b8d051b5e42fa5::t_021178aa9b48f5 1-73
+OverboardKit/Sources/OverboardCore/Launcher/SearchMatch.swift
+  s_b8d051b5e42fa5::t_da8bc20c868cb5 18-19,211-213,220,222-258,260-261,263-264,266-267,269,274-294,297-300,307,314-315
+OverboardKit/Sources/OverboardCore/Search/FileNameIndex+Schema.swift
+  s_b8d051b5e42fa5::t_e7701c77154a59 20,57-68
+OverboardKit/Sources/OverboardCore/Search/FileNameIndex+Search.swift
+  s_b8d051b5e42fa5::t_046e899fcf15b7 173-176,185-187,191-199,201-202
+OverboardKit/Sources/OverboardCore/Search/FileNameIndex.swift
+  s_b8d051b5e42fa5::t_3b9e954a5ab55f 59-60,70-71,80,85,139-151
+OverboardKit/Sources/OverboardCore/Search/IndexedFile.swift
+  s_b8d051b5e42fa5::t_ea62f563256afe 16-20,30-32,46-47,53-54,57-62
+OverboardKit/Sources/OverboardCore/Search/NoiseClassifier.swift
+  s_b8d051b5e42fa5::t_33e7e77680c349 1-106
+OverboardKit/Sources/OverboardMac/AppPreferences.swift
+  s_b8d051b5e42fa5::t_c480f6668c9eba 97-101
+OverboardKit/Sources/OverboardMac/ArchivePreferencesAdapter.swift
+  s_b8d051b5e42fa5::t_a2703a167e5104 19,38
+OverboardKit/Sources/OverboardMac/FileIndexService+LastOpened.swift
+  s_b8d051b5e42fa5::t_5a912896782df5 1-42
+OverboardKit/Sources/OverboardMac/FileIndexService+Scan.swift
+  s_b8d051b5e42fa5::t_eb59418d8c0d99 109-111,115-121,125-126,155,217-218,238-242,268-270
+OverboardKit/Sources/OverboardMac/FileIndexService.swift
+  s_b8d051b5e42fa5::t_bc31e866842b2c 60,72,96,110,217
+OverboardKit/Sources/OverboardMac/NoiseTracker.swift
+  s_b8d051b5e42fa5::t_c6e769e28695d8 1-76
+OverboardKit/Sources/OverboardUI/Launcher/LauncherViewModel+Search.swift
+  s_b8d051b5e42fa5::t_5201d5369cfbb2 242-245,341-344,355-357,366
+OverboardKit/Sources/OverboardUI/Settings/FileSearchSettingsTab.swift
+  s_b8d051b5e42fa5::t_c24ee7f7eca203 8-9,78-79,83-110
+OverboardKit/Tests/OverboardCoreTests/LauncherRankingEvalTests.swift
+  s_b8d051b5e42fa5::t_3346653a01b9a6 1-164
+OverboardKit/Tests/OverboardCoreTests/LauncherRankingTests.swift
+  s_b8d051b5e42fa5::t_009dcf6abab764 6-10,30-31,35-36,42-46,53-57,80-82,88,129-130,140-141
+OverboardKit/Tests/OverboardMacTests/FileMetadataScannerTests.swift
+  s_b8d051b5e42fa5::t_adafed83bfe264 133-163
+OverboardKit/Tests/OverboardUISnapshotTests/LauncherScopeTests.swift
+  s_b8d051b5e42fa5::t_c3e62ed43dbc61 335-336,338-339,341,347
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "b4ceb47351e478cc65b8a06dcfba8a54a69e1e84",
+  "prompts": {},
+  "sessions": {
+    "s_b8d051b5e42fa5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f4a7dc67-a86e-43d0-9fe6-92cd948a5009",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "nicky <nicky@nickysemenza.com>"
+    }
+  }
+}
