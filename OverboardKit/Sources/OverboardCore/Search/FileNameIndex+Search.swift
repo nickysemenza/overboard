@@ -170,8 +170,10 @@ extension FileNameIndex {
         }
     }
 
-    /// Scores and orders retrieved candidates. Pure — no actor state, no I/O —
-    /// so it can run wherever the caller is, and is directly unit-testable.
+    /// Scores and orders retrieved candidates with the same blended score
+    /// the launcher merge uses, so the cut to `limit` keeps the files that
+    /// merge would rank highest. Pure — no actor state, no I/O — so it can run
+    /// wherever the caller is, and is directly unit-testable.
     nonisolated static func rank(
         _ candidates: [IndexedFile],
         query: String,
@@ -180,49 +182,23 @@ extension FileNameIndex {
     ) -> [LauncherResult] {
         var seen = Set<String>()
         let prepared = SearchMatcher.PreparedQuery(query)
-        let matches = candidates.compactMap { file -> RankedFile? in
+        // Provider order is the shared ranking's last tiebreak; pre-sorting
+        // keeps the old shorter-name, newer, then path order for exact ties.
+        let rows = candidates.compactMap { file -> (file: IndexedFile, tier: SearchMatch.Tier)? in
             guard seen.insert(file.path).inserted,
                   let tier = prepared.tier(foldedTitle: file.foldedName, foldedContext: file.foldedPath)
             else { return nil }
-            let id = "file:" + file.path
-            return RankedFile(
-                file: file, tier: tier, usage: context.usage[id, default: 0],
-                frecency: LauncherFrecency.score(
-                    id: id, counts: context.counts, lastUsed: context.lastUsed, now: context.now
-                )
-            )
-        }.sorted(by: Self.precedes)
-        return matches.prefix(max(limit, 0)).map(\.file.result)
-    }
-
-    private struct RankedFile {
-        let file: IndexedFile
-        let tier: SearchMatch.Tier
-        let usage: Int
-        let frecency: Double
-    }
-
-    private nonisolated static func precedes(_ left: RankedFile, _ right: RankedFile) -> Bool {
-        let leftPriority = left.usage > 0 ? 0 : left.tier.rawValue
-        let rightPriority = right.usage > 0 ? 0 : right.tier.rawValue
-        if leftPriority != rightPriority {
-            return leftPriority < rightPriority
+            return (file, tier)
+        }.sorted { left, right in
+            if left.file.name.count != right.file.name.count {
+                return left.file.name.count < right.file.name.count
+            }
+            if left.file.modifiedAt != right.file.modifiedAt {
+                return left.file.modifiedAt > right.file.modifiedAt
+            }
+            return left.file.path < right.file.path
         }
-        if left.usage != right.usage {
-            return left.usage > right.usage
-        }
-        if left.tier != right.tier {
-            return left.tier < right.tier
-        }
-        if left.frecency != right.frecency {
-            return left.frecency > right.frecency
-        }
-        if left.file.name.count != right.file.name.count {
-            return left.file.name.count < right.file.name.count
-        }
-        if left.file.modifiedAt != right.file.modifiedAt {
-            return left.file.modifiedAt > right.file.modifiedAt
-        }
-        return left.file.path < right.file.path
+        let ranked = LauncherRanking.ranked(rows.map { ($0.file.result, $0.tier) }, query: query, context: context)
+        return Array(ranked.prefix(max(limit, 0)))
     }
 }

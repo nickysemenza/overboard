@@ -332,17 +332,19 @@ struct LauncherRankingScopeTests {
         let oldUsage = Defaults[.launcherSelectionUsage]
         defer { Defaults[.launcherSelectionUsage] = oldUsage }
         Defaults[.launcherSelectionUsage] = [:]
+        // Five letters, so no short-query app lean: only usage could promote
+        // the weaker app match.
         let app = LauncherResult.app(
-            name: "Sublime Merge",
-            url: URL(fileURLWithPath: "/Applications/Sublime Merge.app")
+            name: "Say Hello Utility",
+            url: URL(fileURLWithPath: "/Applications/Say Hello Utility.app")
         )
-        let file = LauncherResult.file(name: "sm.png", url: URL(fileURLWithPath: "/tmp/sm.png"))
+        let file = LauncherResult.file(name: "hello.png", url: URL(fileURLWithPath: "/tmp/hello.png"))
         let model = LauncherViewModel(
             instantProviders: [DelayedLauncherProvider(rows: [app, file])],
             secondaryProviders: []
         )
         model.recordSuccessfulSelection(id: app.id, query: "other query")
-        model.query = "sm"
+        model.query = "hello"
         model.scheduleSearch()
         await waitForSearch(model)
         #expect(model.results.first == file)

@@ -85,21 +85,73 @@ public extension LauncherProvider {
 }
 
 public struct LauncherSearchContext: Sendable {
+    /// Exact-query picks: rows chosen for exactly the query now typed.
     public var usage: [String: Int]
+    /// Picks made for longer queries that start with this one ("notes"
+    /// counts toward "not"), already weighted by how much of that query was
+    /// typed and how recently the row was picked. Unlike `usage` these only
+    /// add to the blended score; they never pin a row.
+    public var carried: [String: Double]
     public var counts: [String: Int]
     public var lastUsed: [String: Double]
     public var now: Date
+    /// Folders the user has picked a file from. A noise location stops being
+    /// demoted for files directly inside one of these.
+    public var pickedFolders: Set<String>
+    public var noiseRules: NoiseRules
 
     public init(
         usage: [String: Int] = [:],
+        carried: [String: Double] = [:],
         counts: [String: Int] = [:],
         lastUsed: [String: Double] = [:],
-        now: Date = .now
+        now: Date = .now,
+        noiseRules: NoiseRules = NoiseRules()
     ) {
         self.usage = usage
+        self.noiseRules = noiseRules
+        self.carried = carried
         self.counts = counts
         self.lastUsed = lastUsed
         self.now = now
+        self.pickedFolders = Set(counts.keys.compactMap { id in
+            id.hasPrefix("file:") ? (String(id.dropFirst(5)) as NSString).deletingLastPathComponent : nil
+        })
+    }
+
+    /// Splits the persisted `query \u{1F} id` pick counts into this query's
+    /// exact-query picks and the picks carried over from longer queries.
+    public init(
+        query: String,
+        selectionUsage: [String: Int],
+        counts: [String: Int],
+        lastUsed: [String: Double],
+        now: Date = .now,
+        noiseRules: NoiseRules = NoiseRules()
+    ) {
+        let needle = AppMatcher.fold(query.trimmingCharacters(in: .whitespacesAndNewlines))
+        var usage: [String: Int] = [:], carried: [String: Double] = [:]
+        for (key, value) in selectionUsage {
+            guard !needle.isEmpty, let separator = key.firstIndex(of: "\u{1F}") else { continue }
+            let picked = key[..<separator], id = String(key[key.index(after: separator)...])
+            if picked == needle {
+                usage[id] = value
+            } else if picked.hasPrefix(needle) {
+                // No per-query timestamps are kept, so the row's own last
+                // pick stands in: of two rows claiming a prefix, the more
+                // recently picked one carries more weight.
+                let ageDays = max(0, now.timeIntervalSince1970 - lastUsed[id, default: 0]) / 86400
+                carried[id, default: 0] += Double(value) * Double(needle.count) / Double(picked.count)
+                    / (1 + ageDays / 14)
+            }
+        }
+        self.init(
+            usage: usage, carried: carried, counts: counts, lastUsed: lastUsed, now: now, noiseRules: noiseRules
+        )
+    }
+
+    public func frecency(_ id: String) -> Double {
+        LauncherFrecency.score(id: id, counts: self.counts, lastUsed: self.lastUsed, now: self.now)
     }
 
     public func sorted(
@@ -107,9 +159,6 @@ public struct LauncherSearchContext: Sendable {
         query: String,
         aliases: [String: String] = [:]
     ) -> [LauncherResult] {
-        let frecency = Dictionary(results.map {
-            ($0.id, LauncherFrecency.score(id: $0.id, counts: self.counts, lastUsed: self.lastUsed, now: self.now))
-        }, uniquingKeysWith: { first, _ in first })
-        return LauncherRanking.sorted(results, query: query, aliases: aliases, usage: self.usage, frecency: frecency)
+        LauncherRanking.sorted(results, query: query, aliases: aliases, context: self)
     }
 }

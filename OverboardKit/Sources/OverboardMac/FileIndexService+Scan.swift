@@ -106,15 +106,24 @@ public nonisolated enum FileMetadataScanner {
             try await index.remove(under: url.path)
         }
         try Task.checkCancellation()
-        try await index.upsert([self.entry(url, values: values, root: root, generation: UUID().uuidString)])
+        let entry = self.entry(url, values: values, root: root, generation: UUID().uuidString,
+                               noise: NoiseTracker(root: root.path))
+        try await index.upsert([entry])
         return []
     }
 
-    private static func entry(_ url: URL, values: URLResourceValues, root: URL, generation: String) -> IndexedFile {
+    private static func entry(
+        _ url: URL,
+        values: URLResourceValues,
+        root: URL,
+        generation: String,
+        noise: NoiseTracker
+    ) -> IndexedFile {
         IndexedFile(path: url.path, name: url.lastPathComponent, root: root.path, generation: generation,
                     modifiedAt: values.contentModificationDate ?? .distantPast,
                     availability: FileAvailability.status(at: url, values: values),
-                    isDirectory: values.isDirectory == true, location: FileIndexService.locationName(root))
+                    isDirectory: values.isDirectory == true, location: FileIndexService.locationName(root),
+                    isNoise: noise.isNoise(path: url.path, isDirectory: values.isDirectory == true))
     }
 
     public static func scan(
@@ -143,7 +152,7 @@ public nonisolated enum FileMetadataScanner {
         // escapes into the enumerator and keeps firing while `indexEntries` is
         // also mutating this state, and two `inout` borrows of the same local
         // across that overlap trip Swift's exclusivity checks at runtime.
-        let accumulator = ScanAccumulator()
+        let accumulator = ScanAccumulator(noise: NoiseTracker(root: root.path))
         try await index.beginScan(generation)
         guard let enumerator = self.enumerator(at: directory ?? root, accumulator: accumulator) else {
             try await index.discardScan(generation)
@@ -205,15 +214,8 @@ public nonisolated enum FileMetadataScanner {
         guard let directory, directory != root,
               let values = try? directory.resourceValues(forKeys: self.resourceKeys)
         else { return }
-        accumulator.batch.append(IndexedFile(
-            path: directory.path,
-            name: directory.lastPathComponent,
-            root: root.path,
-            generation: generation,
-            modifiedAt: values.contentModificationDate ?? .distantPast,
-            availability: FileAvailability.status(at: directory, values: values),
-            isDirectory: true,
-            location: FileIndexService.locationName(root)
+        accumulator.batch.append(self.entry(
+            directory, values: values, root: root, generation: generation, noise: accumulator.noise
         ))
     }
 
@@ -233,6 +235,11 @@ public nonisolated enum FileMetadataScanner {
     private final class ScanAccumulator {
         var batch: [IndexedFile] = []
         var failures: [String] = []
+        let noise: NoiseTracker
+
+        init(noise: NoiseTracker) {
+            self.noise = noise
+        }
     }
 
     /// Walks the enumerator to completion, classifying each entry and
@@ -258,15 +265,9 @@ public nonisolated enum FileMetadataScanner {
                 if values.isPackage == true {
                     enumerator.skipDescendants()
                 }
-                accumulator.batch.append(IndexedFile(
-                    path: url.path,
-                    name: url.lastPathComponent,
-                    root: context.root.path,
-                    generation: context.generation,
-                    modifiedAt: values.contentModificationDate ?? .distantPast,
-                    availability: FileAvailability.status(at: url, values: values),
-                    isDirectory: values.isDirectory == true,
-                    location: FileIndexService.locationName(context.root)
+                accumulator.batch.append(self.entry(
+                    url, values: values, root: context.root, generation: context.generation,
+                    noise: accumulator.noise
                 ))
             } catch {
                 if accumulator.failures.count < 12 {

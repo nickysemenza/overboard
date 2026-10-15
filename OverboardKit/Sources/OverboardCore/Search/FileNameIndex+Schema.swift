@@ -17,6 +17,7 @@ extension FileNameIndex {
     static func createSchema(in database: any DatabaseWriter) throws {
         try database.write { db in
             try Self.createTables(in: db)
+            try Self.addRankingColumns(in: db)
             try Self.updateTrigger(in: db)
         }
     }
@@ -51,6 +52,18 @@ extension FileNameIndex {
             PRIMARY KEY (scanID, path)
         ) WITHOUT ROWID;
         """)
+    }
+
+    /// Columns added after the first release. Existing rows start as clean
+    /// and never opened; the next scan and Spotlight sync fill them in.
+    private static func addRankingColumns(in db: Database) throws {
+        let columns = try Set(db.columns(in: "file_entry").map(\.name))
+        if !columns.contains("isNoise") {
+            try db.execute(sql: "ALTER TABLE file_entry ADD COLUMN isNoise BOOLEAN NOT NULL DEFAULT 0")
+        }
+        if !columns.contains("lastOpenedAt") {
+            try db.execute(sql: "ALTER TABLE file_entry ADD COLUMN lastOpenedAt DATETIME")
+        }
     }
 
     private static func updateTrigger(in db: Database) throws {

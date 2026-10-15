@@ -130,4 +130,35 @@ struct FileMetadataScannerTests {
         #expect(!issues.isEmpty)
         #expect(try await index.search("known").count == 1)
     }
+
+    @Test func marksVersionStampedAndGitignoredFoldersAsNoise() async throws {
+        let root = FileMetadataScanner.canonicalURL(
+            FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        )
+        defer { try? FileManager.default.removeItem(at: root) }
+        let files = [
+            "mod/alpha@v1.2.3/matchers/not.go", "project/vendor/mailer/notes", "project/notes.md",
+            "Downloads/app-1.2.3.dmg",
+        ]
+        for file in files {
+            let url = root.appendingPathComponent(file)
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
+                                                    withIntermediateDirectories: true)
+            try Data().write(to: url)
+        }
+        try Data("# deps\n/vendor/\n!keep\n".utf8).write(to: root.appendingPathComponent("project/.gitignore"))
+        let index = try FileNameIndex()
+        _ = try await FileMetadataScanner.scan(root: root, exclusions: [], generation: "one", index: index)
+
+        func noise(_ query: String) async throws -> [String: Bool] {
+            try await Dictionary(uniqueKeysWithValues: index.search(query).compactMap { result in
+                guard case let .file(name, _, info) = result else { return nil }
+                return (name, info.isNoise)
+            })
+        }
+        #expect(try await noise("not.go") == ["not.go": true])
+        #expect(try await noise("notes") == ["notes": true, "notes.md": false])
+        // A version in a file's own name is the user's download, not a cache.
+        #expect(try await noise("app-1.2.3") == ["app-1.2.3.dmg": false])
+    }
 }

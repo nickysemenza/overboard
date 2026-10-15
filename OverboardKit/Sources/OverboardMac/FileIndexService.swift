@@ -57,6 +57,7 @@ public final class FileIndexService {
     var index: FileNameIndex?
     private(set) var scanTask: Task<Void, Never>?
     var refreshTask: Task<Void, Never>?
+    var lastOpenedTask: Task<Void, Never>?
     var eventStream: FSEventStreamRef?
     var dirtyPaths = Set<String>()
     var dirtySubtrees = Set<String>()
@@ -68,7 +69,7 @@ public final class FileIndexService {
     var activeRoots: [URL] = []
     var activeExclusions: [String] = []
 
-    private let rootsOverride: [URL]?
+    let rootsOverride: [URL]?
     private let exclusionsOverride: [String]?
     let operations: FileIndexOperations
     /// Callers parked in ``nextReconcile()``, resumed by ``signalReconcile()``
@@ -92,6 +93,7 @@ public final class FileIndexService {
     isolated deinit {
         self.scanTask?.cancel()
         self.refreshTask?.cancel()
+        self.lastOpenedTask?.cancel()
         self.stopWatching()
     }
 
@@ -105,6 +107,7 @@ public final class FileIndexService {
         self.lifecycleGeneration += 1
         self.scanTask?.cancel()
         self.refreshTask?.cancel()
+        self.lastOpenedTask?.cancel()
         self.stopWatching()
         self.dirtyPaths.removeAll()
         self.dirtySubtrees.removeAll()
@@ -211,6 +214,7 @@ public final class FileIndexService {
         }
         self.isIndexing = false
         self.status = Self.statusMessage(fileCount: self.fileCount, hasIssues: !self.issues.isEmpty)
+        self.startLastOpenedSync(index: index)
         self.onChange()
         self.signalReconcile()
         if !self.dirtyPaths.isEmpty {

@@ -94,6 +94,11 @@ public nonisolated extension Defaults.Keys {
         default: ".git\nnode_modules\n.build\nbuild\ndist\ntarget\nDerivedData\n.cache\n.Trash",
         suite: AppPreferenceStorage.suite
     )
+    /// Folders the user marks as noise locations, one name or path per line.
+    /// Applied when ranking, so unlike exclusions no rebuild is needed.
+    static let fileSearchNoise = Key<String>("fileSearchNoise", default: "", suite: AppPreferenceStorage.suite)
+    /// Folders the user marks as not noise, overriding detection.
+    static let fileSearchNotNoise = Key<String>("fileSearchNotNoise", default: "", suite: AppPreferenceStorage.suite)
     /// Unsaved draft text for the Files settings tab's included-folders editor.
     /// The tab only commits typed edits on "Apply & Rebuild Index" (rebuilding
     /// the index is expensive), so this mirrors keystrokes as they happen —
