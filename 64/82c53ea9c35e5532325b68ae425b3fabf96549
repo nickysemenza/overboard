@@ -1,0 +1,23 @@
+GLOSSARY.md
+  s_b8d051b5e42fa5::t_97d80feb421a0a 1-29
+PRODUCT.md
+  s_b8d051b5e42fa5::t_b2ab8ec7a10176 16,20
+docs/adr/0001-blended-launcher-ranking.md
+  s_b8d051b5e42fa5::t_750b9c01c4fc91 1-13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "6482c53ea9c35e5532325b68ae425b3fabf96549",
+  "prompts": {},
+  "sessions": {
+    "s_b8d051b5e42fa5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f4a7dc67-a86e-43d0-9fe6-92cd948a5009",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "nicky <nicky@nickysemenza.com>"
+    }
+  }
+}
