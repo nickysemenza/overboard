@@ -13,11 +13,11 @@ A personal, keyboard-driven launcher and clipboard manager. The primary jobs are
 ## Product principles
 
 - Enter always activates the selected result; the first result is selected by default.
-- Choosing a result for a query makes it the top match for that query; otherwise match quality outranks provider order, and use counts only reorder within a tier.
+- Choosing a result for a query makes it the top match for that query. Otherwise results are ordered by one blended judgement: match quality weighs most, but how likely a result is the user's own (apps, recently opened or picked files) can lift it over a slightly better match from machine-managed folders. Provider order never decides.
 - All mixes results; Files, Clipboard, and Apps provide focused scopes.
 - The empty launcher suggests apps using frequency and recency of successful actions through Overboard; running apps provide an initial fallback.
 - Keep the bottom clipboard drawer for recent pastes and a list with preview for browsing history.
-- Search and indexing read file metadata, not file contents. Opening an undownloaded cloud file is an explicit action.
+- Search and indexing read file metadata, not file contents; the one exception is small `.gitignore` files already on disk, read to recognise generated folders. Spotlight is consulted only for when files were last opened. Opening an undownloaded cloud file is an explicit action.
 - Preserve source-app targeting, clipboard restoration, and secret-handling rules.
 
 ## Design commitments
