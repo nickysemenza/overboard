@@ -15,9 +15,8 @@ public enum LauncherScope: String, CaseIterable, Sendable, Identifiable {
     }
 }
 
-/// Comparable across providers. A row previously picked for this exact query
-/// is promoted above its natural tier (see `LauncherRanking.sorted`);
-/// otherwise learning (and frecency) only break ties within a tier.
+/// Comparable across providers. How well the text matches is the heaviest
+/// input to `LauncherScore`, not the whole ordering (see `LauncherRanking.sorted`).
 public struct SearchMatch: Sendable, Equatable {
     public enum Tier: Int, Comparable, Sendable {
         case exact, prefix, words, substring, fuzzy, related
@@ -209,68 +208,111 @@ public enum LauncherRanking {
     }
 
     /// Ordering, most to least significant: fixed `priority` (-1 kinds, then
-    /// promoted-by-usage/natural-tier rows, then the fixed low-priority
-    /// kinds) → per-query `usage` desc → natural tier (only distinguishes
-    /// rows inside the promoted group, since `priority` already separates
-    /// tiers otherwise) → `frecency` desc → kind rank (app, then file, then
+    /// exact-query picks, then everything else, then the fixed low-priority
+    /// kinds) → exact-query `usage` desc → blended `LauncherScore` (with a
+    /// repeat-name penalty) → frecency → kind rank (app, then file, then
     /// everything else) → original index, so a stable provider order is the
     /// last resort rather than the first.
     public static func sorted(
         _ results: [LauncherResult],
         query: String,
         aliases: [String: String] = [:],
-        usage: [String: Int] = [:],
-        frecency: [String: Double] = [:]
+        context: LauncherSearchContext = LauncherSearchContext()
     ) -> [LauncherResult] {
-        results.enumerated().map { index, result in
-            (index: index, result: result, tier: self.match(for: result, query: query, aliases: aliases).tier)
-        }.sorted { left, right in
-            let leftPriority = self.priority(left.result, tier: left.tier, usage: usage)
-            let rightPriority = self.priority(right.result, tier: right.tier, usage: usage)
-            if leftPriority != rightPriority {
-                return leftPriority < rightPriority
+        self.ranked(
+            results.map { ($0, self.match(for: $0, query: query, aliases: aliases).tier) },
+            query: query, context: context
+        )
+    }
+
+    /// `sorted` for rows whose tier the caller already knows — the file index
+    /// computes tiers from pre-folded columns — so both stages order rows by
+    /// the same rules.
+    static func ranked(
+        _ rows: [(result: LauncherResult, tier: SearchMatch.Tier)],
+        query: String,
+        context: LauncherSearchContext
+    ) -> [LauncherResult] {
+        let scored = rows.enumerated().map { index, row in
+            Ranked(
+                index: index, result: row.result,
+                priority: self.priority(row.result, usage: context.usage),
+                usage: context.usage[row.result.id, default: 0],
+                score: LauncherScore.value(for: row.result, tier: row.tier, query: query, context: context),
+                frecency: context.frecency(row.result.id)
+            )
+        }
+        return self.penalizingRepeatNames(scored.sorted(by: Ranked.precedes)).map(\.result)
+    }
+
+    private struct Ranked {
+        let index: Int
+        let result: LauncherResult
+        let priority: Int
+        let usage: Int
+        var score: Double
+        let frecency: Double
+
+        static func precedes(_ left: Self, _ right: Self) -> Bool {
+            if left.priority != right.priority {
+                return left.priority < right.priority
             }
-            let leftUse = usage[left.result.id, default: 0], rightUse = usage[right.result.id, default: 0]
-            if leftUse != rightUse {
-                return leftUse > rightUse
+            if left.usage != right.usage {
+                return left.usage > right.usage
             }
-            if left.tier != right.tier {
-                return left.tier < right.tier
+            if left.score != right.score {
+                return left.score > right.score
             }
-            let leftFrecency = frecency[left.result.id, default: 0]
-            let rightFrecency = frecency[right.result.id, default: 0]
-            if leftFrecency != rightFrecency {
-                return leftFrecency > rightFrecency
+            if left.frecency != right.frecency {
+                return left.frecency > right.frecency
             }
-            let leftKind = self.kindRank(left.result), rightKind = self.kindRank(right.result)
+            let leftKind = LauncherRanking.kindRank(left.result), rightKind = LauncherRanking.kindRank(right.result)
             if leftKind != rightKind {
                 return leftKind < rightKind
             }
             return left.index < right.index
-        }.map(\.result)
+        }
     }
 
-    /// -1 kinds always lead, regardless of query match. Otherwise, a row
-    /// chosen for this exact query before (`usage[id] > 0`) is promoted into
-    /// the `.exact` slot (0) — still below those fixed kinds — so one
-    /// accidental pick can't sit above a stronger match forever; `sorted`'s
-    /// natural-tier tiebreak sorts out ties within that promoted group.
-    private static func priority(_ result: LauncherResult, tier: SearchMatch.Tier, usage: [String: Int]) -> Int {
+    /// Sinks the second and later files sharing a display name (six
+    /// `not.json`s from sibling test folders) below other matches. Exact-query
+    /// picks keep their place: the penalty only touches unpinned rows.
+    private static func penalizingRepeatNames(_ rows: [Ranked]) -> [Ranked] {
+        var seen: [String: Int] = [:]
+        var changed = false
+        let penalized = rows.map { row -> Ranked in
+            guard case let .file(name, _, _) = row.result else { return row }
+            let key = AppMatcher.fold(name)
+            let repeats = seen[key, default: 0]
+            seen[key] = repeats + 1
+            guard repeats > 0, row.usage == 0 else { return row }
+            var row = row
+            row.score -= min(LauncherScore.repeatPenaltyCap, LauncherScore.repeatPenalty * Double(repeats))
+            changed = true
+            return row
+        }
+        return changed ? penalized.sorted(by: Ranked.precedes) : penalized
+    }
+
+    /// -1 kinds always lead, regardless of query match. Otherwise an
+    /// exact-query pick (`usage[id] > 0`) sits in slot 0 — still below those
+    /// fixed kinds — and every other row in slot 1, ordered by score.
+    private static func priority(_ result: LauncherResult, usage: [String: Int]) -> Int {
         switch result {
         case .command, .calculation, .quicklink, .shellCommand: -1
         case .webSearch: 10
         case .askAI: 11
         case .calendarEvent: 12
         case .nowPlaying: 13
-        default: usage[result.id, default: 0] > 0 ? 0 : tier.rawValue
+        default: usage[result.id, default: 0] > 0 ? 0 : 1
         }
     }
 
     /// Apps first, then files, then everything else. States as a rule what
     /// used to be an accident of `instant + buckets` provider ordering (apps
     /// land in `instant`, files in a later secondary bucket), for rows that
-    /// still tie after tier, usage and frecency.
-    private static func kindRank(_ result: LauncherResult) -> Int {
+    /// still tie after usage, score and frecency.
+    fileprivate static func kindRank(_ result: LauncherResult) -> Int {
         switch result {
         case .app: 0
         case .file: 1

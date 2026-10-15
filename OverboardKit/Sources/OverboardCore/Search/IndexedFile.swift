@@ -13,6 +13,11 @@ public struct IndexedFile: Codable, Sendable, FetchableRecord, PersistableRecord
     public var availability: FileSearchInfo.Availability
     public var isDirectory: Bool
     public var location: String
+    /// Recognised at index time from the folder's own traits or the user's
+    /// noise list; see `NoiseClassifier`.
+    public var isNoise: Bool
+    /// Written only by the Spotlight last-opened sync, never by scans.
+    public var lastOpenedAt: Date?
 
     public init(
         path: String,
@@ -22,7 +27,9 @@ public struct IndexedFile: Codable, Sendable, FetchableRecord, PersistableRecord
         modifiedAt: Date = .distantPast,
         availability: FileSearchInfo.Availability = .local,
         isDirectory: Bool = false,
-        location: String = "On this Mac"
+        location: String = "On this Mac",
+        isNoise: Bool = false,
+        lastOpenedAt: Date? = nil
     ) {
         // APFS can enumerate a canonically equivalent spelling different from
         // a URL supplied by the caller. SQLite's binary keys must agree.
@@ -36,12 +43,21 @@ public struct IndexedFile: Codable, Sendable, FetchableRecord, PersistableRecord
         self.availability = availability
         self.isDirectory = isDirectory
         self.location = location
+        self.isNoise = isNoise
+        self.lastOpenedAt = lastOpenedAt
     }
 
     public var result: LauncherResult {
         .file(name: self.name, url: URL(fileURLWithPath: self.path), info: FileSearchInfo(
             availability: self.availability, isDirectory: self.isDirectory, modifiedAt: self.modifiedAt,
-            location: self.location
+            location: self.location, isNoise: self.isNoise, lastOpenedAt: self.lastOpenedAt,
+            depth: self.depth
         ))
+    }
+
+    /// Folders between the file and its root, counted lexically.
+    var depth: Int {
+        guard self.path.hasPrefix(self.root + "/") else { return 0 }
+        return self.path.dropFirst(self.root.count + 1).split(separator: "/").count
     }
 }

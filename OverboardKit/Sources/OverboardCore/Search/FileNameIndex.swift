@@ -56,8 +56,8 @@ public actor FileNameIndex {
                     sql: """
                     INSERT INTO file_entry (
                         path, name, foldedName, foldedPath, root, generation,
-                        modifiedAt, availability, isDirectory, location
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        modifiedAt, availability, isDirectory, location, isNoise
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(path) DO UPDATE SET
                         name = excluded.name,
                         foldedName = excluded.foldedName,
@@ -67,7 +67,8 @@ public actor FileNameIndex {
                         modifiedAt = excluded.modifiedAt,
                         availability = excluded.availability,
                         isDirectory = excluded.isDirectory,
-                        location = excluded.location
+                        location = excluded.location,
+                        isNoise = excluded.isNoise
                     WHERE file_entry.name IS NOT excluded.name
                        OR file_entry.foldedName IS NOT excluded.foldedName
                        OR file_entry.foldedPath IS NOT excluded.foldedPath
@@ -76,11 +77,12 @@ public actor FileNameIndex {
                        OR file_entry.availability IS NOT excluded.availability
                        OR file_entry.isDirectory IS NOT excluded.isDirectory
                        OR file_entry.location IS NOT excluded.location
+                       OR file_entry.isNoise IS NOT excluded.isNoise
                     """,
                     arguments: [
                         file.path, file.name, file.foldedName, file.foldedPath,
                         file.root, file.generation, file.modifiedAt,
-                        file.availability.rawValue, file.isDirectory, file.location,
+                        file.availability.rawValue, file.isDirectory, file.location, file.isNoise,
                     ]
                 )
             }
@@ -131,6 +133,19 @@ public actor FileNameIndex {
     public func discardScan(_ scanID: String) async throws {
         try await self.database.write { db in
             try db.execute(sql: "DELETE FROM temp.file_scan_seen WHERE scanID = ?", arguments: [scanID])
+        }
+    }
+
+    /// Replaces every file's last-opened date with Spotlight's latest answer.
+    /// Paths Spotlight reports outside the index are ignored; files it no
+    /// longer reports lose their date.
+    public func setLastOpened(_ dates: [String: Date]) async throws {
+        try Task.checkCancellation()
+        try await self.database.write { db in
+            try db.execute(sql: "UPDATE file_entry SET lastOpenedAt = NULL WHERE lastOpenedAt IS NOT NULL")
+            for (path, date) in dates {
+                try db.execute(sql: "UPDATE file_entry SET lastOpenedAt = ? WHERE path = ?", arguments: [date, path])
+            }
         }
     }
 

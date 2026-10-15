@@ -5,6 +5,8 @@ import SwiftUI
 struct FileSearchSettingsTab: View {
     @State private var roots = ""
     @State private var exclusions = ""
+    @Default(.fileSearchNoise) private var noise
+    @Default(.fileSearchNotNoise) private var notNoise
     private let service = FileIndexService.shared
     var coordinator = TypedSettingsCoordinator()
 
@@ -73,9 +75,38 @@ struct FileSearchSettingsTab: View {
                     """
                     One folder name or absolute path per line. Hidden internals and app-package \
                     contents are skipped. Only names, paths, dates and cloud availability are \
-                    indexed; file contents are never read.
+                    indexed; file contents are never read, except small .gitignore files \
+                    already on this Mac, which mark generated folders as noise.
                     """
                 )
+            }
+            Section {
+                SettingsTextListEditor(
+                    text: self.$noise,
+                    height: 80,
+                    accessibilityLabel: "Noise folder names or absolute paths, one per line"
+                )
+            } header: {
+                Text("Noise folders")
+            } footer: {
+                Text(
+                    """
+                    Files here rank below your own but stay searchable. Folders with version \
+                    numbers in their names (parser@v1.2.3) and folders a .gitignore excludes \
+                    are noise automatically. Takes effect immediately.
+                    """
+                )
+            }
+            Section {
+                SettingsTextListEditor(
+                    text: self.$notNoise,
+                    height: 80,
+                    accessibilityLabel: "Folder names or absolute paths that are never noise, one per line"
+                )
+            } header: {
+                Text("Never noise")
+            } footer: {
+                Text("Overrides automatic detection and the list above. Same format as Excluded folders.")
             }
             Section {
                 HStack(spacing: 10) {

@@ -16,6 +16,7 @@ public enum ArchivePreferencesAdapter {
     private nonisolated static let stringNames: Set<String> = [
         "excludedBundleIDs", "plainTextBundleIDs", "autoTransformRules", "launcherAppAliases",
         "launcherQuicklinks", "fileSearchExclusions", "fileSearchRootsDraft", "fileSearchExclusionsDraft",
+        "fileSearchNoise", "fileSearchNotNoise",
     ]
     private nonisolated static let arrayNames: Set<String> = [
         "launcherSearchHistory", "fileSearchRoots", "savedSearches", "emojiRecents",
@@ -34,6 +35,7 @@ public enum ArchivePreferencesAdapter {
     private static let stringKeys: [Defaults.Key<String>] = [
         .excludedBundleIDs, .plainTextBundleIDs, .autoTransformRules, .launcherAppAliases,
         .launcherQuicklinks, .fileSearchExclusions, .fileSearchRootsDraft, .fileSearchExclusionsDraft,
+        .fileSearchNoise, .fileSearchNotNoise,
     ]
     private static let arrayKeys: [Defaults.Key<[String]>] = [
         .launcherSearchHistory, .fileSearchRoots, .savedSearches, .emojiRecents,

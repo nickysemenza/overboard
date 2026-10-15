@@ -3,6 +3,11 @@ import Foundation
 import Testing
 
 struct LauncherRankingTests {
+    private static func frecent(_ id: String, uses: Int) -> LauncherSearchContext {
+        let now = Date.now
+        return LauncherSearchContext(counts: [id: uses], lastUsed: [id: now.timeIntervalSince1970], now: now)
+    }
+
     @Test func exactFileBeatsWeakAppRegardlessOfProviderOrder() {
         let app = LauncherResult.app(
             name: "Say Hello Utility",
@@ -22,24 +27,34 @@ struct LauncherRankingTests {
             url: URL(fileURLWithPath: "/Applications/Sublime Merge.app")
         )
         let file = LauncherResult.file(name: "sm.png", url: URL(fileURLWithPath: "/tmp/sm.png"))
-        #expect(LauncherRanking.sorted([file, app], query: "sm", usage: [app.id: 1]).first == app)
+        #expect(LauncherRanking.sorted([file, app], query: "sm", context: LauncherSearchContext(usage: [app.id: 1]))
+            .first == app)
 
         // Still below the fixed, always-first kinds.
         let shell = LauncherResult.shellCommand("echo sm")
-        #expect(LauncherRanking.sorted([shell, app], query: "sm", usage: [app.id: 100]).first == shell)
+        #expect(LauncherRanking.sorted([shell, app], query: "sm", context: LauncherSearchContext(usage: [app.id: 100]))
+            .first == shell)
 
         // Two rows promoted into the same slot with equal usage fall back to
         // natural tier: "sm.png" is `.exact`, "smart" only `.prefix`.
         let smart = LauncherResult.file(name: "smart", url: URL(fileURLWithPath: "/tmp/smart"))
         #expect(
-            LauncherRanking.sorted([smart, file], query: "sm", usage: [smart.id: 1, file.id: 1]).first == file
+            LauncherRanking.sorted(
+                [smart, file],
+                query: "sm",
+                context: LauncherSearchContext(usage: [smart.id: 1, file.id: 1])
+            ).first == file
         )
 
         // Within-tier usage tiebreak (both stems equal "hello", so both
         // `.exact`) still holds.
         let exact = LauncherResult.file(name: "hello.txt", url: URL(fileURLWithPath: "/tmp/hello.txt"))
         let peer = LauncherResult.file(name: "hello.md", url: URL(fileURLWithPath: "/tmp/hello.md"))
-        #expect(LauncherRanking.sorted([exact, peer], query: "hello", usage: [peer.id: 2]).first == peer)
+        #expect(LauncherRanking.sorted(
+            [exact, peer],
+            query: "hello",
+            context: LauncherSearchContext(usage: [peer.id: 2])
+        ).first == peer)
     }
 
     @Test func acronymBeatsPrefixFilesRegardlessOfOrder() {
@@ -62,15 +77,15 @@ struct LauncherRankingTests {
         #expect(LauncherRanking.sorted([file, app], query: "sm").first == app)
     }
 
-    @Test func exactStemFileStillBeatsUnlearnedAcronym() {
-        // Documents the trade-off: without a recorded selection, a file
-        // whose stem literally is the query still beats an acronym match.
+    @Test func shortQueryAcronymBeatsExactStemFile() {
+        // Short queries lean toward apps (ADR 0001): at two letters an
+        // unlearned acronym beats a file whose stem literally is the query.
         let app = LauncherResult.app(
             name: "Sublime Merge",
             url: URL(fileURLWithPath: "/Applications/Sublime Merge.app")
         )
         let file = LauncherResult.file(name: "sm.png", url: URL(fileURLWithPath: "/tmp/sm.png"))
-        #expect(LauncherRanking.sorted([app, file], query: "sm").first == file)
+        #expect(LauncherRanking.sorted([file, app], query: "sm").first == app)
     }
 
     @Test func aliasBeatsExactFile() {
@@ -111,7 +126,8 @@ struct LauncherRankingTests {
             name: "Sublime Text", url: URL(fileURLWithPath: "/Applications/Sublime Text.app")
         )
         #expect(
-            LauncherRanking.sorted([stickies, sublimeText], query: "st", frecency: [sublimeText.id: 5]).first
+            LauncherRanking
+                .sorted([stickies, sublimeText], query: "st", context: Self.frecent(sublimeText.id, uses: 31)).first
                 == sublimeText
         )
 
@@ -121,7 +137,8 @@ struct LauncherRankingTests {
             name: "Simple Task Tracker", url: URL(fileURLWithPath: "/Applications/Simple Task Tracker.app")
         )
         #expect(
-            LauncherRanking.sorted([wordsApp, stickies], query: "st", frecency: [wordsApp.id: 100]).first == stickies
+            LauncherRanking.sorted([wordsApp, stickies], query: "st", context: Self.frecent(wordsApp.id, uses: 100_000))
+                .first == stickies
         )
     }
 
