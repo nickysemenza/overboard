@@ -122,6 +122,8 @@ jobs:
   build:
     name: Build app artifact
     runs-on: xcode-27
+    outputs:
+      signed: ${{ steps.secrets.outputs.available }}
     steps:
       # Full history + tags: shared with release.yml — the signed path below
       # goes through the same "Embed git version" build phase, which needs
@@ -204,3 +206,67 @@ jobs:
           name: Overboard
           path: Overboard.zip
           if-no-files-found: error
+
+  # Every merge to main ships: the notarized zip the build job just made is
+  # published as a prerelease named after `git describe` (v0.10.1-13-gabc1234)
+  # and the cask in nickysemenza/homebrew-tap is bumped to it, so `brew
+  # upgrade` tracks main without anyone pushing a tag. Pushing a real vX.Y.Z
+  # tag still goes through release.yml. The `-*` exclude keeps these
+  # per-merge tags out of the describe, so versions stay
+  # <last real tag>-<commits since>-g<sha> instead of chaining onto each
+  # other; embed-git-version.sh uses the same exclude so the app reports the
+  # same string. The tags are created with GITHUB_TOKEN, which doesn't trigger
+  # release.yml's tag-push trigger.
+  publish:
+    name: Publish main build
+    needs: [lint, test, build]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.build.outputs.signed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Compute version
+        id: version
+        run: |
+          describe=$(git describe --tags --exclude '*-*')
+          echo "version=${describe#v}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: Overboard
+
+      # On a commit that is exactly a vX.Y.Z tag, release.yml owns the
+      # release, so skip it here rather than racing it for the same tag.
+      - name: Create GitHub prerelease
+        id: release
+        run: |
+          case "$VERSION" in
+            *-*) ;;
+            *) echo "v$VERSION is a release tag; release.yml publishes it"; exit 0 ;;
+          esac
+          mv Overboard.zip "Overboard-$VERSION.zip"
+          gh release create "v$VERSION" \
+            --target "$GITHUB_SHA" \
+            --prerelease \
+            --title "Overboard $VERSION" \
+            --generate-notes \
+            "Overboard-$VERSION.zip"
+          echo "published=true" >> "$GITHUB_OUTPUT"
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Bump the cask in nickysemenza/homebrew-tap
+        if: steps.release.outputs.published == 'true'
+        run: |
+          gh workflow run bump.yml \
+            --repo nickysemenza/homebrew-tap \
+            --field cask=overboard \
+            --field "version=$VERSION"
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}

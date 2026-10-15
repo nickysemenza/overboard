@@ -23,6 +23,10 @@
 # past v0.3.0 still calls itself 0.3.0 (true to the tag) while describing as
 # v0.3.0-2-gabc1234 (true to the bits). AppVersion.isDirtyOrAhead keys off it.
 #
+# Tags containing "-" are the per-merge prereleases ci.yml publishes
+# (v0.10.1-13-gabc1234). Both describes exclude them so builds keep counting
+# from the last real release tag instead of from the previous merge.
+#
 # Best-effort throughout — never fail a build over version metadata. With no
 # git and no tags, whatever the project file set stands.
 #
@@ -51,11 +55,11 @@ get_key() {
     /usr/libexec/PlistBuddy -c "Print :$1" "$plist" 2>/dev/null || true
 }
 
-set_key GitDescribe "$(git describe --tags --always --dirty 2>/dev/null || true)"
+set_key GitDescribe "$(git describe --tags --exclude '*-*' --always --dirty 2>/dev/null || true)"
 set_key GitSHA "$(git rev-parse --short HEAD 2>/dev/null || true)"
 
 # Nearest tag, minus the conventional leading "v".
-tag=$(git describe --tags --abbrev=0 2>/dev/null || true)
+tag=$(git describe --tags --exclude '*-*' --abbrev=0 2>/dev/null || true)
 version=${tag#v}
 
 # Only a clean dotted-numeric core is usable. A non-release tag ("nightly") or
