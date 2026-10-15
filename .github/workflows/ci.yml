@@ -208,7 +208,7 @@ jobs:
           if-no-files-found: error
 
   # Every merge to main ships: the notarized zip the build job just made is
-  # published as a prerelease named after `git describe` (v0.10.1-13-gabc1234)
+  # published as a release named after `git describe` (v0.10.1-13-gabc1234)
   # and the cask in nickysemenza/homebrew-tap is bumped to it, so `brew
   # upgrade` tracks main without anyone pushing a tag. Pushing a real vX.Y.Z
   # tag still goes through release.yml. The `-*` exclude keeps these
@@ -216,7 +216,10 @@ jobs:
   # <last real tag>-<commits since>-g<sha> instead of chaining onto each
   # other; embed-git-version.sh uses the same exclude so the app reports the
   # same string. The tags are created with GITHUB_TOKEN, which doesn't trigger
-  # release.yml's tag-push trigger.
+  # release.yml's tag-push trigger. They are regular releases, not
+  # prereleases (`brew audit` rejects a cask pointing at a GitHub
+  # prerelease), but --latest=false keeps the Releases page's "Latest" badge
+  # on the last vX.Y.Z tag.
   publish:
     name: Publish main build
     needs: [lint, test, build]
@@ -241,7 +244,7 @@ jobs:
 
       # On a commit that is exactly a vX.Y.Z tag, release.yml owns the
       # release, so skip it here rather than racing it for the same tag.
-      - name: Create GitHub prerelease
+      - name: Create GitHub release
         id: release
         run: |
           case "$VERSION" in
@@ -251,7 +254,7 @@ jobs:
           mv Overboard.zip "Overboard-$VERSION.zip"
           gh release create "v$VERSION" \
             --target "$GITHUB_SHA" \
-            --prerelease \
+            --latest=false \
             --title "Overboard $VERSION" \
             --generate-notes \
             "Overboard-$VERSION.zip"

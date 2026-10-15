@@ -23,7 +23,7 @@
 # past v0.3.0 still calls itself 0.3.0 (true to the tag) while describing as
 # v0.3.0-2-gabc1234 (true to the bits). AppVersion.isDirtyOrAhead keys off it.
 #
-# Tags containing "-" are the per-merge prereleases ci.yml publishes
+# Tags containing "-" are the per-merge releases ci.yml publishes
 # (v0.10.1-13-gabc1234). Both describes exclude them so builds keep counting
 # from the last real release tag instead of from the previous merge.
 #
