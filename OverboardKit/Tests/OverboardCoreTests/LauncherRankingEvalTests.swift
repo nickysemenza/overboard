@@ -12,8 +12,15 @@ struct LauncherRankingEvalTests {
     private static let cloud = "/Users/me/Library/Mobile Documents/com~apple~CloudDocs"
     private static let now = Date(timeIntervalSince1970: 1_800_000_000)
 
-    private static let apps: [LauncherResult] = ["Notes", "Numbers", "Sublime Merge", "Stickies", "Budget Tracker"]
-        .map { .app(name: $0, url: URL(fileURLWithPath: "/Applications/\($0).app")) }
+    private static let apps: [LauncherResult] = [
+        "Notes",
+        "Numbers",
+        "Sublime Merge",
+        "Stickies",
+        "Budget Tracker",
+        "Murmur",
+    ]
+    .map { .app(name: $0, url: URL(fileURLWithPath: "/Applications/\($0).app")) }
 
     /// Home-relative or iCloud-relative paths. `noise` stands in for what
     /// the scanner detects (`FileMetadataScannerTests` covers detection).
@@ -67,6 +74,19 @@ struct LauncherRankingEvalTests {
     ])
     func topResult(query: String, expected: String) async throws {
         #expect(try await Self.ranked(query).first?.label == expected)
+    }
+
+    @Test func appOutranksItsDataFolderAndInstaller() async throws {
+        // The app writes recordings into its data folder all day, and the
+        // installer was just downloaded; neither says the user wants them.
+        let fresh = Self.now.addingTimeInterval(-3600)
+        let top = try await Self.ranked("murmu", files: [
+            IndexedFile(path: Self.home + "/Murmur", name: "Murmur", root: Self.home, generation: "g",
+                        modifiedAt: fresh, isDirectory: true),
+            IndexedFile(path: Self.home + "/Downloads/Murmur.dmg", name: "Murmur.dmg", root: Self.home,
+                        generation: "g", modifiedAt: fresh),
+        ]).first
+        #expect(top == Self.apps.last)
     }
 
     @Test func ownFoldersOutrankVendoredCopies() async throws {

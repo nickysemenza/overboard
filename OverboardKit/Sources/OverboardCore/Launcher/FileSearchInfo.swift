@@ -14,8 +14,6 @@ public struct FileSearchInfo: Sendable, Equatable, Codable {
     /// When macOS last saw the file opened, by any app (Spotlight's
     /// `kMDItemLastUsedDate`); nil when Spotlight hasn't reported one.
     public var lastOpenedAt: Date?
-    /// Folders between the file and its search root; 1 for a root's child.
-    public var depth: Int?
 
     public init(
         availability: Availability = .local,
@@ -23,8 +21,7 @@ public struct FileSearchInfo: Sendable, Equatable, Codable {
         modifiedAt: Date? = nil,
         location: String? = nil,
         isNoise: Bool = false,
-        lastOpenedAt: Date? = nil,
-        depth: Int? = nil
+        lastOpenedAt: Date? = nil
     ) {
         self.availability = availability
         self.isDirectory = isDirectory
@@ -32,6 +29,5 @@ public struct FileSearchInfo: Sendable, Equatable, Codable {
         self.location = location
         self.isNoise = isNoise
         self.lastOpenedAt = lastOpenedAt
-        self.depth = depth
     }
 }
