@@ -1,0 +1,23 @@
+GLOSSARY.md
+  s_b8d051b5e42fa5::t_67b9c8a312b07f 30-33
+OverboardKit/Sources/OverboardCore/Launcher/SearchMatch.swift
+  s_b8d051b5e42fa5::t_9a9cc6355d06d7 245-267
+OverboardKit/Tests/OverboardCoreTests/LauncherRankingEvalTests.swift
+  s_b8d051b5e42fa5::t_ebf313bc31c541 15-23,40-41,81-90
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "193038b2ac3ebf7fe206111ed43286a3c79f11e5",
+  "prompts": {},
+  "sessions": {
+    "s_b8d051b5e42fa5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f4a7dc67-a86e-43d0-9fe6-92cd948a5009",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "nicky <nicky@nickysemenza.com>"
+    }
+  }
+}
