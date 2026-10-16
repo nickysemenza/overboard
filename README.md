@@ -333,6 +333,24 @@ for the SQLite index. Ingestion timing includes database/index writes; it does
 not include walking user folders, cloud-provider metadata latency, or UI rendering.
 Physical enumeration cost depends on folder count, access, and provider state.
 
+To measure actual filesystem refresh work separately from matching:
+
+```sh
+swift run --jobs 4 --package-path OverboardKit file-scan-benchmark
+```
+
+This creates 5,000 empty synthetic files under 50 directories, primes a temporary
+disk-backed index, then compares recursive, immediate-child, and entry-only
+refreshes of the same root. It reports process CPU time, elapsed time, and retained
+record count, then deletes the fixture. It never scans user locations. Elapsed
+time includes the scanner's cooperative pauses; CPU time measures the work saved.
+
+Ordinary directory events reconcile immediate children. New or moved-in directory
+trees and missed-event recovery still recurse. Sibling event bursts coalesce into
+shallow local refreshes; long scans yield between work slices and backlogged
+batches pause between passes. Bulk scans use filesystem metadata and dataless
+flags for cached cloud availability; opening a result rechecks current availability.
+
 The index is rebuilt/reconciled on startup and after missed filesystem events;
 normal changes reconcile affected subtrees after a short debounce. The separate
 `filenames.sqlite` database is rebuildable; clearing it never clears clipboard history.

@@ -26,7 +26,8 @@ nonisolated struct FileIndexOperations: Sendable {
 
     var refresh: @Sendable (FileIndexRefreshRequest) async throws -> [String] = { request in
         try await FileMetadataScanner.refresh(
-            request.path, roots: request.roots, exclusions: request.exclusions, index: request.index
+            request.path, roots: request.roots, exclusions: request.exclusions, index: request.index,
+            scope: request.scope
         )
     }
 }
@@ -36,4 +37,5 @@ nonisolated struct FileIndexRefreshRequest: Sendable {
     var roots: [URL]
     var exclusions: [String]
     var index: FileNameIndex
+    var scope: FileIndexRefreshScope = .entry
 }

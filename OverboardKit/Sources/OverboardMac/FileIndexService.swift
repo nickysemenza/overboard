@@ -60,14 +60,30 @@ public final class FileIndexService {
     var lastOpenedTask: Task<Void, Never>?
     var eventStream: FSEventStreamRef?
     var dirtyPaths = Set<String>()
-    var dirtySubtrees = Set<String>()
+    var dirtyScopes: [String: FileIndexRefreshScope] = [:]
     var dirtyOrder: [String: Int] = [:]
     var nextDirtyOrder = 0
     private var started = false
     var lifecycleGeneration = 0
     var isStopped = false
-    var activeRoots: [URL] = []
-    var activeExclusions: [String] = []
+    var activeRoots: [URL] = [] {
+        didSet { self.cachedPathPolicy = nil }
+    }
+
+    var activeExclusions: [String] = [] {
+        didSet { self.cachedPathPolicy = nil }
+    }
+
+    private var cachedPathPolicy: FileIndexPathPolicy?
+
+    var pathPolicy: FileIndexPathPolicy {
+        if let policy = self.cachedPathPolicy {
+            return policy
+        }
+        let policy = FileIndexPathPolicy(roots: self.activeRoots, exclusions: self.activeExclusions)
+        self.cachedPathPolicy = policy
+        return policy
+    }
 
     let rootsOverride: [URL]?
     private let exclusionsOverride: [String]?
@@ -110,7 +126,7 @@ public final class FileIndexService {
         self.lastOpenedTask?.cancel()
         self.stopWatching()
         self.dirtyPaths.removeAll()
-        self.dirtySubtrees.removeAll()
+        self.dirtyScopes.removeAll()
         self.dirtyOrder.removeAll()
         self.isIndexing = false
         self.signalReconcile()
@@ -149,7 +165,7 @@ public final class FileIndexService {
         previousRefresh?.cancel()
         self.stopWatching()
         self.dirtyPaths.removeAll()
-        self.dirtySubtrees.removeAll()
+        self.dirtyScopes.removeAll()
         self.dirtyOrder.removeAll()
         self.refreshTask = nil
         self.issues = []
