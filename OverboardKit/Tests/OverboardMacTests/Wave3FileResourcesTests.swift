@@ -73,15 +73,16 @@ struct Wave3FileResourcesTests {
             service.enqueueChange(root.appendingPathComponent("a-\(offset).txt").path)
         }
         service.enqueueChange(first)
-        let batch = service.consumeDirtyDirectories()
+        let batch = service.consumeDirtyChanges()
         #expect(batch.count == 32)
-        #expect(batch.first?.path == first)
-        #expect(!batch.contains(root))
+        #expect(batch.first?.path.path == first)
+        #expect(!batch.contains(where: { $0.path.path == root.path }))
         for offset in 0 ..< 1000 {
             service.enqueueChange(root.appendingPathComponent("extra-\(offset).txt").path)
         }
         #expect(service.dirtyPaths.count <= 512)
         #expect(service.dirtyPaths.contains(root.path))
+        #expect(service.dirtyScopes[root.path] == .children)
         service.stop()
         service.enqueueChange(first)
         #expect(service.dirtyPaths.isEmpty)

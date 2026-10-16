@@ -19,7 +19,7 @@ extension FileIndexService {
     /// result into the published state. Runs on the debounce timer fired by
     /// `scheduleRefresh()`.
     private func performRefresh(index: FileNameIndex) async {
-        let directories = self.consumeDirtyDirectories()
+        let directories = self.consumeDirtyChanges()
         let lifecycle = self.lifecycleGeneration
         self.isIndexing = true
         defer {
@@ -28,7 +28,7 @@ extension FileIndexService {
                 self.refreshTask = nil
                 self.signalReconcile()
                 if !Task.isCancelled, !self.dirtyPaths.isEmpty {
-                    self.scheduleRefresh(delay: .zero)
+                    self.scheduleRefresh(delay: .seconds(1))
                 }
             }
         }
@@ -44,81 +44,18 @@ extension FileIndexService {
         self.onChange()
     }
 
-    /// Drains a bounded oldest-first batch without promoting files to parent scans.
-    func consumeDirtyDirectories() -> [URL] {
-        let changed = self.dirtyPaths.sorted {
-            self.dirtyOrder[$0, default: 0] < self.dirtyOrder[$1, default: 0]
-        }.prefix(32)
-        for path in changed {
-            self.dirtyPaths.remove(path)
-            self.dirtySubtrees.remove(path)
-            self.dirtyOrder.removeValue(forKey: path)
-        }
-        return changed.map { URL(fileURLWithPath: $0) }
-    }
-
-    func enqueueChange(_ rawPath: String, subtree: Bool = false) {
-        guard !self.isStopped else { return }
-        let path = URL(fileURLWithPath: rawPath).standardized.path.precomposedStringWithCanonicalMapping
-        let url = URL(fileURLWithPath: path)
-        guard let root = FileMetadataScanner.owner(of: url, roots: self.activeRoots, exclusions: self.activeExclusions)
-        else { return }
-        if self.dirtySubtrees.contains(where: {
-            (path == $0 || path.hasPrefix($0 + "/")) &&
-                FileMetadataScanner.owner(of: URL(fileURLWithPath: $0), roots: self.activeRoots,
-                                          exclusions: self.activeExclusions)?.path == root.path
-        }) {
-            return
-        }
-        if self.dirtyPaths.count >= 512 {
-            for activeRoot in self.activeRoots where self.dirtyPaths.contains(where: {
-                FileMetadataScanner.owner(of: URL(fileURLWithPath: $0), roots: self.activeRoots,
-                                          exclusions: self.activeExclusions)?.path == activeRoot.path
-            }) {
-                self.coalesceSubtree(activeRoot.path, owner: activeRoot)
-            }
-            self.coalesceSubtree(root.path, owner: root)
-        } else if subtree {
-            self.coalesceSubtree(path, owner: root)
-        } else {
-            self.insertDirty(path)
-        }
-    }
-
-    private func insertDirty(_ path: String) {
-        if self.dirtyPaths.insert(path).inserted {
-            self.dirtyOrder[path] = self.nextDirtyOrder
-            self.nextDirtyOrder += 1
-        }
-    }
-
-    private func coalesceSubtree(_ path: String, owner: URL) {
-        var order = self.nextDirtyOrder
-        for existing in self.dirtyPaths where existing == path || existing.hasPrefix(path + "/") {
-            guard FileMetadataScanner.owner(of: URL(fileURLWithPath: existing), roots: self.activeRoots,
-                                            exclusions: self.activeExclusions)?.path == owner.path else { continue }
-            order = min(order, self.dirtyOrder[existing, default: order])
-            self.dirtyPaths.remove(existing)
-            self.dirtySubtrees.remove(existing)
-            self.dirtyOrder.removeValue(forKey: existing)
-        }
-        self.insertDirty(path)
-        self.dirtyOrder[path] = order
-        self.dirtySubtrees.insert(path)
-    }
-
     /// Scans one dirty directory under whichever active root claims it.
     /// Returns `true` to keep processing the remaining directories — whether
     /// this one was skipped (no root claims it) or scanned successfully —
     /// and `false` to abort the whole refresh, matching the original
     /// early-return behavior when the worker is cancelled or throws.
-    private func refreshDirectory(_ directory: URL, index: FileNameIndex) async -> Bool {
+    private func refreshDirectory(_ change: FileIndexChange, index: FileNameIndex) async -> Bool {
         let roots = self.activeRoots
         let exclusions = self.activeExclusions
         let refresh = self.operations.refresh
         let worker = Task.detached(priority: .utility) {
             try await refresh(FileIndexRefreshRequest(
-                path: directory, roots: roots, exclusions: exclusions, index: index
+                path: change.path, roots: roots, exclusions: exclusions, index: index, scope: change.scope
             ))
         }
         do {
@@ -149,21 +86,7 @@ extension FileIndexService {
                 let service = Unmanaged<FileIndexService>.fromOpaque(pointer).takeUnretainedValue()
                 guard !service.isStopped else { return }
                 let changed = unsafeBitCast(paths, to: NSArray.self).compactMap { $0 as? String }
-                let missed = (0 ..< count)
-                    .contains {
-                        flags[$0] &
-                            UInt32(kFSEventStreamEventFlagMustScanSubDirs | kFSEventStreamEventFlagUserDropped |
-                                kFSEventStreamEventFlagKernelDropped | kFSEventStreamEventFlagRootChanged |
-                                kFSEventStreamEventFlagEventIdsWrapped) != 0
-                    }
-                if missed {
-                    for root in service.activeRoots {
-                        service.enqueueChange(root.path, subtree: true)
-                    }
-                }
-                for (offset, path) in changed.enumerated() {
-                    service.enqueueChange(path, subtree: flags[offset] & UInt32(kFSEventStreamEventFlagItemIsDir) != 0)
-                }
+                service.enqueueEvents(changed, flags: Array(UnsafeBufferPointer(start: flags, count: count)))
                 if !service.dirtyPaths.isEmpty {
                     service.scheduleRefresh()
                 }

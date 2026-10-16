@@ -45,6 +45,25 @@ struct FileNameIndexTests {
         #expect(try await index.search("new").count == 1)
     }
 
+    @Test func childReconciliationUsesLiteralPathBoundaries() async throws {
+        let index = try FileNameIndex()
+        let parent = "/fixture/café_%"
+        try await index.upsert([
+            self.entry(parent), self.entry(parent + "/direct.txt"), self.entry(parent + "/nested/deep.txt"),
+            self.entry(parent + "/nested.backup.txt"), self.entry(parent + "/nested0"),
+            self.entry(parent + "/nested0.txt"),
+            self.entry(parent + "-sibling/keep.txt"),
+        ])
+        #expect(try await index.children(under: parent, root: "/fixture").map(\.path) == [
+            parent + "/direct.txt", parent + "/nested.backup.txt", parent + "/nested0", parent + "/nested0.txt",
+        ])
+        try await index.removeDescendants(under: parent)
+        #expect(try await index.count() == 2)
+        try await index.remove(under: parent)
+        #expect(try await index.count() == 1)
+        #expect(try await index.search("keep").count == 1)
+    }
+
     @Test func unchangedRescanPerformsNoPersistentUpdatesAndStillReconciles() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

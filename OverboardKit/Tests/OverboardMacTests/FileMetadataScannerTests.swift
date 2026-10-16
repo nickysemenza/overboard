@@ -98,7 +98,8 @@ struct FileMetadataScannerTests {
         #expect(FileMetadataScanner.shouldInclude(file, root: canonicalRoot, exclusions: []))
     }
 
-    @Test func deniedLocationPreservesKnownMetadataAndReportsAccess() async throws {
+    @Test(arguments: [FileIndexRefreshScope.subtree, .children])
+    func deniedLocationPreservesKnownMetadataAndReportsAccess(scope: FileIndexRefreshScope) async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let file = root.appendingPathComponent("restricted.txt")
@@ -110,7 +111,13 @@ struct FileMetadataScannerTests {
             try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: root.path)
             try? FileManager.default.removeItem(at: root)
         }
-        let issues = try await FileMetadataScanner.scan(root: root, exclusions: [], generation: "two", index: index)
+        let issues = try await FileMetadataScanner.refresh(
+            root,
+            roots: [root],
+            exclusions: [],
+            index: index,
+            scope: scope
+        )
         #expect(!issues.isEmpty)
         #expect(try await index.search("restricted.txt").count == 1)
     }
