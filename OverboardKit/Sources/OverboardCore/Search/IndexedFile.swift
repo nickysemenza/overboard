@@ -50,14 +50,7 @@ public struct IndexedFile: Codable, Sendable, FetchableRecord, PersistableRecord
     public var result: LauncherResult {
         .file(name: self.name, url: URL(fileURLWithPath: self.path), info: FileSearchInfo(
             availability: self.availability, isDirectory: self.isDirectory, modifiedAt: self.modifiedAt,
-            location: self.location, isNoise: self.isNoise, lastOpenedAt: self.lastOpenedAt,
-            depth: self.depth
+            location: self.location, isNoise: self.isNoise, lastOpenedAt: self.lastOpenedAt
         ))
-    }
-
-    /// Folders between the file and its root, counted lexically.
-    var depth: Int {
-        guard self.path.hasPrefix(self.root + "/") else { return 0 }
-        return self.path.dropFirst(self.root.count + 1).split(separator: "/").count
     }
 }
