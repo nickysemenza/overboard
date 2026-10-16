@@ -1,0 +1,27 @@
+OverboardKit/Sources/OverboardCore/Launcher/FileSearchInfo.swift
+  s_b8d051b5e42fa5::t_7bfbf3eda93980 24
+OverboardKit/Sources/OverboardCore/Launcher/LauncherScore.swift
+  s_b8d051b5e42fa5::t_7060d9570098d8 13-17,19,27-28,54-56,70
+OverboardKit/Sources/OverboardCore/Search/IndexedFile.swift
+  s_b8d051b5e42fa5::t_2f2016e7230736 53
+OverboardKit/Tests/OverboardCoreTests/LauncherRankingEvalTests.swift
+  s_b8d051b5e42fa5::t_7ef825e6b1861f 15-23,79-91
+docs/adr/0001-blended-launcher-ranking.md
+  s_b8d051b5e42fa5::t_1a79daadeb9871 3,10-11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "b23982b359b207dcbac67ff3ed2ddba562bb533d",
+  "prompts": {},
+  "sessions": {
+    "s_b8d051b5e42fa5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f4a7dc67-a86e-43d0-9fe6-92cd948a5009",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "nicky <nicky@nickysemenza.com>"
+    }
+  }
+}
