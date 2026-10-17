@@ -87,9 +87,50 @@ public actor ClipStore {
     /// Returns the stored (or bumped) item, or nil if the snapshot was skipped.
     @discardableResult
     public func ingest(_ snapshot: PasteboardSnapshot) async throws -> ClipItem? {
+        try await self.ingest(snapshot, provenance: nil)?.item
+    }
+
+    /// The capture-path ingest. Ordered cheapest-first so a recopy of content
+    /// that's already live never pays for the expensive stages:
+    ///
+    /// 1. classify (one SHA-256 over the representations -> `contentHash`);
+    /// 2. look the hash up. A hit bumps the existing row and returns, with
+    ///    no sensitivity scan, no blob hashing/writes, no provenance lookup
+    ///    (an AppleScript round trip of up to 500 ms), no embedding, and
+    ///    `isNew == false` so the caller skips enrichment too;
+    /// 3. only for genuinely new content: the sensitivity scan (run once and
+    ///    threaded through to the insert and the embedding step), provenance,
+    ///    then the blob + row write.
+    ///
+    /// `provenance` is invoked at most once, only for new, non-secret content
+    /// (secrets never record where they came from, so asking is wasted work).
+    ///
+    /// Blob hashes are not reused from the classifier: its hash covers the
+    /// whole snapshot (kind + every representation), while a blob's name is
+    /// the SHA-256 of one payload, so the two digests are of different bytes.
+    /// The recopy fast path skips blob hashing entirely instead.
+    ///
+    /// Known trade-off: the fast path trusts the earlier scan. Identical
+    /// content has an identical sensitivity label, so a recopy only re-checks
+    /// the classifier's own `isSecret` (cheap, already computed), not the
+    /// deeper `ClipSensitivity` scan. Content stored as non-secret by an older
+    /// detector stays non-secret until a recapture of changed bytes.
+    public func ingest(
+        _ snapshot: PasteboardSnapshot,
+        provenance: ProvenanceResolver?
+    ) async throws -> IngestOutcome? {
         try Task.checkCancellation()
         try snapshot.admission?.check()
         guard var classified = CaptureClassifier.classify(snapshot) else { return nil }
+
+        if let bumped = try await self.bumpLiveItem(
+            contentHash: classified.contentHash, snapshot: snapshot, isSecret: classified.isSecret
+        ) {
+            return IngestOutcome(item: bumped, isNew: false)
+        }
+
+        // Computed once per capture; `insertIndexed` and `storeEmbedding`
+        // receive "already screened" rather than rescanning the same text.
         if let label = ClipSensitivity.label(for: snapshot.reps) {
             classified.isSecret = true
             classified.previewText = ClipSensitivity.maskedPreview(label: label)
@@ -102,11 +143,20 @@ public actor ClipStore {
         }
         let classification = classified
 
+        var snapshot = snapshot
+        if !classification.isSecret, let found = await provenance?() {
+            snapshot.sourceURL = found.url
+            snapshot.sourceTitle = found.title
+        }
+        try Task.checkCancellation()
+        try snapshot.admission?.check()
+        let pending = snapshot
+
         let blobs = self.blobs
         let stored: (item: ClipItem, isNew: Bool)? = try await self.writeCancellable { db in
-            try snapshot.admission?.check()
-            let result = try Self.ingestWrite(db, snapshot: snapshot, classified: classification, blobs: blobs)
-            try snapshot.admission?.check()
+            try pending.admission?.check()
+            let result = try Self.ingestWrite(db, snapshot: pending, classified: classification, blobs: blobs)
+            try pending.admission?.check()
             return result
         }
 
@@ -119,9 +169,9 @@ public actor ClipStore {
         {
             // Best-effort; semantic search simply won't find this item if the
             // model is unavailable.
-            try? await self.storeEmbedding(itemID: stored.item.id, text: searchText)
+            try? await self.storeEmbedding(itemID: stored.item.id, text: searchText, screened: true)
         }
-        return stored.item
+        return IngestOutcome(item: stored.item, isNew: stored.isNew)
     }
 
     /// One already-classified representation, ready to become a `Representation`
@@ -147,30 +197,16 @@ public actor ClipStore {
         blobs: BlobStore
     ) throws -> (item: ClipItem, isNew: Bool) {
         let now = snapshot.capturedAt
-        let reps = try Self.pendingRepresentations(for: snapshot.reps, blobs: blobs)
-
-        // Dedupe: same content already live → bump it to the top.
-        if let existing = try ClipItem
-            .filter(sql: "contentHash = ? AND deletedAt IS NULL", arguments: [classified.contentHash])
-            .fetchOne(db)
-        {
-            var bumped = existing
-            bumped.useCount = try Int(Self.nextItemCounter(
-                after: Int64(existing.useCount), itemID: existing.id, counter: .useCount
-            ))
-            bumped.lastUsedAt = now
-            bumped.updatedAt = now
-            bumped.lamport = try Self.nextItemCounter(
-                after: existing.lamport, itemID: existing.id, counter: .revision
-            )
-            try bumped.update(db)
-            if classified.isSecret, !existing.isSecret {
-                try Self.protectSensitiveItem(db, itemID: bumped.id, label: "Sensitive content")
-                bumped = try ClipItem.fetchOne(db, key: bumped.id) ?? bumped
-            }
+        // Re-check inside the write: another capture may have inserted the same
+        // content since the fast-path read. Blobs are written only after this
+        // miss, so a lost race never touches the blob store.
+        if let bumped = try Self.bumpExisting(
+            db, contentHash: classified.contentHash, now: now, isSecret: classified.isSecret
+        ) {
             return (bumped, false)
         }
 
+        let reps = try Self.pendingRepresentations(for: snapshot.reps, blobs: blobs)
         let item = try Self.insertNewItem(db, snapshot: snapshot, classified: classified, now: now, reps: reps)
         return (item, true)
     }
@@ -233,7 +269,7 @@ public actor ClipStore {
             sourceURL: sourceURL,
             sourceTitle: sourceTitle
         )
-        try Self.insertIndexed(db, item: item, searchText: classified.searchText)
+        try Self.insertIndexed(db, item: item, searchText: classified.searchText, searchTextScreened: true)
 
         for rep in reps {
             try Representation(
@@ -257,12 +293,19 @@ public actor ClipStore {
     /// model (it's derived, and enrichment rewrites it), so it's passed
     /// alongside and written here. Internal (not `private`) so
     /// `ClipStore+Archive.swift`'s `insertImported` can reach it.
-    static func insertIndexed(_ db: GRDB.Database, item: ClipItem, searchText: String?) throws {
+    ///
+    /// `searchTextScreened` means the caller already ran the sensitivity scan
+    /// over this text's source (`ingest` scans the representations once up
+    /// front and flags `item.isSecret`), so it isn't rescanned here.
+    static func insertIndexed(
+        _ db: GRDB.Database, item: ClipItem, searchText: String?, searchTextScreened: Bool = false
+    ) throws {
         try item.insert(db)
-        if item.isSecret || searchText.flatMap({ ClipSensitivity.label(for: $0) }) != nil {
+        let searchLabel = searchTextScreened ? nil : searchText.flatMap { ClipSensitivity.label(for: $0) }
+        if item.isSecret || searchLabel != nil {
             try protectSensitiveItem(
                 db, itemID: item.id,
-                label: searchText.flatMap { ClipSensitivity.label(for: $0) }
+                label: searchLabel
                     ?? item.previewText.flatMap { $0.hasPrefix("Secret — ") ? String($0.dropFirst(9)) : nil }
                     ?? "Sensitive content"
             )

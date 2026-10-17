@@ -91,6 +91,10 @@ public final class ClipboardMonitor {
                 self?.tick()
             }
         }
+        // Tolerance lets the system coalesce these wakeups with other timers
+        // (up to 100 ms of slack, half the interval) without changing the
+        // nominal cadence.
+        timer.tolerance = 0.1
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
     }

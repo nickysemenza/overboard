@@ -3,17 +3,6 @@ import Foundation
 import OverboardCore
 
 public nonisolated enum FileMetadataScanner {
-    /// Resource keys fetched for every entry, whether it's the incremental
-    /// scan's own directory record or one yielded by the enumerator. Cloud
-    /// download-state keys trigger provider round trips: use dataless flags
-    /// for the cached badge, and recheck provider state at open time.
-    static let resourceKeys: Set<URLResourceKey> = [
-        .isDirectoryKey,
-        .isSymbolicLinkKey,
-        .isPackageKey,
-        .contentModificationDateKey,
-    ]
-
     /// Foundation deliberately abbreviates /private/var back to /var on some
     /// macOS releases. POSIX realpath agrees with enumerator/FSEvents paths.
     public static func canonicalURL(_ url: URL) -> URL {
@@ -36,13 +25,28 @@ public nonisolated enum FileMetadataScanner {
         FileIndexPathPolicy(roots: roots, exclusions: exclusions).owner(of: url)
     }
 
-    private static func hasPackageAncestor(_ url: URL, root: URL) -> Bool {
-        var parent = url.deletingLastPathComponent()
-        while parent.path != root.path, parent.path.hasPrefix(root.path + "/") {
-            if (try? parent.resourceValues(forKeys: [.isPackageKey]).isPackage) == true {
+    /// Joins a directory path and an entry name without the doubled slash a
+    /// naive join produces under `/`.
+    static func join(_ directory: String, _ name: String) -> String {
+        directory == "/" ? "/" + name : directory + "/" + name
+    }
+
+    /// Whether `metadata` describes a package, which is indexed as one opaque
+    /// entry and never descended into.
+    static func isPackage(_ metadata: BulkEntry, classifier: PackageClassifier) -> Bool {
+        metadata.isDirectory && classifier.isPackage(name: metadata.name, finderFlags: metadata.finderFlags)
+    }
+
+    private static func hasPackageAncestor(_ path: String, root: String, classifier: PackageClassifier) -> Bool {
+        var parent = (path as NSString).deletingLastPathComponent
+        while parent != root, parent.hasPrefix(root + "/") {
+            if let metadata = try? BulkDirectoryWalker.stat(path: parent), self.isPackage(
+                metadata,
+                classifier: classifier
+            ) {
                 return true
             }
-            parent.deleteLastPathComponent()
+            parent = (parent as NSString).deletingLastPathComponent
         }
         return false
     }
@@ -62,22 +66,19 @@ public nonisolated enum FileMetadataScanner {
         let url = configuredRoot ?? self.canonicalURL(url.deletingLastPathComponent())
             .appendingPathComponent(url.lastPathComponent, isDirectory: url.hasDirectoryPath)
         let roots = canonicalRoots
+        let classifier = PackageClassifier()
         guard let root = self.owner(of: url, roots: roots, exclusions: exclusions),
-              !self.hasPackageAncestor(url, root: root)
+              !self.hasPackageAncestor(url.path, root: root.path, classifier: classifier)
         else {
             try await index.remove(under: url.path)
             return []
         }
-        guard FileManager.default.fileExists(atPath: url.path) else {
+        guard let metadata = try self.statOrNil(url.path), !metadata.isSymbolicLink else {
             try await index.remove(under: url.path)
             return []
         }
-        let values = try url.resourceValues(forKeys: self.resourceKeys)
-        if values.isSymbolicLink == true {
-            try await index.remove(under: url.path)
-            return []
-        }
-        if values.isDirectory == true, values.isPackage != true {
+        let isPackage = self.isPackage(metadata, classifier: classifier)
+        if metadata.isDirectory, !isPackage {
             switch scope {
             case .entry:
                 if url.path == root.path {
@@ -96,28 +97,52 @@ public nonisolated enum FileMetadataScanner {
                                            index: index, under: url, roots: roots)
             }
         }
-        if values.isPackage == true || values.isDirectory != true {
+        if isPackage || !metadata.isDirectory {
             try await index.removeDescendants(under: url.path)
         }
         try Task.checkCancellation()
-        let entry = self.entry(url, values: values, root: root, generation: UUID().uuidString,
-                               noise: NoiseTracker(root: root.path))
-        try await index.upsert([entry])
+        let identity = EntryIdentity(root: root, generation: UUID().uuidString)
+        try await index.upsert([self.entry(path: url.path, metadata: metadata, identity: identity)])
         return []
     }
 
-    static func entry(
-        _ url: URL,
-        values: URLResourceValues,
-        root: URL,
-        generation: String,
-        noise: NoiseTracker
-    ) -> IndexedFile {
-        IndexedFile(path: url.path, name: url.lastPathComponent, root: root.path, generation: generation,
-                    modifiedAt: values.contentModificationDate ?? .distantPast,
-                    availability: FileAvailability.status(at: url, values: values),
-                    isDirectory: values.isDirectory == true, location: FileIndexService.locationName(root),
-                    isNoise: noise.isNoise(path: url.path, isDirectory: values.isDirectory == true))
+    /// Metadata for `path`, or nil when it no longer exists.
+    private static func statOrNil(_ path: String) throws -> BulkEntry? {
+        do {
+            return try BulkDirectoryWalker.stat(path: path)
+        } catch where [ENOENT, ENOTDIR].contains(error.code) {
+            return nil
+        }
+    }
+
+    /// The per-scan facts every indexed entry shares. Resolving the location
+    /// name and building the noise tracker once keeps both out of the loop.
+    struct EntryIdentity {
+        let rootPath: String
+        let location: String
+        let generation: String
+        let noise: NoiseTracker
+
+        init(root: URL, generation: String) {
+            self.rootPath = root.path
+            self.location = FileIndexService.locationName(root)
+            self.generation = generation
+            self.noise = NoiseTracker(root: root.path)
+        }
+    }
+
+    static func entry(path: String, metadata: BulkEntry, identity: EntryIdentity) -> IndexedFile {
+        IndexedFile(path: path, name: metadata.name, root: identity.rootPath, generation: identity.generation,
+                    modifiedAt: metadata.modifiedAt, availability: metadata.availability,
+                    isDirectory: metadata.isDirectory, location: identity.location,
+                    isNoise: identity.noise.isNoise(path: path, isDirectory: metadata.isDirectory))
+    }
+
+    /// Whether the enumerator-equivalent rules index `metadata`: dot-files and
+    /// `UF_HIDDEN` items are skipped (`.skipsHiddenFiles`) and symlinks are
+    /// never indexed or followed.
+    static func isIndexable(_ metadata: BulkEntry) -> Bool {
+        !metadata.name.hasPrefix(".") && metadata.flags & UInt32(UF_HIDDEN) == 0 && !metadata.isSymbolicLink
     }
 
     public static func scan(
@@ -134,33 +159,32 @@ public nonisolated enum FileMetadataScanner {
         let roots = roots.isEmpty ? [root] : roots.map(self.canonicalURL)
         let policy = FileIndexPathPolicy(roots: roots, exclusions: exclusions)
         let scope = directory ?? root
+        let classifier = PackageClassifier()
         guard policy.owner(of: scope)?.path == root.path,
-              !self.hasPackageAncestor(scope, root: root)
+              !self.hasPackageAncestor(scope.path, root: root.path, classifier: classifier)
         else {
             try await index.remove(under: scope.path)
             return []
         }
-        if let values = try? scope.resourceValues(forKeys: self.resourceKeys), values.isPackage == true {
+        let scopeMetadata = try? BulkDirectoryWalker.stat(path: scope.path)
+        if let scopeMetadata, self.isPackage(scopeMetadata, classifier: classifier) {
             return try await self.refresh(scope, roots: roots, exclusions: exclusions, index: index)
         }
-        // A reference type, not `inout` locals: the errorHandler closure below
-        // escapes into the enumerator and keeps firing while `indexEntries` is
-        // also mutating this state, and two `inout` borrows of the same local
-        // across that overlap trip Swift's exclusivity checks at runtime.
-        let accumulator = ScanAccumulator(noise: NoiseTracker(root: root.path))
+        let identity = EntryIdentity(root: root, generation: generation)
+        let accumulator = ScanAccumulator()
         try await index.beginScan(generation)
-        guard let enumerator = self.enumerator(at: directory ?? root, accumulator: accumulator) else {
-            try await index.discardScan(generation)
-            return ["\(root.path): Couldn’t read this location. Check access in System Settings."]
-        }
 
         do {
-            self.appendDirectoryEntry(directory, root: root, generation: generation, accumulator: accumulator)
+            // An incremental walk yields descendants, not the directory
+            // itself. Refresh its record before reconciling the seen-path set.
+            if let directory, directory != root, let scopeMetadata {
+                accumulator.batch.append(self.entry(path: directory.path, metadata: scopeMetadata, identity: identity))
+            }
 
             try await self.indexEntries(
-                from: enumerator,
+                from: scope.path,
                 context: ScanContext(
-                    root: root, policy: policy, generation: generation, index: index
+                    rootPath: root.path, policy: policy, identity: identity, index: index, classifier: classifier
                 ),
                 accumulator: accumulator
             )
@@ -181,98 +205,57 @@ public nonisolated enum FileMetadataScanner {
         }
     }
 
-    private static func enumerator(
-        at directory: URL,
-        accumulator: ScanAccumulator
-    ) -> FileManager.DirectoryEnumerator? {
-        FileManager.default.enumerator(
-            at: directory,
-            includingPropertiesForKeys: Array(self.resourceKeys),
-            options: [.skipsHiddenFiles, .skipsPackageDescendants],
-            errorHandler: { url, error in
-                if accumulator.failures.count < 12 {
-                    accumulator.failures.append("\(url.path): \(error.localizedDescription)")
-                }
-                return true
-            }
-        )
-    }
-
-    private static func appendDirectoryEntry(
-        _ directory: URL?,
-        root: URL,
-        generation: String,
-        accumulator: ScanAccumulator
-    ) {
-        // An incremental enumeration yields descendants, not the directory
-        // itself. Refresh its record before reconciling the seen-path set.
-        guard let directory, directory != root,
-              let values = try? directory.resourceValues(forKeys: self.resourceKeys)
-        else { return }
-        accumulator.batch.append(self.entry(
-            directory, values: values, root: root, generation: generation, noise: accumulator.noise
-        ))
-    }
-
     /// Groups one scan invocation's fixed parameters so `indexEntries` stays
     /// under SwiftLint's parameter-count limit without losing readability.
     private struct ScanContext {
-        let root: URL
+        let rootPath: String
         let policy: FileIndexPathPolicy
-        let generation: String
+        let identity: EntryIdentity
         let index: FileNameIndex
+        let classifier: PackageClassifier
     }
 
-    /// The in-flight batch and failure list, shared by reference between
-    /// `scan(...)`, its errorHandler closure, and `indexEntries` — see the
-    /// exclusivity note at the `ScanAccumulator()` call site.
+    /// The in-flight batch and failure list for one scan.
     private final class ScanAccumulator {
         var batch: [IndexedFile] = []
         var failures: [String] = []
-        let noise: NoiseTracker
-
-        init(noise: NoiseTracker) {
-            self.noise = noise
-        }
     }
 
-    /// Walks the enumerator to completion, classifying each entry and
+    /// Walks `start` depth-first to completion, classifying each entry and
     /// flushing to the index in batches. Split out of `scan(...)` so that
     /// function stays orchestration-only.
+    ///
+    /// Paths are built by joining the canonical scope with names the kernel
+    /// returned, so they are already canonical and need no `standardized` or
+    /// `realpath` per entry.
     private static func indexEntries(
-        from enumerator: FileManager.DirectoryEnumerator,
+        from start: String,
         context: ScanContext,
         accumulator: ScanAccumulator
     ) async throws {
         var budget = FileIndexScanBudget()
-        while let url = enumerator.nextObject() as? URL {
+        let walker = BulkDirectoryWalker()
+        var pending = [start]
+        while let directory = pending.popLast() {
             try Task.checkCancellation()
-            try await budget.yieldIfNeeded()
-            guard context.policy.owner(of: url)?.path == context.root.path
-            else {
-                enumerator.skipDescendants()
-                continue
+            let listing = walker.list(path: directory)
+            if let error = listing.error, accumulator.failures.count < 12 {
+                accumulator.failures.append("\(directory): \(error.message)")
             }
-            do {
-                let values = try url.resourceValues(forKeys: self.resourceKeys)
-                if values.isSymbolicLink == true {
-                    enumerator.skipDescendants(); continue
+            for metadata in listing.entries {
+                try Task.checkCancellation()
+                try await budget.yieldIfNeeded()
+                guard self.isIndexable(metadata) else { continue }
+                let path = self.join(directory, metadata.name)
+                guard context.policy.owner(ofPath: path)?.path == context.rootPath else { continue }
+                if metadata.isDirectory, !self.isPackage(metadata, classifier: context.classifier) {
+                    pending.append(path)
                 }
-                if values.isPackage == true {
-                    enumerator.skipDescendants()
+                accumulator.batch.append(self.entry(path: path, metadata: metadata, identity: context.identity))
+                if accumulator.batch.count >= 400 {
+                    try await context.index.upsert(accumulator.batch, seenIn: context.identity.generation)
+                    accumulator.batch.removeAll(keepingCapacity: true)
                 }
-                accumulator.batch.append(self.entry(
-                    url, values: values, root: context.root, generation: context.generation,
-                    noise: accumulator.noise
-                ))
-            } catch {
-                if accumulator.failures.count < 12 {
-                    accumulator.failures.append("\(url.path): \(error.localizedDescription)")
-                }
-            }
-            if accumulator.batch.count >= 400 {
-                try await context.index.upsert(accumulator.batch, seenIn: context.generation)
-                accumulator.batch.removeAll(keepingCapacity: true)
             }
         }
     }

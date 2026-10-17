@@ -97,16 +97,19 @@ public actor FileNameIndex {
         let path = path?.precomposedStringWithCanonicalMapping
         try await self.database.write { db in
             if let path {
+                // Seek the subtree's range on the path key ('0' sorts right
+                // after '/'). `+root` keeps SQLite off the root index, which
+                // would visit every row of a large root (all of ~) per refresh.
                 try db.execute(
                     sql: """
-                    DELETE FROM file_entry WHERE root = ?
-                    AND (path = ? OR substr(path, 1, length(?)) = ?)
+                    DELETE FROM file_entry WHERE +root = ?
+                    AND (path = ? OR (path >= ? AND path < ?))
                     AND NOT EXISTS (
                         SELECT 1 FROM temp.file_scan_seen
                         WHERE scanID = ? AND file_scan_seen.path = file_entry.path
                     )
                     """,
-                    arguments: [root, path, path + "/", path + "/", generation]
+                    arguments: [root, path, path + "/", path + "0", generation]
                 )
             } else {
                 try db.execute(
@@ -136,20 +139,40 @@ public actor FileNameIndex {
 
     /// Replaces every file's last-opened date with Spotlight's latest answer.
     /// Paths Spotlight reports outside the index are ignored; files it no
-    /// longer reports lose their date.
+    /// longer reports lose their date. Only rows whose value actually changed
+    /// are written: this runs every 30 minutes, almost always against nearly
+    /// identical data, and a blanket NULL-then-rewrite dirtied every row.
     public func setLastOpened(_ dates: [String: Date]) async throws {
         try Task.checkCancellation()
         try await self.database.write { db in
-            try db.execute(sql: "UPDATE file_entry SET lastOpenedAt = NULL WHERE lastOpenedAt IS NOT NULL")
+            var current: [String: Date] = [:]
+            let rows = try Row.fetchCursor(
+                db, sql: "SELECT path, lastOpenedAt FROM file_entry WHERE lastOpenedAt IS NOT NULL"
+            )
+            while let row = try rows.next() {
+                current[row["path"]] = row["lastOpenedAt"]
+            }
+            for path in current.keys where dates[path] == nil {
+                try db.execute(sql: "UPDATE file_entry SET lastOpenedAt = NULL WHERE path = ?", arguments: [path])
+            }
             for (path, date) in dates {
+                // SQLite keeps milliseconds, so a stored date never equals the
+                // original exactly; compare at the precision it round-trips.
+                if let stored = current[path], abs(stored.timeIntervalSince(date)) < 0.001 {
+                    continue
+                }
                 try db.execute(sql: "UPDATE file_entry SET lastOpenedAt = ? WHERE path = ?", arguments: [date, path])
             }
         }
     }
 
+    /// Drops all entries and the scan history that vouched for them.
     public func reset() async throws {
         try Task.checkCancellation()
-        try await self.database.write { db in try db.execute(sql: "DELETE FROM file_entry") }
+        try await self.database.write { db in
+            try db.execute(sql: "DELETE FROM file_entry")
+            try db.execute(sql: "DELETE FROM scan_state")
+        }
     }
 
     public func retainRoots(_ roots: [String]) async throws {
@@ -158,6 +181,10 @@ public actor FileNameIndex {
             let slots = Array(repeating: "?", count: roots.count).joined(separator: ",")
             try db.execute(
                 sql: "DELETE FROM file_entry WHERE root NOT IN (\(slots))",
+                arguments: StatementArguments(roots.map(\.precomposedStringWithCanonicalMapping))
+            )
+            try db.execute(
+                sql: "DELETE FROM scan_state WHERE root NOT IN (\(slots))",
                 arguments: StatementArguments(roots.map(\.precomposedStringWithCanonicalMapping))
             )
         }

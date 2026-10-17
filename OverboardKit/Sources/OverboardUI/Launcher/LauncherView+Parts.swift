@@ -76,7 +76,12 @@ struct LauncherScopeBar: View {
                 .accessibilityAddTraits(self.viewModel.scope == scope ? .isSelected : [])
             }
             Spacer(minLength: 0)
-            if self.viewModel.scope == .files {
+            // `searchIsActive` is true only while the panel is on screen. The
+            // orderOut'd hosting view stays alive, and reading the index
+            // status unconditionally would re-render it on every status
+            // change; short-circuiting here means a hidden panel registers no
+            // dependency on `FileIndexService`.
+            if self.viewModel.searchIsActive, self.viewModel.scope == .files {
                 Text(FileIndexService.shared.status).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
             }
         }

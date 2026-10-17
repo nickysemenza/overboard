@@ -237,6 +237,31 @@ enum Migrations {
             try db.execute(sql: "ALTER TABLE representation ADD COLUMN itemIndex INTEGER")
         }
 
+        // v8: an O(1) change fingerprint for the drawer's live updates. The old
+        // token hashed every `item` and `snippet` row in Swift on each write;
+        // this single-row counter is bumped by triggers instead, so it moves
+        // on every insert, update, and delete (including hard deletes, which
+        // no per-row revision column could ever reflect) without scanning.
+        migrator.registerMigration("v8-change-counter") { db in
+            try db.execute(sql: """
+            CREATE TABLE change_counter (
+              id INTEGER PRIMARY KEY CHECK (id = 1),
+              revision INTEGER NOT NULL
+            );
+            INSERT INTO change_counter (id, revision) VALUES (1, 0);
+            """)
+            for table in ["item", "snippet"] {
+                for event in ["INSERT", "UPDATE", "DELETE"] {
+                    try db.execute(sql: """
+                    CREATE TRIGGER \(table)_change_\(event.lowercased()) AFTER \(event) ON \(table)
+                    BEGIN
+                      UPDATE change_counter SET revision = revision + 1 WHERE id = 1;
+                    END
+                    """)
+                }
+            }
+        }
+
         return migrator
     }
 

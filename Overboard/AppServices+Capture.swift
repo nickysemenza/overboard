@@ -34,13 +34,21 @@ extension AppServices {
         let generation = self.captureGeneration
         do {
             try original.admission?.check()
-            let snapshot = await Self.applyingLocalProvenance(to: Self.applyingAutoTransforms(to: original))
+            let snapshot = Self.applyingAutoTransforms(to: original)
             guard !Task.isCancelled, self.captureGeneration == generation else { return }
-            guard let item = try await self.store.ingest(snapshot),
-                  !Task.isCancelled, self.captureGeneration == generation
+            // Provenance is a lazy closure: the store only runs the (up to
+            // 500 ms AppleScript) lookup for new, non-secret content, so a
+            // recopy never waits on the browser.
+            guard let outcome = try await self.store.ingest(
+                snapshot, provenance: Self.localProvenanceResolver(for: snapshot)
+            ),
+                !Task.isCancelled, self.captureGeneration == generation
             else { return }
             self.signal.bump()
-            self.enrichmentQueue.enqueue(item: item, snapshot: snapshot)
+            // A recopy only bumped an already-enriched row.
+            if outcome.isNew {
+                self.enrichmentQueue.enqueue(item: outcome.item, snapshot: snapshot)
+            }
         } catch is CancellationError {
             return
         } catch {
@@ -48,15 +56,14 @@ extension AppServices {
         }
     }
 
-    private static func applyingLocalProvenance(to original: PasteboardSnapshot) async -> PasteboardSnapshot {
-        guard let bundleID = original.sourceBundleID,
-              BrowserScript.dialect(forBundleID: bundleID) != nil,
-              let provenance = await BrowserProvenanceService.fetch(bundleID: bundleID)
-        else { return original }
-        var snapshot = original
-        snapshot.sourceURL = provenance.url
-        snapshot.sourceTitle = provenance.title
-        return snapshot
+    private static func localProvenanceResolver(for snapshot: PasteboardSnapshot) -> ProvenanceResolver? {
+        guard let bundleID = snapshot.sourceBundleID,
+              BrowserScript.dialect(forBundleID: bundleID) != nil
+        else { return nil }
+        return {
+            guard let provenance = await BrowserProvenanceService.fetch(bundleID: bundleID) else { return nil }
+            return (provenance.url, provenance.title)
+        }
     }
 
     /// The recurring background chores, as data. `MaintenanceScheduler` owns

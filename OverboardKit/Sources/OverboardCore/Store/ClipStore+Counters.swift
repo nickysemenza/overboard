@@ -40,19 +40,11 @@ extension ClipStore {
         }
     }
 
+    /// Monotonic change fingerprint over `item` and `snippet`, read from the
+    /// trigger-maintained `change_counter` row (migration v8): one primary-key
+    /// lookup regardless of library size. Any insert, update, or delete on
+    /// either table advances it.
     static func itemChangeToken(in database: Database) throws -> Int64 {
-        let rows = try Row.fetchCursor(database, sql: """
-        SELECT 'item' AS entity, id, lamport FROM item
-        UNION ALL
-        SELECT 'snippet' AS entity, id, lamport FROM snippet
-        ORDER BY entity, id
-        """)
-        var hasher = Hasher()
-        while let row = try rows.next() {
-            hasher.combine(row["entity"] as String)
-            hasher.combine(row["id"] as String)
-            hasher.combine(row["lamport"] as Int64)
-        }
-        return Int64(hasher.finalize())
+        try Int64.fetchOne(database, sql: "SELECT revision FROM change_counter WHERE id = 1") ?? 0
     }
 }

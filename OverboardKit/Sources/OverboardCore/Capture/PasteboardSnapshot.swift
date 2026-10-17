@@ -57,3 +57,16 @@ public enum WellKnownUTI {
     public static let fileURLs = "com.nickysemenza.overboard.file-urls"
     public static let color = "com.apple.cocoa.pasteboard.color"
 }
+
+/// What `ClipStore.ingest(_:provenance:)` did with a snapshot.
+public struct IngestOutcome: Sendable {
+    public let item: ClipItem
+    /// False when the snapshot was a recopy of live content and only bumped
+    /// the existing row; callers skip enrichment for those.
+    public let isNew: Bool
+}
+
+/// Lazily resolves where a copy came from (browser front-tab URL + title).
+/// Invoked by `ClipStore.ingest` only when the content is new and not secret,
+/// so recopies never pay for the lookup.
+public typealias ProvenanceResolver = @Sendable () async -> (url: String, title: String?)?

@@ -12,28 +12,20 @@ extension FileMetadataScanner {
         let context = ChildrenScanContext(root: root, roots: roots, exclusions: exclusions, index: index,
                                           known: Dictionary(uniqueKeysWithValues: previous.map { ($0.path, $0) }))
         var budget = FileIndexScanBudget()
-        guard let enumerator = FileManager.default.enumerator(
-            at: directory, includingPropertiesForKeys: Array(self.resourceKeys),
-            options: [.skipsHiddenFiles, .skipsPackageDescendants, .skipsSubdirectoryDescendants],
-            errorHandler: { url, error in
-                state.record("\(url.path): \(error.localizedDescription)")
-                return true
-            }
-        ) else { return ["\(directory.path): Couldn’t read this location. Check access in System Settings."] }
 
-        if directory.path != root.path, let values = try? directory.resourceValues(forKeys: self.resourceKeys) {
-            state.batch.append(self.entry(
-                directory,
-                values: values,
-                root: root,
-                generation: context.generation,
-                noise: context.noise
-            ))
+        if directory.path != root.path,
+           let metadata = try? BulkDirectoryWalker.stat(path: directory.path)
+        {
+            state.batch.append(self.entry(path: directory.path, metadata: metadata, identity: context.identity))
         }
-        while let url = enumerator.nextObject() as? URL {
+        let listing = BulkDirectoryWalker().list(path: directory.path)
+        if let error = listing.error {
+            state.record("\(directory.path): \(error.message)")
+        }
+        for metadata in listing.entries {
             try Task.checkCancellation()
             try await budget.yieldIfNeeded()
-            try await self.refreshChild(url, context: context, state: state)
+            try await self.refreshChild(metadata, in: directory.path, context: context, state: state)
             if state.batch.count >= 400 {
                 try await index.upsert(state.batch)
                 state.batch.removeAll(keepingCapacity: true)
@@ -51,34 +43,30 @@ extension FileMetadataScanner {
         return state.failures
     }
 
-    private static func refreshChild(_ url: URL, context: ChildrenScanContext,
+    private static func refreshChild(_ metadata: BulkEntry, in directory: String, context: ChildrenScanContext,
                                      state: ChildrenScanState) async throws
     {
-        guard context.policy.owner(of: url)?.path == context.root.path else { return }
-        do {
-            let values = try url.resourceValues(forKeys: self.resourceKeys)
-            guard values.isSymbolicLink != true else { return }
-            let path = url.path.precomposedStringWithCanonicalMapping
-            state.seen.insert(path)
-            if values.isDirectory == true, values.isPackage != true {
-                if context.known[path]?.isDirectory != true {
-                    let failures = try await self.scan(root: context.root, exclusions: context.exclusions,
-                                                       generation: context.generation, index: context.index,
-                                                       under: url, roots: context.roots)
-                    for failure in failures {
-                        state.record(failure)
-                    }
+        guard self.isIndexable(metadata) else { return }
+        let path = self.join(directory, metadata.name)
+        guard context.policy.owner(ofPath: path)?.path == context.root.path else { return }
+        // NFD names from the kernel must compare equal to the precomposed
+        // paths the index stores.
+        let canonicalPath = path.precomposedStringWithCanonicalMapping
+        state.seen.insert(canonicalPath)
+        if metadata.isDirectory, !self.isPackage(metadata, classifier: context.classifier) {
+            if context.known[canonicalPath]?.isDirectory != true {
+                let failures = try await self.scan(root: context.root, exclusions: context.exclusions,
+                                                   generation: context.identity.generation, index: context.index,
+                                                   under: URL(fileURLWithPath: path, isDirectory: true),
+                                                   roots: context.roots)
+                for failure in failures {
+                    state.record(failure)
                 }
-            } else if context.known[path]?.isDirectory == true {
-                try await context.index.removeDescendants(under: path)
             }
-            state.batch.append(self.entry(url, values: values, root: context.root, generation: context.generation,
-                                          noise: context.noise))
-        } catch is CancellationError {
-            throw CancellationError()
-        } catch {
-            state.record("\(url.path): \(error.localizedDescription)")
+        } else if context.known[canonicalPath]?.isDirectory == true {
+            try await context.index.removeDescendants(under: canonicalPath)
         }
+        state.batch.append(self.entry(path: path, metadata: metadata, identity: context.identity))
     }
 }
 
@@ -100,9 +88,9 @@ private nonisolated struct ChildrenScanContext {
     let exclusions: [String]
     let index: FileNameIndex
     let known: [String: IndexedFile]
-    let generation = UUID().uuidString
     let policy: FileIndexPathPolicy
-    let noise: NoiseTracker
+    let identity: FileMetadataScanner.EntryIdentity
+    let classifier = PackageClassifier()
 
     init(root: URL, roots: [URL], exclusions: [String], index: FileNameIndex, known: [String: IndexedFile]) {
         self.root = root
@@ -111,6 +99,6 @@ private nonisolated struct ChildrenScanContext {
         self.index = index
         self.known = known
         self.policy = FileIndexPathPolicy(roots: roots, exclusions: exclusions)
-        self.noise = NoiseTracker(root: root.path)
+        self.identity = FileMetadataScanner.EntryIdentity(root: root, generation: UUID().uuidString)
     }
 }

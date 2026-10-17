@@ -112,7 +112,7 @@ extension AppServices {
     private static func makeInstantProviders(calendar: CalendarSource) -> [any LauncherProvider] {
         [
             QuicklinkProvider { Quicklink.parse(Defaults[.launcherQuicklinks]) },
-            ShellCommandProvider(isAvailable: { GhosttyLauncher.isInstalled() }),
+            ShellCommandProvider(isAvailable: { GhosttyLauncher.isInstalledCached() }),
             AppSearchProvider(index: AppIndex(), limit: 60) {
                 AppMatcher.parseAliases(Defaults[.launcherAppAliases])
             },

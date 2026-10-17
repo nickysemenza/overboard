@@ -58,6 +58,9 @@ public final class PermissionService {
     /// Mac, whatever it actually has installed and granted.
     private let isStubbed: Bool
 
+    /// Set while a background Automation read is outstanding; see `refresh()`.
+    @ObservationIgnored private var isReadingAutomation = false
+
     private var activationObserver: NSObjectProtocol?
 
     /// Private: the live instance is `shared`, whose lifetime is the process's,
@@ -187,9 +190,9 @@ public final class PermissionService {
     public func requestAutomation(for bundleID: String) {
         guard !self.isStubbed else { return }
         Task { [weak self] in
-            let state = await Task.detached {
+            let state = await Self.onAutomationQueue {
                 Self.readAutomation(bundleID: bundleID, askUserIfNeeded: true)
-            }.value
+            }
             self?.automationStates[bundleID] = state
         }
     }
@@ -205,13 +208,36 @@ public final class PermissionService {
         let targets = Self.supportedAutomationTargets.filter { Self.isInstalled($0.bundleID) }
         self.visibleAutomationTargets = targets
         let bundleIDs = targets.map(\.bundleID)
+        // One read at a time: a hung target keeps its read blocked, and every
+        // app activation would otherwise stack another one behind it.
+        guard !self.isReadingAutomation else { return }
+        self.isReadingAutomation = true
         Task { [weak self] in
-            let states = await Task.detached {
+            let states = await Self.onAutomationQueue {
                 bundleIDs.reduce(into: [String: PermissionState]()) { result, id in
                     result[id] = Self.readAutomation(bundleID: id, askUserIfNeeded: false)
                 }
-            }.value
+            }
             self?.automationStates = states
+            self?.isReadingAutomation = false
+        }
+    }
+
+    /// `AEDeterminePermissionToAutomateTarget` is a synchronous Apple Event
+    /// round trip that blocks until the target answers — indefinitely when the
+    /// target app is hung. It must not run on Swift's cooperative pool, whose
+    /// handful of threads every other task in the app shares. Concurrent so an
+    /// explicit request isn't stuck behind a hung background read;
+    /// `isReadingAutomation` keeps refreshes from piling up.
+    private nonisolated static let automationQueue = DispatchQueue(
+        label: "com.nickysemenza.overboard.automation-permission", qos: .utility, attributes: .concurrent
+    )
+
+    private nonisolated static func onAutomationQueue<T: Sendable>(
+        _ work: @escaping @Sendable () -> T
+    ) async -> T {
+        await withCheckedContinuation { continuation in
+            self.automationQueue.async { continuation.resume(returning: work()) }
         }
     }
 

@@ -1,4 +1,5 @@
 import Foundation
+import os
 #if canImport(FoundationModels)
     import FoundationModels
 #endif
@@ -109,9 +110,29 @@ public enum AITransformer {
 
     /// True when the on-device model is ready (Apple Silicon with Apple
     /// Intelligence enabled).
+    ///
+    /// Cached for ``availabilityTTL``: it's asked once per launcher keystroke,
+    /// per enrichment, and per card render, and each `SystemLanguageModel`
+    /// availability read is a cross-process query. `availability` itself stays
+    /// uncached so Settings shows the live state. The cost of the TTL is that
+    /// enabling Apple Intelligence can take up to that long to light up AI rows.
     public static var isAvailable: Bool {
-        self.availability == .available
+        let now = ContinuousClock.now
+        if let cached = self.availabilityCache.withLock({ $0 }),
+           now - cached.checkedAt < self.availabilityTTL
+        {
+            return cached.value
+        }
+        let value = self.availability == .available
+        self.availabilityCache.withLock { $0 = (now, value) }
+        return value
     }
+
+    static let availabilityTTL: Duration = .seconds(30)
+
+    private static let availabilityCache = OSAllocatedUnfairLock<(checkedAt: ContinuousClock.Instant, value: Bool)?>(
+        initialState: nil
+    )
 
     public static func apply(_ transform: AITransform, to text: String) async throws -> String {
         // Fresh session per request: sessions accumulate transcript context,

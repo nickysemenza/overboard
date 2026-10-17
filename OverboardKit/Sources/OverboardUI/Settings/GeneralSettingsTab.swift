@@ -107,7 +107,10 @@ struct GeneralSettingsTab: View {
             Section {
                 LabeledContent("Version", value: AppVersion.marketing)
                     .help("The tagged release this build descends from; it only changes when a release is cut.")
-                LabeledContent("Build", value: AppVersion.build)
+                LabeledContent(
+                    "Build",
+                    value: AppVersion.isDebugBuild ? "\(AppVersion.build) (Debug)" : AppVersion.build
+                )
                 if let git = AppVersion.gitDescribe {
                     LabeledContent("Source") {
                         HStack(spacing: 6) {

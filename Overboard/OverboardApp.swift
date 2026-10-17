@@ -1,3 +1,4 @@
+import OverboardCore
 import OverboardMac
 import OverboardUI
 import SwiftUI
@@ -160,6 +161,8 @@ private struct SummonMenuItem: View {
 
 /// The boat bounces whenever something is captured. While capture is paused it
 /// dims to the secondary style so an off clipboard is visible at a glance.
+/// Debug builds draw it orange: they're several times slower than Release,
+/// and the installed dogfood build is otherwise indistinguishable.
 private struct MenuBarLabel: View {
     let signal: CaptureSignal
     let captureState: CaptureState
@@ -167,9 +170,16 @@ private struct MenuBarLabel: View {
     var body: some View {
         Image(systemName: "sailboat.fill")
             .symbolEffect(.bounce, value: self.signal.count)
+        #if DEBUG
+            // Palette mode survives the menu bar's template rendering,
+            // which otherwise strips a plain foreground color.
+            .symbolRenderingMode(.palette)
+            .foregroundStyle(.orange.opacity(self.captureState.isPaused ? 0.45 : 1))
+        #else
             // Dim the boat while paused so an off clipboard is obvious.
             .foregroundStyle(self.captureState.isPaused ? .secondary : .primary)
-            .accessibilityLabel("Overboard")
+        #endif
+            .accessibilityLabel(AppVersion.isDebugBuild ? "Overboard (Debug)" : "Overboard")
             .accessibilityValue(self.captureState.isPaused ? "Capture paused" : "Capturing")
     }
 }

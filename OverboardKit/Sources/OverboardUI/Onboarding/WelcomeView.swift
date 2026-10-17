@@ -74,10 +74,10 @@ public struct WelcomeView: View {
         // An ordinary window, explicitly: no glass, and a real background so
         // the content reads in both appearances (see DESIGN.md).
         .background(Color(nsColor: .windowBackgroundColor))
+        // On-appear only: `PermissionService.shared` already refreshes itself on
+        // every app activation, so a second activation observer here would
+        // double each refresh (a TCC probe plus Automation checks).
         .onAppear {
-            self.permissions.refresh()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             self.permissions.refresh()
         }
     }
