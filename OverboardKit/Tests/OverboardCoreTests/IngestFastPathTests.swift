@@ -178,9 +178,10 @@ struct ItemChangeTokenTests {
         try await expectChange("pin") { try await harness.store.setPinned(id: itemID, true) }
         try await expectChange("use") { try await harness.store.markUsed(id: itemID) }
         try await expectChange("soft delete") { try await harness.store.delete(id: itemID) }
+        let deletedID = itemID
         try await expectChange("restore") {
             try await harness.dbWriter.write {
-                try $0.execute(sql: "UPDATE item SET deletedAt = NULL WHERE id = ?", arguments: [itemID])
+                try $0.execute(sql: "UPDATE item SET deletedAt = NULL WHERE id = ?", arguments: [deletedID])
             }
         }
 
@@ -191,7 +192,7 @@ struct ItemChangeTokenTests {
         try await expectChange("snippet delete") { try await harness.store.deleteSnippet(id: snippet.id) }
 
         try await expectChange("hard delete") {
-            try await harness.dbWriter.write { try $0.execute(sql: "DELETE FROM item WHERE id = ?", arguments: [itemID]) }
+            try await harness.dbWriter.write { try $0.execute(sql: "DELETE FROM item WHERE id = ?", arguments: [deletedID]) }
         }
     }
 
