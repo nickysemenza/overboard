@@ -15,8 +15,16 @@ extension FileIndexService {
             let scope = self.dirtyScopes.removeValue(forKey: path) ?? .entry
             self.dirtyPaths.remove(path)
             self.dirtyOrder.removeValue(forKey: path)
+            self.dirtyOwners.removeValue(forKey: path)
             return FileIndexChange(path: URL(fileURLWithPath: path, isDirectory: false), scope: scope)
         }
+    }
+
+    func clearDirtyChanges() {
+        self.dirtyPaths.removeAll()
+        self.dirtyScopes.removeAll()
+        self.dirtyOrder.removeAll()
+        self.dirtyOwners.removeAll()
     }
 
     func enqueueChange(_ rawPath: String, subtree: Bool = false) {
@@ -28,15 +36,32 @@ extension FileIndexService {
         let url = URL(fileURLWithPath: rawPath, isDirectory: false).standardized
         let path = url.path.precomposedStringWithCanonicalMapping
         guard let root = self.pathPolicy.owner(of: url) else { return }
-        if self.dirtyPaths.contains(where: {
-            Self.covers($0, scope: self.dirtyScopes[$0, default: .entry], path: path, scope: scope)
-                && self.pathPolicy.owner(of: URL(fileURLWithPath: $0, isDirectory: false)) == root
-        }) {
+        if self.isCovered(path, scope: scope, owner: root.path) {
             return
         }
-        self.coalesce(path, scope: scope, owner: root)
+        self.coalesce(path, scope: scope, owner: root.path)
         if self.dirtyPaths.count > 512 {
             self.compactChanges(around: path, root: root)
+        }
+    }
+
+    /// Whether an already-dirty ancestor (or the path itself) makes this change
+    /// redundant. Only the path and its ancestors can cover it, so this walks
+    /// the path upward through dictionary lookups instead of scanning every
+    /// dirty path on every event.
+    private func isCovered(_ path: String, scope: FileIndexRefreshScope, owner: String) -> Bool {
+        var candidate = path
+        while true {
+            if self.dirtyPaths.contains(candidate), self.dirtyOwners[candidate] == owner,
+               Self.covers(candidate, scope: self.dirtyScopes[candidate, default: .entry], path: path, scope: scope)
+            {
+                return true
+            }
+            let parent = (candidate as NSString).deletingLastPathComponent
+            if parent == candidate || parent.isEmpty {
+                return false
+            }
+            candidate = parent
         }
     }
 
@@ -52,20 +77,22 @@ extension FileIndexService {
         return scope == .children && requested == .entry && (path as NSString).deletingLastPathComponent == ancestor
     }
 
-    private func coalesce(_ path: String, scope: FileIndexRefreshScope, owner: URL) {
+    private func coalesce(_ path: String, scope: FileIndexRefreshScope, owner: String) {
         var order = self.nextDirtyOrder
         for existing in self.dirtyPaths {
             guard Self.covers(path, scope: scope, path: existing,
                               scope: self.dirtyScopes[existing, default: .entry]),
-                self.pathPolicy.owner(of: URL(fileURLWithPath: existing, isDirectory: false)) == owner else { continue }
+                self.dirtyOwners[existing] == owner else { continue }
             order = min(order, self.dirtyOrder[existing, default: order])
             self.dirtyPaths.remove(existing)
             self.dirtyScopes.removeValue(forKey: existing)
             self.dirtyOrder.removeValue(forKey: existing)
+            self.dirtyOwners.removeValue(forKey: existing)
         }
         self.dirtyPaths.insert(path)
         self.dirtyScopes[path] = scope
         self.dirtyOrder[path] = order
+        self.dirtyOwners[path] = owner
         self.nextDirtyOrder += 1
     }
 
@@ -75,16 +102,15 @@ extension FileIndexService {
         let parent = (path as NSString).deletingLastPathComponent
         let siblings = self.dirtyPaths.filter {
             self.dirtyScopes[$0] == .entry && ($0 as NSString).deletingLastPathComponent == parent
-                && self.pathPolicy.owner(of: URL(fileURLWithPath: $0, isDirectory: false)) == root
+                && self.dirtyOwners[$0] == root.path
         }
         if siblings.count > 1, self.pathPolicy.owner(of: URL(fileURLWithPath: parent, isDirectory: true)) == root {
-            self.coalesce(parent, scope: .children, owner: root)
+            self.coalesce(parent, scope: .children, owner: root.path)
             return
         }
         var nearest = root.path
         for existing in self.dirtyPaths where existing != path {
-            guard self.pathPolicy.owner(of: URL(fileURLWithPath: existing, isDirectory: false)) == root
-            else { continue }
+            guard self.dirtyOwners[existing] == root.path else { continue }
             var ancestor = parent
             while ancestor != root.path, existing != ancestor, !existing.hasPrefix(ancestor + "/") {
                 ancestor = (ancestor as NSString).deletingLastPathComponent
@@ -93,16 +119,20 @@ extension FileIndexService {
                 nearest = ancestor
             }
         }
-        self.coalesce(nearest, scope: .subtree, owner: root)
+        self.coalesce(nearest, scope: .subtree, owner: root.path)
+    }
+
+    /// Re-queues every root recursively: after dropped events the only safe
+    /// assumption is that anything may have changed.
+    func enqueueAllRoots() {
+        for root in self.activeRoots {
+            self.enqueueChange(root.path, scope: .subtree)
+        }
     }
 
     func enqueueEvents(_ paths: [String], flags: [FSEventStreamEventFlags]) {
-        let lost = UInt32(kFSEventStreamEventFlagUserDropped | kFSEventStreamEventFlagKernelDropped |
-            kFSEventStreamEventFlagEventIdsWrapped)
-        if flags.contains(where: { $0 & lost != 0 }) {
-            for root in self.activeRoots {
-                self.enqueueChange(root.path, scope: .subtree)
-            }
+        if flags.contains(where: { $0 & FileIndexEventFilter.lostFlags != 0 }) {
+            self.enqueueAllRoots()
             return
         }
         for (path, flags) in zip(paths, flags) {
@@ -112,13 +142,7 @@ extension FileIndexService {
                 self.enqueueChange((path as NSString).deletingLastPathComponent, scope: .subtree)
                 continue
             }
-            let recover = flags & UInt32(kFSEventStreamEventFlagMustScanSubDirs | kFSEventStreamEventFlagRootChanged) !=
-                0
-            let directory = flags & UInt32(kFSEventStreamEventFlagItemIsDir) != 0
-            let introduced = flags & UInt32(kFSEventStreamEventFlagItemCreated | kFSEventStreamEventFlagItemRenamed) !=
-                0
-            let scope: FileIndexRefreshScope = recover || (directory && introduced) ? .subtree : directory ? .children :
-                .entry
+            let scope = FileIndexEventFilter.scope(for: flags)
             self.enqueueChange(path, scope: scope)
             if scope == .subtree {
                 // A parent scan intentionally skips separately owned roots.
