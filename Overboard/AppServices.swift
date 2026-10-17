@@ -122,12 +122,7 @@ final class AppServices {
             enrichImage: Self.imageEnricher()
         )
         let enrichment = self.enrichment
-        // capacity 1 = at most one pending clip behind the one in flight. A
-        // burst of copies labels only the newest; superseded clips are simply
-        // skipped (the queue already drops the oldest pending on overflow), so
-        // the on-device model isn't asked to title clips the user has already
-        // moved past. Skipped clips stay unlabeled (and un-OCR'd) by design.
-        self.enrichmentQueue = BoundedEnrichmentQueue(capacity: 1) { item, snapshot in
+        self.enrichmentQueue = BoundedEnrichmentQueue { item, snapshot in
             await enrichment.enrich(item: item, snapshot: snapshot)
         }
         let stack = self.stack
