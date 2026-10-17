@@ -51,6 +51,11 @@ extension FileNameIndex {
             scanID TEXT NOT NULL, path TEXT NOT NULL,
             PRIMARY KEY (scanID, path)
         ) WITHOUT ROWID;
+        CREATE TABLE IF NOT EXISTS scan_state (
+            root TEXT PRIMARY KEY NOT NULL, deviceUUID TEXT NOT NULL,
+            eventID INTEGER NOT NULL, configHash TEXT NOT NULL,
+            completedAt DATETIME NOT NULL
+        );
         """)
     }
 

@@ -58,10 +58,22 @@ public final class FileIndexService {
     private(set) var scanTask: Task<Void, Never>?
     var refreshTask: Task<Void, Never>?
     var lastOpenedTask: Task<Void, Never>?
-    var eventStream: FSEventStreamRef?
+    var eventStreams: [FSEventStreamRef] = []
+    /// FSEvents callbacks run here, off the main thread, and are filtered
+    /// before anything reaches the main actor.
+    let eventQueue = DispatchQueue(label: "com.nickysemenza.overboard.file-index-events")
     var dirtyPaths = Set<String>()
     var dirtyScopes: [String: FileIndexRefreshScope] = [:]
     var dirtyOrder: [String: Int] = [:]
+    /// Root path owning each dirty path, recorded at enqueue time so coalescing
+    /// never re-derives ownership (URL work) for entries already queued.
+    var dirtyOwners: [String: String] = [:]
+    var activeConfigHash = ""
+    var pendingHistoryStreams = 0
+    var isProgressBlocked = false
+    var verifiedEventID: UInt64 = 0
+    var persistedEventID: UInt64 = 0
+    var lastCheckpoint: Date?
     var nextDirtyOrder = 0
     private var started = false
     var lifecycleGeneration = 0
@@ -99,10 +111,10 @@ public final class FileIndexService {
         self.operations = FileIndexOperations()
     }
 
-    init(index: FileNameIndex, roots: [URL], operations: FileIndexOperations) {
+    init(index: FileNameIndex, roots: [URL], exclusions: [String] = [], operations: FileIndexOperations) {
         self.index = index
         self.rootsOverride = roots
-        self.exclusionsOverride = []
+        self.exclusionsOverride = exclusions
         self.operations = operations
     }
 
@@ -118,6 +130,7 @@ public final class FileIndexService {
     /// process `exit()` never runs — called explicitly from app shutdown
     /// (`AppServices.stop()`) so the stream doesn't survive to `exit()`.
     public func stop() {
+        self.persistProgressOnStop()
         self.isStopped = true
         self.started = false
         self.lifecycleGeneration += 1
@@ -125,9 +138,7 @@ public final class FileIndexService {
         self.refreshTask?.cancel()
         self.lastOpenedTask?.cancel()
         self.stopWatching()
-        self.dirtyPaths.removeAll()
-        self.dirtyScopes.removeAll()
-        self.dirtyOrder.removeAll()
+        self.clearDirtyChanges()
         self.isIndexing = false
         self.signalReconcile()
     }
@@ -164,9 +175,8 @@ public final class FileIndexService {
         previousScan?.cancel()
         previousRefresh?.cancel()
         self.stopWatching()
-        self.dirtyPaths.removeAll()
-        self.dirtyScopes.removeAll()
-        self.dirtyOrder.removeAll()
+        self.clearDirtyChanges()
+        self.resetProgress()
         self.refreshTask = nil
         self.issues = []
         self.isIndexing = true
@@ -220,12 +230,21 @@ public final class FileIndexService {
         }
         try await index.retainRoots(roots.map(\.path))
         guard !Task.isCancelled else { return }
-        self.watch(roots)
+        // A root whose saved progress is still valid skips its scan; the stream
+        // replays what changed since the oldest of those IDs instead. `clear`
+        // already dropped every saved state with the entries.
+        let configHash = Self.configHash(roots: roots, exclusions: exclusions)
+        self.activeConfigHash = configHash
+        let resumed = try await Self.resumePoints(
+            roots: roots, states: index.scanStates(), configHash: configHash
+        )
+        try Task.checkCancellation()
+        self.watch(roots, since: resumed.values.min())
         let initialCount = try await index.count()
         try Task.checkCancellation()
         self.fileCount = initialCount
-        for root in roots {
-            try await self.scanRoot(root, exclusions: exclusions, index: index)
+        for root in roots where resumed[root.path] == nil {
+            try await self.scanRoot(root, exclusions: exclusions, configHash: configHash, index: index)
             guard !Task.isCancelled else { return }
         }
         self.isIndexing = false
@@ -236,29 +255,6 @@ public final class FileIndexService {
         if !self.dirtyPaths.isEmpty {
             self.scheduleRefresh()
         }
-    }
-
-    /// Scans a single root and folds its failures/count into the published state.
-    private func scanRoot(_ root: URL, exclusions: [String], index: FileNameIndex) async throws {
-        guard !Task.isCancelled else { return }
-        self.status = "Indexing \(Self.locationName(root))…"
-        let generation = UUID().uuidString
-        let request = FileIndexScanRequest(
-            root: root, exclusions: exclusions, generation: generation, index: index, roots: self.activeRoots
-        )
-        let scan = self.operations.scan
-        let worker = Task.detached(priority: .utility) {
-            try await scan(request)
-        }
-        let failures = try await withTaskCancellationHandler {
-            try await worker.value
-        } onCancel: { worker.cancel() }
-        guard !Task.isCancelled else { return }
-        let fileCount = try await index.count()
-        try Task.checkCancellation()
-        self.issues += failures
-        self.fileCount = fileCount
-        self.onChange()
     }
 
     /// Returns when the next index pass finishes — the initial scan, or a
