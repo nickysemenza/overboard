@@ -35,22 +35,35 @@ public enum AppVersion {
         infoString("GitSHA")
     }
 
+    /// Compiled with the Debug configuration (`-Onone`). Debug builds are
+    /// several times slower on CPU-bound work, so anything reporting the
+    /// version — or a performance problem — should say so.
+    public static var isDebugBuild: Bool {
+        #if DEBUG
+            true
+        #else
+            false
+        #endif
+    }
+
     /// One-liner for the launcher subtitle.
     public static var detail: String {
-        if let git = gitDescribe {
+        let base = if let git = gitDescribe {
             "\(git) · build \(build)"
         } else {
             "build \(build)"
         }
+        return isDebugBuild ? "\(base) · Debug" : base
     }
 
     /// Full human string, suitable for a bug report.
     public static var summary: String {
-        if let git = gitDescribe {
+        let base = if let git = gitDescribe {
             "Overboard \(marketing) (\(git))"
         } else {
             "Overboard \(marketing) (build \(build))"
         }
+        return isDebugBuild ? "\(base) [Debug]" : base
     }
 
     /// True when the source has drifted from the tag — a dirty tree or any
