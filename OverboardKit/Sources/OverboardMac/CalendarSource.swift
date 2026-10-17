@@ -10,14 +10,16 @@ import OverboardCore
 /// (`.EKEventStoreChanged`) plus a debounced fetch that also runs at launch
 /// and on every launcher summon, so a missed notification (or a restart)
 /// still catches up. `EKEvent`/`EKEventStore` aren't `Sendable`, so the fetch
-/// itself is a `nonisolated static` function that builds its own store and
+/// itself is a `nonisolated static` function that queries one shared store and
 /// converts every event to a `CalendarEvent` value before returning —
 /// nothing EventKit-shaped ever crosses the queue hop.
 public final class CalendarSource {
-    /// Held only to register for `.EKEventStoreChanged`; fetches use a fresh
-    /// instance (see `fetchUpcomingEvents`) rather than crossing this one to
-    /// the fetch queue.
-    private let store = EKEventStore()
+    /// The one `EKEventStore` for this process: creating one is expensive, so
+    /// fetches reuse it instead of building a fresh store per refresh, and the
+    /// change observer below listens on it. Not `Sendable`, so by convention
+    /// it is only *used* (queried) on `fetchQueue`, a serial queue; the main
+    /// actor touches it solely as the notification's `object`.
+    private nonisolated(unsafe) static let store = EKEventStore()
 
     public private(set) var upcomingEvents: [CalendarEvent] = []
     /// Thread-safe mirror of `upcomingEvents`, read by the launcher
@@ -99,7 +101,7 @@ public final class CalendarSource {
         self.needsRefresh = false
         self.changeObserver = NotificationCenter.default.addObserver(
             forName: .EKEventStoreChanged,
-            object: self.store,
+            object: Self.store,
             queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated {
@@ -210,13 +212,14 @@ public final class CalendarSource {
         }
     }
 
-    /// Runs entirely off the main actor, on `fetchQueue`. A fresh
-    /// `EKEventStore` is created here (rather than reusing the persistent
-    /// `store` above) purely so no non-`Sendable` EventKit type has to cross
-    /// the queue hop — only the `Sendable` `CalendarEvent` values this
-    /// returns do.
+    /// Runs entirely off the main actor, on `fetchQueue`, against the shared
+    /// `store`. Only the `Sendable` `CalendarEvent` values this returns cross
+    /// the queue hop; no EventKit object does.
     private nonisolated static func fetchUpcomingEvents(start: Date, end: Date) -> [CalendarEvent] {
-        let store = EKEventStore()
+        let store = Self.store
+        // A long-lived store must be told to pick up changes made elsewhere
+        // (a fresh one used to get that for free).
+        store.refreshSourcesIfNecessary()
         let predicate = store.predicateForEvents(withStart: start, end: end, calendars: nil)
         let events = store.events(matching: predicate)
             .filter { !$0.isAllDay && $0.status != .canceled && !Self.isDeclinedByOwner($0) }

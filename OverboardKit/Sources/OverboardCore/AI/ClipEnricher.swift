@@ -1,4 +1,5 @@
 import Foundation
+import os
 #if canImport(FoundationModels)
     import FoundationModels
 #endif
@@ -43,6 +44,27 @@ public enum ClipEnricher {
         )
     }
 
+    /// Process-lifetime cache of `promptOverheadTokens`, keyed by locale and
+    /// instruction text.
+    private static let overheadCache = OSAllocatedUnfairLock(initialState: [String: Int]())
+
+    /// Tokens the fixed parts of a labeling request cost: the instructions plus
+    /// the `GeneratedLabel` output schema. Both are constants for a given
+    /// model and locale, so counting them (two model round trips) happens once
+    /// rather than once per clip. Only successful counts are cached.
+    @available(macOS 26.4, *)
+    static func promptOverheadTokens(instructions: String, model: SystemLanguageModel) async throws -> Int {
+        let key = "\(Locale.current.identifier)|\(instructions)"
+        if let cached = self.overheadCache.withLock({ $0[key] }) {
+            return cached
+        }
+        let instructionTokens = try await model.tokenCount(for: Instructions(instructions))
+        let schemaTokens = try await model.tokenCount(for: GeneratedLabel.generationSchema)
+        let total = instructionTokens + schemaTokens
+        self.overheadCache.withLock { $0[key] = total }
+        return total
+    }
+
     /// Trims `text` to fit the model's context window alongside
     /// `instructions` and the `GeneratedLabel` output schema. Below macOS
     /// 26.4 — where `contextSize` / `tokenCount(for:)` aren't available —
@@ -51,9 +73,8 @@ public enum ClipEnricher {
     private static func boundedInput(_ text: String, instructions: String) async throws -> String {
         if #available(macOS 26.4, *) {
             let model = SystemLanguageModel.default
-            let instructionTokens = try await model.tokenCount(for: Instructions(instructions))
-            let schemaTokens = try await model.tokenCount(for: GeneratedLabel.generationSchema)
-            let budget = model.contextSize - instructionTokens - schemaTokens - 512
+            let overhead = try await Self.promptOverheadTokens(instructions: instructions, model: model)
+            let budget = model.contextSize - overhead - 512
             return try await TokenBudget.fit(text, budget: budget) { try await model.tokenCount(for: $0) }
         }
         return String(text.prefix(3000))

@@ -24,7 +24,11 @@ public struct MaterializedClip: Sendable, Equatable {
 public extension ClipStore {
     func materialize(itemIDs: [String]) async throws -> [MaterializedClip] {
         let blobs = self.blobs
-        return try await self.dbWriter.write { db in
+        // A read, not a write: this only fetches rows and blob files. A purge
+        // racing the paste can delete a blob after this snapshot saw its row;
+        // that surfaces as a thrown error for an item that was being deleted
+        // anyway, which the paste path already handles like "missing".
+        return try await self.dbWriter.read { db in
             try itemIDs.map { itemID in
                 guard let item = try ClipItem.fetchOne(db, key: itemID), item.deletedAt == nil else {
                     throw DatabaseError(message: "Clip is missing or deleted: \(itemID)")

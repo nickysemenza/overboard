@@ -1,4 +1,5 @@
 import AppKit
+import os
 
 /// Runs a `>`-prefixed launcher command in Ghostty (`com.mitchellh.ghostty`).
 ///
@@ -35,6 +36,23 @@ public nonisolated enum GhosttyLauncher {
 
     public nonisolated static func isInstalled() -> Bool {
         NSWorkspace.shared.urlForApplication(withBundleIdentifier: self.bundleID) != nil
+    }
+
+    private static let installedCache = OSAllocatedUnfairLock<(checkedAt: ContinuousClock.Instant, value: Bool)?>(
+        initialState: nil
+    )
+
+    /// `isInstalled()` memoized for 30 s. The launcher asks on every search,
+    /// and each ask is a Launch Services query; installing or removing Ghostty
+    /// mid-session only needs to be noticed within a launcher or two.
+    public nonisolated static func isInstalledCached() -> Bool {
+        let now = ContinuousClock.now
+        if let cached = self.installedCache.withLock({ $0 }), now - cached.checkedAt < .seconds(30) {
+            return cached.value
+        }
+        let value = self.isInstalled()
+        self.installedCache.withLock { $0 = (now, value) }
+        return value
     }
 
     /// Throws (rather than flashing a HUD itself) because `OverboardMac`

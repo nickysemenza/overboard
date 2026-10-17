@@ -50,8 +50,10 @@ public struct ClipEnrichmentPipeline: Sendable {
     @concurrent
     public func enrich(item: ClipItem, snapshot: PasteboardSnapshot) async {
         // Only fresh, non-secret items; bumped duplicates are already enriched.
+        // `item.isSecret` is the persisted result of the one sensitivity scan
+        // `ClipStore.ingest` runs over these same representations, so the text
+        // is not rescanned here (nor again before labeling below).
         guard !Task.isCancelled, item.useCount == 1, !item.isSecret,
-              ClipSensitivity.label(for: snapshot.reps) == nil,
               await (try? self.store.isEnrichmentEligible(itemID: item.id)) == true,
               !Task.isCancelled
         else { return }
@@ -100,7 +102,6 @@ public struct ClipEnrichmentPipeline: Sendable {
 
         guard !Task.isCancelled, settings.labelingEnabled, let text = textForLabeling,
               text.count >= Self.labelingMinimumLength,
-              ClipSensitivity.label(for: text) == nil,
               let enrichment = await self.enrichText(text), !Task.isCancelled
         else { return }
 

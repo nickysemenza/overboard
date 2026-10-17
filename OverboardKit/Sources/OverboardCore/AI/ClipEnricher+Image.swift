@@ -55,9 +55,8 @@ import Foundation
             model: SystemLanguageModel
         ) async throws -> String? {
             guard let text, !text.isEmpty else { return nil }
-            let instructionTokens = try await model.tokenCount(for: Instructions(instructions))
-            let schemaTokens = try await model.tokenCount(for: GeneratedLabel.generationSchema)
-            let budget = model.contextSize - instructionTokens - schemaTokens - 1536
+            let overhead = try await Self.promptOverheadTokens(instructions: instructions, model: model)
+            let budget = model.contextSize - overhead - 1536
             let trimmed = try await TokenBudget.fit(text, budget: budget) { try await model.tokenCount(for: $0) }
             return trimmed.isEmpty ? nil : trimmed
         }

@@ -42,7 +42,8 @@ public extension ClipStore {
         }
         try Task.checkCancellation()
         if attached, !capped.isEmpty {
-            try? await self.storeEmbedding(itemID: itemID, text: capped)
+            // `sensitivity` was nil on this path (otherwise `attached` is false).
+            try? await self.storeEmbedding(itemID: itemID, text: capped, screened: true)
         }
         return attached
     }

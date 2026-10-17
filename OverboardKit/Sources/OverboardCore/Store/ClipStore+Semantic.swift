@@ -4,9 +4,11 @@ import GRDB
 // MARK: - Semantic search
 
 public extension ClipStore {
-    internal func storeEmbedding(itemID: String, text: String) async throws {
+    /// `screened` means the caller already ran `ClipSensitivity.label` over
+    /// this text and found nothing, so it isn't scanned a second time.
+    internal func storeEmbedding(itemID: String, text: String, screened: Bool = false) async throws {
         try Task.checkCancellation()
-        guard ClipSensitivity.label(for: text) == nil else { return }
+        guard screened || ClipSensitivity.label(for: text) == nil else { return }
         guard let embedding = sentenceEmbedding,
               let vector = embedding.vector(for: String(text.prefix(300)))
         else { return }
