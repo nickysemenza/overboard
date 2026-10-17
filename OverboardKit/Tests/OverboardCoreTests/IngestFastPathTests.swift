@@ -1,7 +1,7 @@
 import Foundation
 import GRDB
-@testable import OverboardCore
 import os
+@testable import OverboardCore
 import Testing
 
 /// Pins the capture-cost restructuring: a recopy of live content is detected
@@ -84,9 +84,15 @@ struct IngestFastPathTests {
 
     @Test func recopyOfSoftDeletedContentInsertsFreshItem() async throws {
         let harness = try Harness()
-        let first = try #require(try await harness.store.ingest(self.textSnapshot("deleted then recopied"), provenance: nil))
+        let first = try #require(try await harness.store.ingest(
+            self.textSnapshot("deleted then recopied"),
+            provenance: nil
+        ))
         try await harness.store.delete(id: first.item.id)
-        let again = try #require(try await harness.store.ingest(self.textSnapshot("deleted then recopied"), provenance: nil))
+        let again = try #require(try await harness.store.ingest(
+            self.textSnapshot("deleted then recopied"),
+            provenance: nil
+        ))
         #expect(again.isNew)
         #expect(again.item.id != first.item.id)
     }
@@ -192,7 +198,10 @@ struct ItemChangeTokenTests {
         try await expectChange("snippet delete") { try await harness.store.deleteSnippet(id: snippet.id) }
 
         try await expectChange("hard delete") {
-            try await harness.dbWriter.write { try $0.execute(sql: "DELETE FROM item WHERE id = ?", arguments: [deletedID]) }
+            try await harness.dbWriter.write { try $0.execute(
+                sql: "DELETE FROM item WHERE id = ?",
+                arguments: [deletedID]
+            ) }
         }
     }
 

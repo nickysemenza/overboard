@@ -104,8 +104,6 @@ public actor ClipStore {
     ///
     /// `provenance` is invoked at most once, only for new, non-secret content
     /// (secrets never record where they came from, so asking is wasted work).
-    /// A recopy never changed provenance in the old flow either: the bump
-    /// keeps the original row's source fields.
     ///
     /// Blob hashes are not reused from the classifier: its hash covers the
     /// whole snapshot (kind + every representation), while a blob's name is
@@ -174,58 +172,6 @@ public actor ClipStore {
             try? await self.storeEmbedding(itemID: stored.item.id, text: searchText, screened: true)
         }
         return IngestOutcome(item: stored.item, isNew: stored.isNew)
-    }
-
-    /// The recopy fast path: if live content with this hash exists, bump it and
-    /// return it; nil means "new content, carry on". A cheap indexed read gates
-    /// the write so the (far more common) new-content case doesn't take the
-    /// writer lock twice.
-    private func bumpLiveItem(
-        contentHash: String, snapshot: PasteboardSnapshot, isSecret: Bool
-    ) async throws -> ClipItem? {
-        let exists = try await self.dbWriter.read { db in
-            try Bool.fetchOne(
-                db,
-                sql: "SELECT EXISTS(SELECT 1 FROM item WHERE contentHash = ? AND deletedAt IS NULL)",
-                arguments: [contentHash]
-            ) ?? false
-        }
-        guard exists else { return nil }
-        return try await self.writeCancellable { db in
-            try snapshot.admission?.check()
-            let bumped = try Self.bumpExisting(
-                db, contentHash: contentHash, now: snapshot.capturedAt, isSecret: isSecret
-            )
-            try snapshot.admission?.check()
-            return bumped
-        }
-    }
-
-    /// Dedupe: same content already live -> bump it to the top. Nil when no live
-    /// row has this hash (it may have been deleted between the read and the
-    /// write, in which case the caller falls through to a normal insert).
-    private static func bumpExisting(
-        _ db: GRDB.Database, contentHash: String, now: Date, isSecret: Bool
-    ) throws -> ClipItem? {
-        guard let existing = try ClipItem
-            .filter(sql: "contentHash = ? AND deletedAt IS NULL", arguments: [contentHash])
-            .fetchOne(db)
-        else { return nil }
-        var bumped = existing
-        bumped.useCount = try Int(Self.nextItemCounter(
-            after: Int64(existing.useCount), itemID: existing.id, counter: .useCount
-        ))
-        bumped.lastUsedAt = now
-        bumped.updatedAt = now
-        bumped.lamport = try Self.nextItemCounter(
-            after: existing.lamport, itemID: existing.id, counter: .revision
-        )
-        try bumped.update(db)
-        if isSecret, !existing.isSecret {
-            try Self.protectSensitiveItem(db, itemID: bumped.id, label: "Sensitive content")
-            bumped = try ClipItem.fetchOne(db, key: bumped.id) ?? bumped
-        }
-        return bumped
     }
 
     /// One already-classified representation, ready to become a `Representation`
