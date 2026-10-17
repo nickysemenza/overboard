@@ -78,6 +78,24 @@ nonisolated struct FileIndexEventFilter: Sendable {
 
     private static let slash = UInt8(ascii: "/")
 
+    /// The outermost ancestor below the owning root whose name has a package
+    /// extension, judged lexically. A package recognized only by its Finder
+    /// bundle bit is left to the scanner's own check.
+    func enclosingPackage(of rawPath: String) -> String? {
+        let path = Self.normalized(rawPath)
+        guard let root = self.rootPaths.filter({ path.hasPrefix($0 + "/") }).max(by: { $0.count < $1.count })
+        else { return nil }
+        var prefix = root
+        let components = path.dropFirst(root.count + 1).split(separator: "/")
+        for component in components.dropLast() {
+            prefix += "/" + component
+            if PackageClassifier.hasPackageExtension(component) {
+                return prefix
+            }
+        }
+        return nil
+    }
+
     /// FSEvents paths are almost always ASCII and already standardized; only
     /// pay for Unicode normalization when a path actually needs it.
     private static func normalized(_ path: String) -> String {
@@ -94,8 +112,16 @@ nonisolated struct FileIndexEventFilter: Sendable {
             return batch
         }
         for (path, flag) in zip(paths, flags) where self.accepts(path, flags: flag) {
-            batch.paths.append(path)
-            batch.flags.append(flag)
+            // Inside a package (a Photos library, an app) only the package's
+            // own entry is indexed, so its churn collapses onto that entry
+            // here rather than costing a refresh per internal file.
+            if let package = self.enclosingPackage(of: path) {
+                batch.paths.append(package)
+                batch.flags.append(0)
+            } else {
+                batch.paths.append(path)
+                batch.flags.append(flag)
+            }
         }
         return batch
     }

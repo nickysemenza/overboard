@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import os
 import OverboardCore
 import UniformTypeIdentifiers
 
@@ -70,20 +71,21 @@ nonisolated struct BulkListing: Sendable {
 /// A directory is a package when either (a) its path extension maps to a
 /// `UTType` conforming to `.package`, or (b) its Finder info has the
 /// `kHasBundle` bit set. The extension answer is cached per lowercased
-/// extension for the lifetime of the classifier, so one scan asks the type
-/// database about each distinct extension once. Instances are owned by a
-/// single scan and are not thread-safe.
+/// extension for the life of the process, so the type database is asked about
+/// each distinct extension once; the FSEvents filter shares the cache.
 final nonisolated class PackageClassifier {
-    private var byExtension: [String: Bool] = [:]
+    private static let byExtension = OSAllocatedUnfairLock(initialState: [String: Bool]())
 
     func isPackage(name: String, finderFlags: UInt16) -> Bool {
-        if finderFlags & BulkDirectoryWalker.hasBundleFinderFlag != 0 {
-            return true
-        }
+        finderFlags & BulkDirectoryWalker.hasBundleFinderFlag != 0 || Self.hasPackageExtension(name)
+    }
+
+    /// The extension half of the rule alone, for callers with only a name.
+    static func hasPackageExtension(_ name: some StringProtocol) -> Bool {
         guard let dot = name.lastIndex(of: "."), dot != name.startIndex else { return false }
         let ext = name[name.index(after: dot)...].lowercased()
         guard !ext.isEmpty else { return false }
-        if let cached = self.byExtension[ext] {
+        if let cached = self.byExtension.withLock({ $0[ext] }) {
             return cached
         }
         // Plain `UTType(filenameExtension:)` prefers the file flavor (`.app`
@@ -92,7 +94,7 @@ final nonisolated class PackageClassifier {
         // claims conformance to anything asked, so those must be rejected.
         let type = UTType(filenameExtension: ext, conformingTo: .package)
         let answer = type.map { !$0.isDynamic && $0.conforms(to: .package) } ?? false
-        self.byExtension[ext] = answer
+        self.byExtension.withLock { $0[ext] = answer }
         return answer
     }
 }

@@ -97,16 +97,19 @@ public actor FileNameIndex {
         let path = path?.precomposedStringWithCanonicalMapping
         try await self.database.write { db in
             if let path {
+                // Seek the subtree's range on the path key ('0' sorts right
+                // after '/'). `+root` keeps SQLite off the root index, which
+                // would visit every row of a large root (all of ~) per refresh.
                 try db.execute(
                     sql: """
-                    DELETE FROM file_entry WHERE root = ?
-                    AND (path = ? OR substr(path, 1, length(?)) = ?)
+                    DELETE FROM file_entry WHERE +root = ?
+                    AND (path = ? OR (path >= ? AND path < ?))
                     AND NOT EXISTS (
                         SELECT 1 FROM temp.file_scan_seen
                         WHERE scanID = ? AND file_scan_seen.path = file_entry.path
                     )
                     """,
-                    arguments: [root, path, path + "/", path + "/", generation]
+                    arguments: [root, path, path + "/", path + "0", generation]
                 )
             } else {
                 try db.execute(

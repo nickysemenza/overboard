@@ -71,6 +71,9 @@ public final class FileIndexService {
     var activeConfigHash = ""
     var pendingHistoryStreams = 0
     var isProgressBlocked = false
+    /// When the oldest drop still awaiting its recovery rescan arrived; see
+    /// `scheduleLossRecovery`.
+    var pendingLossSince: ContinuousClock.Instant?
     var verifiedEventID: UInt64 = 0
     var persistedEventID: UInt64 = 0
     var lastCheckpoint: Date?

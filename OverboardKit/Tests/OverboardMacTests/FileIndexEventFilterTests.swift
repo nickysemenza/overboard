@@ -120,6 +120,36 @@ struct FileIndexEventFilterTests {
         ])
     }
 
+    @Test func hiddenHomeDirectoriesAreExcludedAfterLibrary() {
+        let plans = FileIndexService.streamPlans(
+            roots: [self.home], home: self.home,
+            excluded: ["\(self.home)/Documents/Skipped"], hidden: ["\(self.home)/.t3", "\(self.home)/.cache"]
+        )
+        let expected = [
+            "\(self.home)/Library", "\(self.home)/.t3", "\(self.home)/.cache", "\(self.home)/Documents/Skipped",
+        ]
+        #expect(plans == [.init(paths: [self.home], exclusions: expected)])
+    }
+
+    @Test func eventsInsidePackagesCollapseOntoThePackage() {
+        let filter = FileIndexEventFilter(policy: self.policy())
+        let library = "\(self.home)/Pictures/Photos Library.photoslibrary"
+        let batch = filter.batch(
+            paths: [
+                "\(library)/database/Photos.sqlite-wal",
+                "\(self.home)/Applications/Tool.app/Contents/Info.plist",
+                library,
+                "\(self.home)/Documents/notes.v2/a.txt",
+            ],
+            flags: [self.modified, self.modified, self.modified, self.modified],
+            lastEventID: 9
+        )
+        #expect(batch.paths == [
+            library, "\(self.home)/Applications/Tool.app", library, "\(self.home)/Documents/notes.v2/a.txt",
+        ])
+        #expect(batch.flags == [0, 0, self.modified, self.modified])
+    }
+
     @Test func exclusionsNeverSwallowARootAndAreCappedAtEight() {
         let plans = FileIndexService.streamPlans(
             roots: ["/fixture/a"], home: self.home,

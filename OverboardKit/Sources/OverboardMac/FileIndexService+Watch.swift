@@ -20,6 +20,7 @@ extension FileIndexService {
     /// `scheduleRefresh()`.
     private func performRefresh(index: FileNameIndex) async {
         let directories = self.consumeDirtyChanges()
+        self.pendingLossSince = nil
         let lifecycle = self.lifecycleGeneration
         self.isIndexing = true
         var completed = false
@@ -94,12 +95,20 @@ extension FileIndexService {
     /// a stream's roots, must not swallow one, and are capped at eight by
     /// FSEvents. The lexical prefilter still runs, so a refused exclusion costs
     /// only efficiency.
-    nonisolated static func streamPlans(roots: [String], home: String, excluded: [String]) -> [StreamPlan] {
+    ///
+    /// `hidden` lists home's top-level dot-directories (`~/.cache`, agent
+    /// worktrees, package caches). Nothing in them is indexed, but with file
+    /// events their build churn alone can overflow the stream, which FSEvents
+    /// answers with a `UserDropped` full rescan. They rank after `~/Library`
+    /// and ahead of configured exclusions for the eight slots.
+    nonisolated static func streamPlans(
+        roots: [String], home: String, excluded: [String], hidden: [String] = []
+    ) -> [StreamPlan] {
         let library = home + "/Library"
         let nested = roots.filter { $0.hasPrefix(library + "/") }
         let shared = roots.filter { !nested.contains($0) }
         func exclusions(for paths: [String], excludingLibrary: Bool) -> [String] {
-            let candidates = (excludingLibrary ? [library] : []) + excluded
+            let candidates = (excludingLibrary ? [library] + hidden : []) + excluded
             var kept: [String] = []
             for candidate in candidates where !kept.contains(candidate) {
                 let isInside = paths.contains { candidate.hasPrefix($0 + "/") }
@@ -142,7 +151,8 @@ extension FileIndexService {
         )
         let sinceWhen = since.map { FSEventStreamEventId($0) } ?? FSEventStreamEventId(kFSEventStreamEventIdSinceNow)
         let plans = Self.streamPlans(
-            roots: roots.map(\.path), home: self.pathPolicy.home, excluded: self.pathPolicy.excludedPaths
+            roots: roots.map(\.path), home: self.pathPolicy.home, excluded: self.pathPolicy.excludedPaths,
+            hidden: Self.hiddenDirectories(in: self.pathPolicy.home)
         )
         for plan in plans {
             guard let stream = FSEventStreamCreate(
@@ -160,6 +170,21 @@ extension FileIndexService {
                 self.pendingHistoryStreams += 1
             }
         }
+    }
+
+    /// Top-level dot-directories of `home`, the known build and cache churners
+    /// first so they win the scarce exclusion slots.
+    nonisolated static func hiddenDirectories(in home: String) -> [String] {
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: home)) ?? []
+        let hidden = names.filter { name in
+            var isDirectory: ObjCBool = false
+            return name.hasPrefix(".")
+                && FileManager.default.fileExists(atPath: home + "/" + name, isDirectory: &isDirectory)
+                && isDirectory.boolValue
+        }
+        let busy = [".t3", ".cache", ".npm", ".cargo", ".rustup", ".nx", ".claude", ".bun", ".gradle", ".pnpm-store"]
+        let ranked = busy.filter(hidden.contains) + hidden.filter { !busy.contains($0) }.sorted()
+        return ranked.map { home + "/" + $0 }
     }
 
     func stopWatching() {
@@ -181,6 +206,7 @@ extension FileIndexService {
         }
         if batch.lost {
             self.enqueueAllRoots()
+            self.scheduleLossRecovery()
         } else {
             self.enqueueEvents(batch.paths, flags: batch.flags)
         }
@@ -190,4 +216,25 @@ extension FileIndexService {
             self.scheduleRefresh()
         }
     }
+
+    /// FSEvents drops events (`UserDropped`) during bursts such as a build,
+    /// and the only safe recovery is rescanning every root, which for a home
+    /// root is hundreds of thousands of entries. Drops arrive repeatedly while
+    /// the burst lasts, so recovery waits for the stream to stay quiet: each
+    /// drop pushes a not-yet-started refresh back by `lossQuietPeriod`, but
+    /// never beyond `lossMaximumDelay` after the first drop, so a burst that
+    /// never ends still gets its rescan.
+    func scheduleLossRecovery(now: ContinuousClock.Instant = .now) {
+        guard !self.isIndexing, !self.isStopped else { return }
+        let firstLoss = self.pendingLossSince ?? now
+        self.pendingLossSince = firstLoss
+        let deadline = firstLoss + Self.lossMaximumDelay
+        guard now < deadline else { return }
+        self.refreshTask?.cancel()
+        self.refreshTask = nil
+        self.scheduleRefresh(delay: min(Self.lossQuietPeriod, deadline - now))
+    }
+
+    static let lossQuietPeriod: Duration = .seconds(30)
+    static let lossMaximumDelay: Duration = .seconds(120)
 }
