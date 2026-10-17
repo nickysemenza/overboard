@@ -27,7 +27,14 @@ nonisolated struct FileIndexPathPolicy: Sendable {
     }
 
     func owner(of url: URL) -> URL? {
-        let path = url.standardized.path.precomposedStringWithCanonicalMapping
+        self.owner(ofPath: url.standardized.path)
+    }
+
+    /// For paths already canonical, such as a canonical root joined with names
+    /// a directory read returned: skips `URL.standardized` per entry.
+    func owner(ofPath rawPath: String) -> URL? {
+        // Pure-ASCII paths are already precomposed; avoid the bridged call.
+        let path = rawPath.utf8.allSatisfy { $0 < 0x80 } ? rawPath : rawPath.precomposedStringWithCanonicalMapping
         guard let root = self.roots.first(where: { path == $0.path || path.hasPrefix($0.path + "/") })
         else { return nil }
         let relative = path.dropFirst(root.path.count).split(separator: "/")
