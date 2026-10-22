@@ -44,7 +44,7 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-async-algorithms", from: "1.1.7"),
         .package(url: "https://github.com/gonzalezreal/swift-markdown-ui", from: "2.4.1"),
         .package(url: "https://github.com/apple/swift-collections.git", .upToNextMinor(from: "1.7.3")),
-        .package(url: "https://github.com/pointfreeco/swift-snapshot-testing", from: "1.19.6"),
+        .package(url: "https://github.com/pointfreeco/swift-snapshot-testing", from: "1.19.7"),
     ],
     targets: [
         .target(
