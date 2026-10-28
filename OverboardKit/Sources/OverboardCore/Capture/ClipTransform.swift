@@ -51,8 +51,8 @@ public enum ClipTransform: String, Sendable, CaseIterable, Identifiable {
 
     private static func stripTracking(from text: String) -> String {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard var components = URLComponents(string: trimmed) else { return text }
-        guard let items = components.queryItems, !items.isEmpty else { return text }
+        guard var components = URLComponents(string: trimmed), let items = components.queryItems,
+              !items.isEmpty else { return text }
 
         let kept = items.filter { item in
             let name = item.name.lowercased()

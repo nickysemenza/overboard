@@ -68,12 +68,9 @@ public nonisolated enum FileMetadataScanner {
         let roots = canonicalRoots
         let classifier = PackageClassifier()
         guard let root = self.owner(of: url, roots: roots, exclusions: exclusions),
-              !self.hasPackageAncestor(url.path, root: root.path, classifier: classifier)
+              !self.hasPackageAncestor(url.path, root: root.path, classifier: classifier),
+              let metadata = try self.statOrNil(url.path), !metadata.isSymbolicLink
         else {
-            try await index.remove(under: url.path)
-            return []
-        }
-        guard let metadata = try self.statOrNil(url.path), !metadata.isSymbolicLink else {
             try await index.remove(under: url.path)
             return []
         }

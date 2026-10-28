@@ -26,7 +26,7 @@ extension ItemCardView {
     private func loadImageThumbnail() async {
         guard self.thumbnail == nil,
               let rep = try? await store.representations(for: item.id)
-              .first(where: { $0.uti == WellKnownUTI.png })
+                  .first(where: { $0.uti == WellKnownUTI.png })
         else { return }
         // Downsample straight off the blob file when possible so a large
         // image never fully inflates in memory just to draw a small card.
@@ -54,7 +54,7 @@ extension ItemCardView {
     private func loadColorSwatch() async {
         guard self.swatch == nil,
               let rep = try? await store.representations(for: item.id)
-              .first(where: { $0.uti == WellKnownUTI.color }),
+                  .first(where: { $0.uti == WellKnownUTI.color }),
               let data = try? await store.payload(for: rep)
         else { return }
         self.swatch = try? NSKeyedUnarchiver.unarchivedObject(ofClass: NSColor.self, from: data)

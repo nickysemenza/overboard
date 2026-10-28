@@ -168,8 +168,7 @@ public enum ArithmeticParser {
         }
 
         mutating func parseExpression(depth: Int) -> Double? {
-            guard depth <= ArithmeticParser.maximumDepth else { return nil }
-            guard var value = self.parseTerm(depth: depth) else { return nil }
+            guard depth <= ArithmeticParser.maximumDepth, var value = self.parseTerm(depth: depth) else { return nil }
             while case let .symbol(character)? = self.peek(), character == "+" || character == "-" {
                 self.index += 1
                 guard let rhs = self.parseTerm(depth: depth) else { return nil }

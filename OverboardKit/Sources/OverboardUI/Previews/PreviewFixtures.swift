@@ -271,8 +271,7 @@
                 }
             }
             .task {
-                guard self.store == nil else { return }
-                guard let seeded = try? Fixtures.store() else { return }
+                guard self.store == nil, let seeded = try? Fixtures.store() else { return }
                 for snapshot in Self.seedSnapshots {
                     _ = try? await seeded.ingest(snapshot)
                 }

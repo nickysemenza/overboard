@@ -8,8 +8,8 @@ public extension ClipStore {
     /// this text and found nothing, so it isn't scanned a second time.
     internal func storeEmbedding(itemID: String, text: String, screened: Bool = false) async throws {
         try Task.checkCancellation()
-        guard screened || ClipSensitivity.label(for: text) == nil else { return }
-        guard let embedding = sentenceEmbedding,
+        guard screened || ClipSensitivity.label(for: text) == nil,
+              let embedding = sentenceEmbedding,
               let vector = embedding.vector(for: String(text.prefix(300)))
         else { return }
         let blob = EmbeddingCoder.encode(vector)

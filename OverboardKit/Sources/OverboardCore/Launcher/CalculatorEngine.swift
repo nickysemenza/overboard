@@ -43,8 +43,8 @@ public enum CalculatorEngine {
     private static let allowedPunctuation = CharacterSet(charactersIn: "+-*/^%().,")
 
     private static func looksLikeMath(_ string: String) -> Bool {
-        guard !string.isEmpty, string.count <= 256 else { return false }
-        guard string.rangeOfCharacter(from: .decimalDigits) != nil else { return false }
+        guard !string.isEmpty, string.count <= 256,
+              string.rangeOfCharacter(from: .decimalDigits) != nil else { return false }
 
         for scalar in string.unicodeScalars {
             let isLetter = CharacterSet.lowercaseLetters.contains(scalar)

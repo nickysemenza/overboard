@@ -42,7 +42,7 @@ public final class ClipActionExecutor {
             var fileURLs: [URL] = []
             if item.kind == .file,
                let rep = try? await self.store.representations(for: item.id)
-               .first(where: { $0.uti == WellKnownUTI.fileURLs }),
+                   .first(where: { $0.uti == WellKnownUTI.fileURLs }),
                let data = try? await self.store.payload(for: rep),
                let strings = try? JSONDecoder().decode([String].self, from: data)
             {

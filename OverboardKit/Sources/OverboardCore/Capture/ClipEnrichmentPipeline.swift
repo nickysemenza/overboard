@@ -70,9 +70,8 @@ public struct ClipEnrichmentPipeline: Sendable {
             let recognized = await self.recognizeText(png) ?? ""
             guard !Task.isCancelled,
                   await (try? self.store.attachRecognizedText(itemID: item.id, text: recognized)) == true,
-                  !Task.isCancelled
-            else { return }
-            guard settings.labelingEnabled else { return }
+                  !Task.isCancelled,
+                  settings.labelingEnabled else { return }
 
             if let enrichImage = self.enrichImage {
                 // macOS 27: the vision-capable model labels the image
