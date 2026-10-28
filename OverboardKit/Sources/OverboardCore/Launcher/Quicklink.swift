@@ -110,8 +110,7 @@ public struct Quicklink: Sendable, Equatable {
 
     private static func parseLine(_ line: some StringProtocol) -> Quicklink? {
         let trimmed = line.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty, !trimmed.hasPrefix("#") else { return nil }
-        guard let separator = trimmed.firstIndex(of: "=") else { return nil }
+        guard !trimmed.isEmpty, !trimmed.hasPrefix("#"), let separator = trimmed.firstIndex(of: "=") else { return nil }
         let keyword = AppMatcher.fold(trimmed[..<separator].trimmingCharacters(in: .whitespaces))
         let rest = trimmed[trimmed.index(after: separator)...].trimmingCharacters(in: .whitespaces)
         guard !keyword.isEmpty, !rest.isEmpty else { return nil }

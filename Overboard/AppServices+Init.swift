@@ -89,8 +89,7 @@ extension AppServices {
                     }
                 },
                 dynamicSubtitle: { command in
-                    guard command == .stats else { return nil }
-                    guard let stats = try? await store.libraryStats() else { return nil }
+                    guard command == .stats, let stats = try? await store.libraryStats() else { return nil }
                     return stats.subtitle
                 }
             ),

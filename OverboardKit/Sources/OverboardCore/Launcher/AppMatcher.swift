@@ -90,8 +90,8 @@ public enum AppMatcher {
         var aliases: [String: String] = [:]
         for line in raw.split(whereSeparator: \.isNewline) {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
-            guard !trimmed.isEmpty, !trimmed.hasPrefix("#") else { continue }
-            guard let separator = trimmed.firstIndex(of: "=") else { continue }
+            guard !trimmed.isEmpty, !trimmed.hasPrefix("#"),
+                  let separator = trimmed.firstIndex(of: "=") else { continue }
             let alias = self.fold(trimmed[..<separator].trimmingCharacters(in: .whitespaces))
             let target = trimmed[trimmed.index(after: separator)...].trimmingCharacters(in: .whitespaces)
             guard !alias.isEmpty, !target.isEmpty else { continue }

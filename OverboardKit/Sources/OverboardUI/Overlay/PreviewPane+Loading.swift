@@ -68,7 +68,7 @@ extension PreviewPane {
     private func loadImage(_ item: ClipItem, store: ClipStore) async {
         if let rep = try? await store.representations(for: item.id)
             .first(where: { $0.uti == WellKnownUTI.png }),
-            let data = try? await store.payload(for: rep)
+           let data = try? await store.payload(for: rep)
         {
             self.largeImage = ItemCardView.thumbnail(from: data, maxPixel: 1600)
         }

@@ -38,8 +38,7 @@ public final class SystemActionService {
         guard let handle = dlopen(
             "/System/Library/PrivateFrameworks/login.framework/Versions/A/login",
             RTLD_LAZY
-        ) else { return nil }
-        guard let symbol = dlsym(handle, "SACLockScreenImmediate") else { return nil }
+        ), let symbol = dlsym(handle, "SACLockScreenImmediate") else { return nil }
         return unsafeBitCast(symbol, to: (@convention(c) () -> Int32).self)
     }()
 

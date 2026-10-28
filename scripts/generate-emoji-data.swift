@@ -121,10 +121,9 @@ var results: [EmojiEntry] = []
 var categoryCounts: [String: Int] = [:]
 
 for entry in entries {
-    guard let emoji = entry["emoji"] as? String, !emoji.isEmpty else { continue }
-    guard let label = entry["label"] as? String, !label.isEmpty else { continue }
-    guard let hexcode = entry["hexcode"] as? String else { continue }
-    guard let versionNumber = (entry["version"] as? NSNumber)?.doubleValue else { continue }
+    guard let emoji = entry["emoji"] as? String, !emoji.isEmpty, let label = entry["label"] as? String, !label.isEmpty,
+          let hexcode = entry["hexcode"] as? String,
+          let versionNumber = (entry["version"] as? NSNumber)?.doubleValue else { continue }
 
     // Fully-qualified guard: emojibase's `emoji` property is always the
     // fully-qualified presentation string, so an empty value is the only
@@ -155,8 +154,7 @@ for entry in entries {
     var keywords: [String] = []
     func addKeyword(_ raw: String) {
         let lower = raw.lowercased()
-        guard !lower.isEmpty, lower != name else { return }
-        guard keywordsSeen.insert(lower).inserted else { return }
+        guard !lower.isEmpty, lower != name, keywordsSeen.insert(lower).inserted else { return }
         keywords.append(lower)
     }
     if let tags = entry["tags"] as? [String] {

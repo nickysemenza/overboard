@@ -21,8 +21,8 @@ public struct QuicklinkProvider: LauncherProvider {
         let keywordRange = trimmed.rangeOfCharacter(from: .whitespaces)
         let keyword = AppMatcher.fold(keywordRange.map { String(trimmed[..<$0.lowerBound]) } ?? trimmed)
         let rest = keywordRange.map { trimmed[$0.upperBound...].trimmingCharacters(in: .whitespaces) } ?? ""
-        guard let link = self.links().first(where: { $0.keyword == keyword }) else { return [] }
-        guard let url = link.url(for: rest.isEmpty ? nil : rest) else { return [] }
+        guard let link = self.links().first(where: { $0.keyword == keyword }),
+              let url = link.url(for: rest.isEmpty ? nil : rest) else { return [] }
         return [.quicklink(link, query: rest, url: url)]
     }
 }

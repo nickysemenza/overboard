@@ -111,9 +111,11 @@ public nonisolated enum FilePreviewLoader {
         let bounded = readWasCapped ? data.prefix(FilePreviewContent.maximumReadBytes) : data
         let previewData = Data(bounded)
         guard !MagicBytes.looksBinary(previewData),
-              let decoded = self.decode(previewData) else { throw FilePreviewLoadError.binary }
-        guard !decoded.unicodeScalars
-            .contains(where: { $0.value == 0 || ($0.value < 8 && $0.value != 9 && $0.value != 10 && $0.value != 13) })
+              let decoded = self.decode(previewData),
+              !decoded.unicodeScalars
+                  .contains(where: {
+                      $0.value == 0 || ($0.value < 8 && $0.value != 9 && $0.value != 10 && $0.value != 13)
+                  })
         else {
             throw FilePreviewLoadError.binary
         }

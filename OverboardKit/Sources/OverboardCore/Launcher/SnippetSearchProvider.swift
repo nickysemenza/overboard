@@ -14,8 +14,7 @@ public struct SnippetSearchProvider: LauncherProvider {
 
     public func results(for query: String) async -> [LauncherResult] {
         // searchSnippets("") returns the full list; require a real query.
-        guard query.count >= 2 else { return [] }
-        guard let snippets = try? await store.searchSnippets(query) else { return [] }
+        guard query.count >= 2, let snippets = try? await store.searchSnippets(query) else { return [] }
         return snippets
             .enumerated()
             .map { index, snippet in

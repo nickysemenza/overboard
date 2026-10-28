@@ -43,7 +43,7 @@ let package = Package(
         .package(url: "https://github.com/sindresorhus/Defaults", from: "9.0.9"),
         .package(url: "https://github.com/apple/swift-async-algorithms", from: "1.1.7"),
         .package(url: "https://github.com/gonzalezreal/swift-markdown-ui", from: "2.4.1"),
-        .package(url: "https://github.com/apple/swift-collections.git", .upToNextMinor(from: "1.7.4")),
+        .package(url: "https://github.com/apple/swift-collections.git", .upToNextMinor(from: "1.7.5")),
         .package(url: "https://github.com/pointfreeco/swift-snapshot-testing", from: "1.19.7"),
     ],
     targets: [

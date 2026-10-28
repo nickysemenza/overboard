@@ -40,9 +40,9 @@ extension AppServices {
             // 500 ms AppleScript) lookup for new, non-secret content, so a
             // recopy never waits on the browser.
             guard let outcome = try await self.store.ingest(
-                snapshot, provenance: Self.localProvenanceResolver(for: snapshot)
-            ),
-                !Task.isCancelled, self.captureGeneration == generation
+                      snapshot, provenance: Self.localProvenanceResolver(for: snapshot)
+                  ),
+                  !Task.isCancelled, self.captureGeneration == generation
             else { return }
             self.signal.bump()
             // A recopy only bumped an already-enriched row.

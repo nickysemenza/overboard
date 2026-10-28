@@ -43,8 +43,7 @@ extension FileIndexService {
             }
         }
         for directory in directories {
-            guard !Task.isCancelled else { return }
-            guard await self.refreshDirectory(directory, index: index) else { return }
+            guard !Task.isCancelled, await self.refreshDirectory(directory, index: index) else { return }
         }
         guard !Task.isCancelled else { return }
         let fileCount = await (try? index.count()) ?? self.fileCount
