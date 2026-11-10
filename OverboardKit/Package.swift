@@ -37,7 +37,7 @@ let package = Package(
         .executable(name: "file-scan-benchmark", targets: ["FileScanBenchmark"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.11.1"),
+        .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.12.0"),
         .package(url: "https://github.com/sindresorhus/KeyboardShortcuts", from: "3.1.0"),
         .package(url: "https://github.com/raspu/Highlightr", from: "2.3.0"),
         .package(url: "https://github.com/sindresorhus/Defaults", from: "9.0.9"),
