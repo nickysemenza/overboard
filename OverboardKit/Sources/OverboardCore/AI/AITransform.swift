@@ -95,16 +95,16 @@ public enum AITransformer {
         #if canImport(FoundationModels)
             switch SystemLanguageModel.default.availability {
             case .available:
-                return .available
+                .available
             case .unavailable(.appleIntelligenceNotEnabled):
-                return .notEnabled
+                .notEnabled
             case .unavailable(.modelNotReady):
-                return .modelNotReady
+                .modelNotReady
             case .unavailable:
-                return .unsupported
+                .unsupported
             }
         #else
-            return .unsupported
+            .unsupported
         #endif
     }
 
